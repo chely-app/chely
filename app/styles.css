@@ -146,3 +146,8 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); outline
 .code { font-family: ui-monospace, Consolas, monospace; font-size: 1.3rem; letter-spacing: .1em; user-select: all; }
 .linkbox { word-break: break-all; background: var(--bg); border: 1px dashed var(--line); border-radius: .7rem; padding: .7rem; user-select: all; font-size: .9rem; }
 @media (max-width: 600px) { .top { position: static; } .nav button { padding: .4rem .6rem; } }
+
+/* Selector de archivo en español */
+.filepick { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; margin-top: .4rem; font-weight: 400; }
+.file-input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+.file-input:focus-visible + .btn { outline: 3px solid var(--accent); outline-offset: 2px; }

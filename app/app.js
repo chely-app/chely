@@ -582,6 +582,15 @@ async function deleteOwnStudy(s) {
 }
 
 // El paciente sube un estudio propio.
+// Selector de archivo propio: el del navegador muestra sus textos en el idioma del sistema.
+function filePicker(input) {
+  input.className = 'file-input';
+  const none = 'Ningún archivo elegido';
+  const name = h('span', { class: 'hint' }, none);
+  input.addEventListener('change', () => { name.textContent = input.files[0]?.name || none; });
+  return h('span', { class: 'filepick' }, input, h('span', { class: 'btn', 'aria-hidden': 'true' }, 'Elegir archivo'), name);
+}
+
 function patientUpload() {
   const m = mainEl();
   let date = todayISO();
@@ -613,7 +622,7 @@ function patientUpload() {
     h('p', { class: 'muted' }, 'Solo informes escritos: análisis, ecografías, radiografías, etc. Chely no interpreta las imágenes de las placas.'),
     h('div', { class: 'grid2' }, h('label', { class: 'field', for: 'up-title' }, '¿Qué estudio es?', title),
       h('div', { class: 'field' }, h('label', { for: 'up-date', style: 'font-weight:700' }, 'Fecha del estudio'), datePicker({ id: 'up-date', value: date, onChange: iso => { date = iso; } }))),
-    h('label', { class: 'field', for: 'up-file' }, 'Archivo del informe ', h('span', { class: 'hint' }, 'PDF o foto (JPG, PNG), hasta 20 MB.'), file),
+    h('label', { class: 'field', for: 'up-file' }, 'Archivo del informe ', h('span', { class: 'hint' }, 'PDF o foto (JPG, PNG), hasta 20 MB.'), filePicker(file)),
     h('label', { class: 'field', for: 'up-text' }, 'O el texto del informe ', h('span', { class: 'hint' }, '(si no tenés el archivo)'), text),
     msg, h('div', { class: 'row' }, btn)));
 }
@@ -890,7 +899,7 @@ function newStudyCard(p) {
   return h('div', { class: 'card' }, h('h2', {}, 'Nuevo estudio'),
     h('div', { class: 'grid2' }, h('label', { class: 'field', for: 'ns-title' }, 'Nombre del estudio', title),
       h('div', { class: 'field' }, h('label', { for: 'ns-date', style: 'font-weight:700' }, 'Fecha del estudio'), datePicker({ id: 'ns-date', value: date, onChange: iso => { date = iso; } }))),
-    h('label', { class: 'field', for: 'ns-file' }, 'Archivo del informe ', h('span', { class: 'hint' }, 'PDF o foto (JPG, PNG), hasta 20 MB. Solo informes escritos.'), file),
+    h('label', { class: 'field', for: 'ns-file' }, 'Archivo del informe ', h('span', { class: 'hint' }, 'PDF o foto (JPG, PNG), hasta 20 MB. Solo informes escritos.'), filePicker(file)),
     h('label', { class: 'field', for: 'ns-text' }, 'Texto del informe ', h('span', { class: 'hint' }, '(si no subís archivo)'), text), msg, h('div', { class: 'row' }, btn));
 }
 
