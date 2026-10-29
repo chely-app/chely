@@ -2,7 +2,7 @@
 // La usan médicos (estudios de pacientes vinculados) y pacientes (estudios que subieron ellos).
 import Anthropic from "@anthropic-ai/sdk";
 import { ChelyAIError, explain, MODEL, transcribe, type StudyForAI } from "../_shared/claude.ts";
-import { cors, fail, json, serviceClient, userClient } from "../_shared/http.ts";
+import { cors, fail, withCors, json, serviceClient, userClient } from "../_shared/http.ts";
 
 const DAILY_LIMIT = Number(Deno.env.get("AI_DAILY_LIMIT") ?? "60");
 const PATIENT_DAILY_LIMIT = Number(Deno.env.get("AI_DAILY_LIMIT_PACIENTE") ?? "10");
@@ -19,7 +19,7 @@ function ageFrom(birth: string | null): number | null {
   return age >= 0 && age < 130 ? age : null;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withCors(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return fail("Método no permitido.", 405);
   if (!Deno.env.get("ANTHROPIC_API_KEY")) return fail("Falta configurar la clave de la IA. Avisale al equipo de Chely.", 500);
@@ -97,4 +97,4 @@ Deno.serve(async (req) => {
     console.error("ia: error inesperado", e instanceof Error ? e.name : typeof e);
     return fail("Ocurrió un error inesperado. Probá de nuevo.", 500);
   }
-});
+}));

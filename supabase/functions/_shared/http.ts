@@ -1,13 +1,27 @@
 // Respuestas HTTP y cliente de Supabase con la sesión de quien llama.
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-const ORIGIN = Deno.env.get("APP_ORIGIN") ?? "*";
+// APP_ORIGIN admite varias direcciones separadas por comas. La app vive en chely.app/app.
+const ORIGINS = (Deno.env.get("APP_ORIGIN") ?? "*").split(",").map((o) => o.trim()).filter(Boolean);
+if (!ORIGINS.includes("*") && !ORIGINS.includes("https://chely.app")) ORIGINS.push("https://chely.app");
+
 export const cors = {
-  "Access-Control-Allow-Origin": ORIGIN,
+  "Access-Control-Allow-Origin": ORIGINS[0],
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Vary": "Origin",
 };
+
+// Responde con el origen de quien llama si está permitido.
+export function withCors(handler: (req: Request) => Promise<Response>) {
+  return async (req: Request) => {
+    const res = await handler(req);
+    const origin = req.headers.get("Origin");
+    if (ORIGINS.includes("*")) res.headers.set("Access-Control-Allow-Origin", "*");
+    else if (origin && ORIGINS.includes(origin)) res.headers.set("Access-Control-Allow-Origin", origin);
+    return res;
+  };
+}
 
 export function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });

@@ -1,0 +1,9 @@
+# GitHub Pages publica solo la página (raíz) y la app (app/). El resto del repositorio no se publica.
+exclude:
+  - supabase
+  - tests
+  - docs
+  - INSTRUCCIONES.md
+  - README.md
+  - node_modules
+  - "*.zip"

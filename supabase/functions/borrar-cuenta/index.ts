@@ -1,7 +1,7 @@
 // Función "borrar-cuenta": borra la cuenta de quien la llama, sus archivos y (por cascada) sus estudios.
-import { cors, fail, json, serviceClient, userClient } from "../_shared/http.ts";
+import { cors, fail, withCors, json, serviceClient, userClient } from "../_shared/http.ts";
 
-Deno.serve(async (req) => {
+Deno.serve(withCors(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return fail("Método no permitido.", 405);
   const session = await userClient(req);
@@ -27,4 +27,4 @@ Deno.serve(async (req) => {
   const { error } = await admin.auth.admin.deleteUser(userId);
   if (error) return fail("No se pudo borrar la cuenta. Escribinos a info@chely.app.", 500);
   return json({ ok: true });
-});
+}));
