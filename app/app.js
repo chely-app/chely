@@ -650,7 +650,7 @@ async function patientOwnStudy() {
     done();
     if (error) { status.className = 'alert bad'; status.textContent = await fnError(error); return; }
     report.value = data.text; await saveText();
-    status.className = 'alert ok'; status.textContent = 'Listo. Revisá que el texto sea igual al del informe y corregí lo que haga falta.';
+    status.className = 'alert ok'; status.textContent = 'Listo, Chely leyó el archivo. Revisá que el texto sea igual al del informe y tocá «Explicar mi estudio».';
   });
   const explainBtn = h('button', { class: 'btn primary big' }, 'Explicar mi estudio');
   explainBtn.addEventListener('click', async () => {
