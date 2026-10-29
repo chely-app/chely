@@ -607,7 +607,7 @@ function patientUpload() {
     if (!f && !text.value.trim()) { msg.className = 'alert bad'; msg.textContent = 'Elegí el archivo del informe o pegá su texto.'; return; }
     if (f && (!UPLOAD_TYPES.includes(f.type) || f.size > MAX_UPLOAD)) { msg.className = 'alert bad'; msg.textContent = 'El archivo tiene que ser PDF, JPG o PNG de hasta 20 MB. Si es Word, guardalo como PDF.'; return; }
     btn.disabled = true; btn.replaceChildren(h('span', { class: 'spinner' }), ' Subiendo…');
-    const { data: st, error } = await sb.from('studies').insert({ patient_id: state.me.id, doctor_id: null, self_uploaded: true, title: title.value.trim(), study_date: date, report_text: text.value.trim() }).select('id').single();
+    const { data: st, error } = await sb.from('studies').insert({ patient_id: state.me.id, doctor_id: null, self_uploaded: true, title: title.value.trim(), study_date: date, report_text: f ? '' : text.value.trim() }).select('id').single();
     if (error) { btn.disabled = false; btn.textContent = 'Subir estudio'; msg.className = 'alert bad'; msg.textContent = errorText(error); return; }
     if (f) {
       const path = `${state.me.id}/${st.id}/${safeFileName(f.name)}`;
@@ -623,7 +623,7 @@ function patientUpload() {
     h('div', { class: 'grid2' }, h('label', { class: 'field', for: 'up-title' }, '¿Qué estudio es?', title),
       h('div', { class: 'field' }, h('label', { for: 'up-date', style: 'font-weight:700' }, 'Fecha del estudio'), datePicker({ id: 'up-date', value: date, onChange: iso => { date = iso; } }))),
     h('label', { class: 'field', for: 'up-file' }, 'Archivo del informe ', h('span', { class: 'hint' }, 'PDF o foto (JPG, PNG), hasta 20 MB.'), filePicker(file)),
-    h('label', { class: 'field', for: 'up-text' }, 'O el texto del informe ', h('span', { class: 'hint' }, '(si no tenés el archivo)'), text),
+    h('label', { class: 'field', for: 'up-text' }, 'O el texto del informe ', h('span', { class: 'hint' }, '(solo si no tenés el archivo; si subís el archivo, Chely lo lee solo)'), text),
     msg, h('div', { class: 'row' }, btn)));
 }
 
@@ -655,6 +655,8 @@ async function patientOwnStudy() {
   const explainBtn = h('button', { class: 'btn primary big' }, 'Explicar mi estudio');
   explainBtn.addEventListener('click', async () => {
     if (!report.value.trim()) { status.className = 'alert bad'; status.textContent = 'Falta el texto del informe. Tocá «Leer el archivo» o pegalo.'; return; }
+    // Con archivo y un texto tan corto, seguramente falta leer el archivo.
+    if (s.file_path && report.value.trim().length < 150) { status.className = 'alert bad'; status.textContent = 'El texto es muy corto para ser el informe completo. Tocá «Leer el archivo» y después «Explicar mi estudio».'; return; }
     if (!await saveText()) return;
     status.className = 'alert info'; status.textContent = 'Chely está leyendo tu estudio y escribiendo la explicación. Puede tardar hasta dos minutos; no cierres esta pantalla.';
     const done = busy(explainBtn, 'Escribiendo la explicación…');
