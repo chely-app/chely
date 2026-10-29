@@ -1,0 +1,22 @@
+{
+  "name": "Chely",
+  "short_name": "Chely",
+  "description": "Chely explica en palabras simples tus análisis clínicos y estudios médicos. Tu médico revisa la explicación y vos la leés desde el celular. Prueba piloto gratis.",
+  "lang": "es-AR",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f8f7",
+  "theme_color": "#0a8a85",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

@@ -1,0 +1,675 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Chely · Tus estudios médicos explicados en criollo</title>
+<meta name="description" content="Chely explica en palabras simples tus análisis clínicos y estudios médicos. Tu médico revisa la explicación y vos la leés desde el celular. Prueba piloto gratis.">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<link rel="canonical" href="https://chely.app/">
+<meta name="theme-color" content="#0a8a85">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Chely">
+<meta property="og:locale" content="es_AR">
+<meta property="og:url" content="https://chely.app/">
+<meta property="og:title" content="Chely · Tus estudios, en criollo">
+<meta property="og:description" content="Chely explica en palabras simples tus análisis clínicos y estudios médicos. Tu médico revisa la explicación y vos la leés desde el celular. Prueba piloto gratis.">
+<meta property="og:image" content="https://chely.app/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Logo de Chely y el lema: Tus estudios, en criollo.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Chely · Tus estudios, en criollo">
+<meta name="twitter:description" content="Chely explica en palabras simples tus análisis clínicos y estudios médicos. Tu médico revisa la explicación y vos la leés desde el celular. Prueba piloto gratis.">
+<meta name="twitter:image" content="https://chely.app/og-image.png">
+<script type="application/ld+json">[{"@context": "https://schema.org", "@type": "Organization", "name": "Chely", "url": "https://chely.app/", "logo": "https://chely.app/icon-512.png", "description": "Chely explica en palabras simples tus análisis clínicos y estudios médicos. Tu médico revisa la explicación y vos la leés desde el celular. Prueba piloto gratis.", "email": "info@chely.app", "contactPoint": {"@type": "ContactPoint", "email": "info@chely.app", "contactType": "customer support", "availableLanguage": "es"}}, {"@context": "https://schema.org", "@type": "WebSite", "name": "Chely", "url": "https://chely.app/", "inLanguage": "es-AR"}, {"@context": "https://schema.org", "@type": "FAQPage", "inLanguage": "es-AR", "mainEntity": [{"@type": "Question", "name": "¿Qué es Chely?", "acceptedAnswer": {"@type": "Answer", "text": "Chely es una app que explica en palabras simples los informes de análisis clínicos y estudios médicos. El médico sube el informe, revisa la explicación y el paciente la lee desde su celular o computadora."}}, {"@type": "Question", "name": "¿Chely reemplaza al médico?", "acceptedAnswer": {"@type": "Answer", "text": "No. Chely explica lo que dice el informe, pero no diagnostica, no da pronósticos y no indica tratamientos. Cada explicación la revisa y aprueba el médico antes de que llegue al paciente."}}, {"@type": "Question", "name": "¿Qué estudios puede explicar?", "acceptedAnswer": {"@type": "Answer", "text": "Informes escritos: análisis de sangre y orina, ecografías, radiografías, tomografías y resonancias, entre otros. Chely lee el texto del informe; no interpreta las imágenes de los estudios."}}, {"@type": "Question", "name": "¿Cuánto cuesta?", "acceptedAnswer": {"@type": "Answer", "text": "Durante la prueba piloto es gratis para médicos y pacientes."}}, {"@type": "Question", "name": "¿Cómo se cuidan mis datos?", "acceptedAnswer": {"@type": "Answer", "text": "Los datos de salud son datos sensibles. Cada paciente decide qué médicos ven sus estudios, puede descargarlos y pedir que se borren. Antes de trabajar con datos reales nos vamos a ajustar, con asesoría legal, a la Ley 25.326 de Protección de Datos Personales y a la Ley 26.529 de Derechos del Paciente."}}, {"@type": "Question", "name": "¿Cómo participo de la prueba piloto?", "acceptedAnswer": {"@type": "Answer", "text": "Completá el formulario de abajo indicando si sos médico, paciente o familiar, o representás a un laboratorio o institución. Te contactamos para empezar."}}]}]</script>
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Nunito:wght@700;800;900&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: página de presentación en bandas. Arriba, la "traducción" del informe al criollo como tesis; después, demo médico → paciente, públicos, modelo, reglas y plan. */
+:root {
+  --bg: #f4f8f7;
+  --paper: #ffffff;
+  --tint: #e3f1ee;
+  --fg: #10302d;
+  --muted: #4d6a66;
+  --line: #cbdedb;
+  --teal: #0a8a85;
+  --teal-deep: #06615e;
+  --teal-ink: #ffffff;
+  --mint: #c3f2df;
+  --report: #f1f0ea;
+  --report-ink: #3b3a33;
+  --ad: #fdf4e3;
+  --ad-ink: #6b4b10;
+  --ok: #1d7a43;
+  --warn: #8a5a00;
+  --font-display: "Nunito", "Atkinson Hyperlegible", "Segoe UI", sans-serif;
+  --font-body: "Atkinson Hyperlegible", "Segoe UI", Verdana, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c1a19; --paper: #132624; --tint: #183330; --fg: #e3f3f0; --muted: #a0bdb9; --line: #2a4744;
+    --teal: #3cc7bf; --teal-deep: #7fe0d9; --teal-ink: #062523; --mint: #1d5646; --report: #23221d; --report-ink: #dedbcc;
+    --ad: #32290f; --ad-ink: #f2d391; --ok: #7fdca0; --warn: #f2c66b; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c1a19; --paper: #132624; --tint: #183330; --fg: #e3f3f0; --muted: #a0bdb9; --line: #2a4744;
+  --teal: #3cc7bf; --teal-deep: #7fe0d9; --teal-ink: #062523; --mint: #1d5646; --report: #23221d; --report-ink: #dedbcc;
+  --ad: #32290f; --ad-ink: #f2d391; --ok: #7fdca0; --warn: #f2c66b; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { font-size: 18px; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); line-height: 1.55; font-size: 1rem; -webkit-font-smoothing: antialiased; }
+h1, h2, h3 { font-family: var(--font-display); line-height: 1.12; margin: 0; text-wrap: balance; }
+h2 { font-size: clamp(1.7rem, 3.4vw, 2.4rem); font-weight: 900; letter-spacing: -.01em; }
+h3 { font-size: 1.2rem; font-weight: 800; }
+p { margin: 0; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--teal); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+.band { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 4rem; }
+.band.alt { background: var(--paper); border-block: 1px solid var(--line); }
+.in { max-width: 1100px; margin: 0 auto; display: grid; gap: 2rem; }
+.eyebrow { font-family: var(--font-mono); font-size: .78rem; letter-spacing: .12em; text-transform: uppercase; color: var(--teal-deep); }
+.lead { font-size: 1.15rem; color: var(--muted); max-width: 60ch; }
+.muted { color: var(--muted); }
+.small { font-size: .86rem; }
+
+/* Barra superior */
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.nav { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.nav-in { max-width: 1100px; margin: 0 auto; display: flex; align-items: center; gap: 1rem; padding-block: .6rem; flex-wrap: wrap; }
+.logo { display: flex; align-items: center; gap: .55rem; margin-right: auto; text-decoration: none; color: var(--fg); }
+.logo img { width: 2.3rem; height: 2.3rem; border-radius: .6rem; }
+.logo b { font-family: var(--font-display); font-weight: 900; font-size: 1.45rem; }
+.nav a.l { color: var(--muted); text-decoration: none; font-weight: 700; font-size: .92rem; }
+.nav a.l:hover { color: var(--teal-deep); }
+@media (max-width: 700px) { .nav a.l { display: none; } }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; border-radius: .9rem; padding: .8rem 1.3rem; font-weight: 700; cursor: pointer; border: 2px solid var(--teal); background: var(--paper); color: var(--teal-deep); text-decoration: none; min-height: 3rem; }
+.btn.primary { background: var(--teal); color: var(--teal-ink); }
+.btn.sm { padding: .45rem .9rem; min-height: 2.4rem; font-size: .9rem; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Hero: el informe y su traducción */
+.hero { padding-block: 3.5rem 4rem; }
+.hero .in { grid-template-columns: 1.05fr .95fr; align-items: center; gap: 3rem; }
+@media (max-width: 880px) { .hero .in { grid-template-columns: 1fr; gap: 2rem; } }
+.hero h1 { font-size: clamp(2.5rem, 6.5vw, 4.4rem); font-weight: 900; letter-spacing: -.025em; }
+.hero h1 em { font-style: normal; color: var(--teal); position: relative; white-space: nowrap; }
+.hero h1 em::after { content: ""; position: absolute; left: 0; right: 0; bottom: .06em; height: .2em; background: var(--mint); z-index: -1; border-radius: .2em; }
+.hero .copy { display: grid; gap: 1.3rem; min-width: 0; }
+.ctas { display: flex; gap: .7rem; flex-wrap: wrap; }
+.translate { display: grid; gap: .9rem; min-width: 0; }
+.report-slip { background: var(--report); color: var(--report-ink); font-family: var(--font-mono); font-size: .9rem; line-height: 1.6; border-radius: .4rem; padding: 1.1rem 1.2rem; border: 1px solid var(--line); box-shadow: 0 1px 0 var(--line), 0 10px 24px rgba(6, 60, 56, .07); transform: rotate(-1deg); }
+.report-slip .hd { display: flex; justify-content: space-between; gap: 1rem; font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; opacity: .75; border-bottom: 1px dashed currentColor; padding-bottom: .5rem; margin-bottom: .6rem; flex-wrap: wrap; }
+.report-slip mark { background: color-mix(in srgb, var(--mint) 70%, transparent); color: inherit; border-radius: .2rem; padding: 0 .15rem; }
+.arrow { display: flex; align-items: center; gap: .6rem; color: var(--teal-deep); font-weight: 700; font-size: .9rem; padding-left: 1rem; }
+.arrow svg { width: 1.4rem; height: 1.4rem; }
+.plain { background: var(--paper); border: 2px solid var(--teal); border-radius: 1.2rem; padding: 1.1rem 1.25rem; display: grid; gap: .5rem; font-size: 1.08rem; font-weight: 700; }
+.plain .tag { font-family: var(--font-mono); font-weight: 500; font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--teal-deep); }
+.plain p { min-height: 4.8em; }
+.switcher { display: flex; gap: .4rem; flex-wrap: wrap; }
+.switcher button { border: 1px solid var(--line); background: var(--paper); border-radius: 999px; padding: .3rem .8rem; cursor: pointer; font-size: .85rem; font-weight: 700; color: var(--muted); }
+.switcher button[aria-pressed="true"] { border-color: var(--teal); color: var(--teal-deep); background: var(--tint); }
+
+/* Cómo funciona */
+.steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; counter-reset: s; }
+@media (max-width: 900px) { .steps { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 520px) { .steps { grid-template-columns: 1fr; } }
+.step { display: grid; gap: .5rem; align-content: start; padding-top: 1rem; border-top: 3px solid var(--teal); }
+.step .n { font-family: var(--font-mono); font-size: .8rem; color: var(--teal-deep); }
+.step p { color: var(--muted); font-size: .95rem; }
+
+/* Demo */
+.demo { display: grid; grid-template-columns: 1.2fr .8fr; gap: 2rem; align-items: start; }
+@media (max-width: 900px) { .demo { grid-template-columns: 1fr; } }
+.panel { background: var(--paper); border: 1px solid var(--line); border-radius: 1.2rem; padding: 1.2rem; display: grid; gap: 1rem; min-width: 0; }
+.panel-head { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
+.panel-head h3 { margin-right: auto; }
+.pill { display: inline-flex; align-items: center; border-radius: 999px; padding: .15rem .65rem; font-size: .76rem; font-weight: 700; background: var(--tint); color: var(--teal-deep); }
+.pill.warn { background: var(--ad); color: var(--warn); }
+.pill.ok { background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok); }
+.studies { display: flex; gap: .5rem; flex-wrap: wrap; }
+.studies button { border: 2px solid var(--line); background: var(--bg); border-radius: .8rem; padding: .5rem .9rem; cursor: pointer; font-weight: 700; text-align: left; }
+.studies button[aria-pressed="true"] { border-color: var(--teal); background: var(--tint); }
+.studies small { display: block; font-weight: 400; color: var(--muted); font-size: .78rem; }
+.panel .report-slip { transform: none; font-size: .82rem; max-height: 13rem; overflow: auto; white-space: pre-wrap; box-shadow: none; }
+.panel textarea { width: 100%; min-height: 12rem; border: 2px solid var(--line); border-radius: .8rem; padding: .8rem; background: var(--bg); line-height: 1.5; resize: vertical; }
+.panel textarea:focus { border-color: var(--teal); outline: none; }
+.progress { display: grid; gap: .35rem; font-size: .9rem; }
+.progress div { display: flex; gap: .5rem; align-items: center; color: var(--muted); }
+.progress div.done { color: var(--ok); }
+.progress div.run { color: var(--teal-deep); }
+.actions { display: flex; gap: .6rem; flex-wrap: wrap; }
+.check { display: flex; gap: .55rem; align-items: flex-start; font-size: .92rem; cursor: pointer; }
+.check input { width: 1.25rem; height: 1.25rem; accent-color: var(--teal); flex: none; margin-top: .15rem; }
+
+/* Teléfono */
+.phone-wrap { display: grid; justify-items: center; gap: .8rem; }
+.phone { width: min(100%, 340px); aspect-ratio: 9 / 18.5; max-width: 100%; border-radius: 2.4rem; border: 10px solid var(--fg); background: var(--bg); position: relative; overflow: hidden; display: grid; grid-template-rows: auto 1fr; box-shadow: 0 24px 48px rgba(6, 50, 46, .18); }
+.ph-top { background: var(--paper); border-bottom: 1px solid var(--line); padding: 1.1rem .9rem .6rem; display: flex; align-items: center; gap: .5rem; }
+.ph-top img { width: 1.6rem; height: 1.6rem; border-radius: .4rem; }
+.ph-top b { font-family: var(--font-display); font-weight: 900; }
+.ph-top span { margin-left: auto; font-size: .7rem; color: var(--muted); }
+.ph-body { overflow-y: auto; padding: .8rem; display: grid; gap: .7rem; align-content: start; font-size: .82rem; }
+.ph-card { background: var(--paper); border: 1px solid var(--line); border-radius: .9rem; padding: .75rem; display: grid; gap: .4rem; }
+.ph-card h4 { margin: 0; font-family: var(--font-display); font-size: .92rem; color: var(--teal-deep); }
+.ph-card p, .ph-card li { line-height: 1.45; }
+.ph-card ul { margin: 0; padding-left: 1rem; display: grid; gap: .25rem; }
+.ph-empty { text-align: center; color: var(--muted); padding: 2rem 1rem; display: grid; gap: .5rem; }
+.ph-note { background: var(--tint); border-radius: .7rem; padding: .55rem .7rem; font-size: .78rem; }
+/* Funciones del paciente dentro del teléfono */
+.term { border: 0; background: none; padding: 0; font: inherit; color: var(--teal-deep); text-decoration: underline dotted; text-underline-offset: .2em; cursor: pointer; font-weight: 700; }
+.vals { display: grid; gap: .45rem; }
+.val { display: grid; grid-template-columns: 1fr auto; gap: .15rem .5rem; align-items: center; padding-bottom: .45rem; border-bottom: 1px solid var(--line); }
+.val:last-child { border-bottom: 0; padding-bottom: 0; }
+.val .nm { font-weight: 700; }
+.val .num { font-variant-numeric: tabular-nums; font-weight: 700; text-align: right; }
+.val .rng { grid-column: 1 / -1; display: flex; gap: .5rem; align-items: center; font-size: .7rem; color: var(--muted); }
+.val .chip { border-radius: 999px; padding: .05rem .5rem; font-size: .68rem; font-weight: 700; white-space: nowrap; }
+.chip.in { background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok); }
+.chip.out { background: var(--ad); color: var(--warn); }
+.track { position: relative; flex: 1; height: .45rem; border-radius: 999px; background: var(--tint); min-width: 3rem; }
+.track .rband { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--ok) 30%, transparent); border-radius: 999px; }
+.track .dot { position: absolute; top: 50%; width: .7rem; height: .7rem; border-radius: 999px; background: var(--fg); border: 2px solid var(--paper); transform: translate(-50%, -50%); }
+.evo-tabs { display: flex; gap: .3rem; flex-wrap: wrap; }
+.evo-tabs button { border: 1px solid var(--line); background: var(--bg); border-radius: 999px; padding: .15rem .6rem; font-size: .72rem; font-weight: 700; cursor: pointer; color: var(--muted); }
+.evo-tabs button[aria-pressed="true"] { border-color: var(--teal); color: var(--teal-deep); background: var(--tint); }
+.evo svg { width: 100%; height: auto; display: block; }
+.survey { display: flex; gap: .3rem; flex-wrap: wrap; align-items: center; border-top: 1px solid var(--line); padding-top: .5rem; font-size: .74rem; }
+.survey b { margin-right: auto; }
+.survey button { border: 1px solid var(--line); background: var(--bg); border-radius: 999px; padding: .15rem .55rem; font-size: .72rem; cursor: pointer; font-weight: 700; }
+.ph-sheet { position: absolute; left: .5rem; right: .5rem; bottom: .5rem; z-index: 3; background: var(--paper); border: 2px solid var(--teal); border-radius: 1rem; padding: .8rem; display: grid; gap: .35rem; font-size: .82rem; box-shadow: 0 10px 24px rgba(0,0,0,.2); }
+.ph-sheet .row { display: flex; align-items: center; gap: .5rem; }
+.ph-sheet h4 { margin: 0 auto 0 0; font-family: var(--font-display); color: var(--teal-deep); font-size: .95rem; }
+.ph-sheet button { border: 1px solid var(--line); background: var(--bg); border-radius: .5rem; padding: .15rem .55rem; cursor: pointer; font-weight: 700; }
+.features { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+@media (max-width: 900px) { .features { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 520px) { .features { grid-template-columns: 1fr; } }
+.feature { display: grid; gap: .4rem; align-content: start; }
+.feature p { color: var(--muted); font-size: .93rem; }
+.feature .src { font-family: var(--font-mono); font-size: .7rem; color: var(--teal-deep); letter-spacing: .04em; }
+.toggle { display: flex; align-items: center; gap: .5rem; font-size: .88rem; font-weight: 700; cursor: pointer; }
+.toggle input { width: 1.2rem; height: 1.2rem; accent-color: var(--teal); }
+
+/* Públicos */
+.aud { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+@media (max-width: 960px) { .aud { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .aud { grid-template-columns: 1fr; } }
+.aud article { background: var(--paper); border: 1px solid var(--line); border-radius: 1.1rem; padding: 1.2rem; display: grid; gap: .7rem; align-content: start; }
+.aud .who { font-family: var(--font-mono); font-size: .75rem; letter-spacing: .1em; text-transform: uppercase; color: var(--teal-deep); }
+.aud .price { font-family: var(--font-display); font-weight: 900; font-size: 1.35rem; }
+.aud ul { margin: 0; padding-left: 1.1rem; display: grid; gap: .35rem; color: var(--muted); font-size: .93rem; }
+
+/* Reglas del banner */
+.rules { display: grid; grid-template-columns: 1fr 1fr; gap: 2.5rem; align-items: start; }
+@media (max-width: 860px) { .rules { grid-template-columns: 1fr; } }
+.rulelist { display: grid; gap: .1rem; }
+.rule { display: grid; grid-template-columns: 2rem 1fr; gap: .7rem; padding: .75rem 0; border-bottom: 1px solid var(--line); }
+.rule .ic { width: 1.7rem; height: 1.7rem; border-radius: 999px; display: grid; place-items: center; font-weight: 900; font-size: .85rem; }
+.rule .ic.yes { background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok); }
+.rule .ic.no { background: color-mix(in srgb, #c0392b 14%, transparent); color: #c0392b; }
+.rule p { color: var(--muted); font-size: .93rem; }
+.anatomy { background: var(--paper); border: 1px solid var(--line); border-radius: 1.2rem; padding: 1.2rem; display: grid; gap: .9rem; }
+.dims { display: grid; grid-template-columns: auto 1fr; gap: .3rem 1rem; font-size: .88rem; }
+.dims dt { font-family: var(--font-mono); color: var(--teal-deep); font-size: .8rem; }
+.dims dd { margin: 0; color: var(--muted); }
+
+/* Confianza y plan */
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 2.5rem; }
+@media (max-width: 860px) { .two { grid-template-columns: 1fr; } }
+.plainlist { margin: 0; padding-left: 1.2rem; display: grid; gap: .55rem; }
+.plainlist li { color: var(--muted); }
+.plainlist strong { color: var(--fg); }
+.road { display: grid; gap: 0; }
+.road .r { display: grid; grid-template-columns: 7.5rem 1fr; gap: 1rem; padding: .9rem 0; border-bottom: 1px solid var(--line); }
+@media (max-width: 520px) { .road .r { grid-template-columns: 1fr; gap: .2rem; } }
+.road .when { font-family: var(--font-mono); font-size: .82rem; color: var(--teal-deep); padding-top: .15rem; }
+.road .r.now .when::before { content: "● "; color: var(--ok); }
+.road p { color: var(--muted); font-size: .93rem; }
+
+/* Sumate */
+/* Preguntas frecuentes */
+.faq { display: grid; gap: .6rem; max-width: 760px; }
+.faq details { background: var(--paper); border: 1px solid var(--line); border-radius: 1rem; padding: .9rem 1.1rem; }
+.faq summary { cursor: pointer; font-family: var(--font-display); font-weight: 800; font-size: 1.08rem; list-style: none; display: flex; justify-content: space-between; gap: 1rem; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: "+"; color: var(--teal-deep); font-size: 1.3rem; line-height: 1; }
+.faq details[open] summary::after { content: "−"; }
+.faq details p { color: var(--muted); margin-top: .6rem; max-width: 65ch; }
+.join { background: var(--teal); color: var(--teal-ink); border-radius: 1.6rem; padding: 2.2rem; display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+@media (max-width: 860px) { .join { grid-template-columns: 1fr; padding: 1.5rem; } }
+.join h2 { color: var(--teal-ink); }
+.join p { opacity: .92; }
+.join form { display: grid; gap: .7rem; background: var(--paper); color: var(--fg); border-radius: 1.1rem; padding: 1.1rem; }
+.join label { display: grid; gap: .25rem; font-weight: 700; font-size: .9rem; }
+.join input, .join select, .join textarea { border: 2px solid var(--line); border-radius: .7rem; padding: .6rem .7rem; background: var(--bg); width: 100%; min-height: 2.8rem; font-weight: 400; }
+.join textarea { min-height: 5rem; resize: vertical; }
+.join .out { background: var(--tint); border-radius: .7rem; padding: .8rem; font-size: .9rem; display: grid; gap: .5rem; white-space: pre-wrap; }
+footer { padding-block: 2rem 3rem; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+footer .in { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: space-between; color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<nav class="nav">
+  <div class="nav-in">
+    <a class="logo" href="#inicio" aria-label="Chely, inicio"><img alt="" src="data:image/png;base64,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"><b>Chely</b></a>
+    <a class="l" href="#como">Cómo funciona</a>
+    <a class="l" href="#demo">Probalo</a>
+    <a class="l" href="#piloto">El piloto</a>
+    <a class="btn primary sm" href="#sumate">Sumate</a>
+  </div>
+</nav>
+
+<header class="band hero" id="inicio">
+  <div class="in">
+    <div class="copy">
+      <span class="eyebrow">Prueba piloto · Informes médicos explicados</span>
+      <h1>Tus estudios, <em>en criollo.</em></h1>
+      <p class="lead">El médico sube el análisis o el estudio. Chely prepara una explicación en palabras simples, el médico la revisa y el paciente la lee desde su celular. Estamos empezando a probarlo y buscamos médicos y pacientes que nos ayuden.</p>
+      <div class="ctas">
+        <a class="btn primary" href="#demo">Ver cómo funciona</a>
+        <a class="btn" href="#sumate">Quiero sumarme</a>
+      </div>
+      <p class="small muted">Chely explica, no diagnostica. La interpretación clínica es siempre del médico.</p>
+    </div>
+    <div class="translate" aria-live="polite">
+      <div class="switcher" role="group" aria-label="Elegir ejemplo">
+        <button type="button" aria-pressed="true" data-ex="0">Ecografía</button>
+        <button type="button" aria-pressed="false" data-ex="1">Laboratorio</button>
+        <button type="button" aria-pressed="false" data-ex="2">Radiografía</button>
+      </div>
+      <div class="report-slip">
+        <div class="hd"><span id="ex-kind">Ecografía abdominal</span><span>Ejemplo ficticio</span></div>
+        <div id="ex-tech"></div>
+      </div>
+      <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 4v16M5 13l7 7 7-7"/></svg> Lo que lee el paciente</div>
+      <div class="plain"><span class="tag">En criollo</span><p id="ex-plain"></p></div>
+    </div>
+  </div>
+</header>
+
+<section class="band alt" id="como">
+  <div class="in">
+    <div style="display:grid;gap:.6rem"><span class="eyebrow">Cómo funciona</span><h2>Del laboratorio al celular del paciente, con el médico en el medio.</h2></div>
+    <div class="steps">
+      <div class="step"><span class="n">Paso 1</span><h3>El médico sube el estudio</h3><p>PDF, foto o texto del informe. También puede llegar directo del laboratorio.</p></div>
+      <div class="step"><span class="n">Paso 2</span><h3>Chely redacta un borrador</h3><p>Explica cada término, conserva cifras y negaciones y arma preguntas para la consulta.</p></div>
+      <div class="step"><span class="n">Paso 3</span><h3>El médico revisa y aprueba</h3><p>Corrige lo que quiera y agrega una nota. Nada llega al paciente sin su visto bueno.</p></div>
+      <div class="step"><span class="n">Paso 4</span><h3>El paciente lo lee tranquilo</h3><p>En su usuario, con letra grande, cuando quiera y las veces que necesite.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="demo">
+  <div class="in">
+    <div style="display:grid;gap:.6rem"><span class="eyebrow">Probalo</span><h2>Hacé de médico por un minuto.</h2><p class="lead">Elegí un estudio, generá el borrador, revisalo y mandáselo a la paciente. Después, en el celular, tocá las palabras subrayadas, mirá los valores y la evolución. Los textos y valores son ejemplos ficticios escritos para esta presentación; en la app real los redacta la IA.</p></div>
+    <div class="demo">
+      <div class="panel" id="doctor">
+        <div class="panel-head"><h3>Portal médico</h3><span class="pill">Dra. Ejemplo</span></div>
+        <div class="studies" role="group" aria-label="Estudios de la paciente" id="studies"></div>
+        <div class="report-slip" id="d-report"></div>
+        <div class="actions"><button class="btn primary" type="button" id="d-gen">Generar explicación</button></div>
+        <div class="progress" id="d-progress" hidden></div>
+        <div id="d-edit" hidden style="display:grid;gap:.8rem">
+          <label for="d-text" style="font-weight:700">Borrador para la paciente <span class="muted small">(podés editarlo)</span></label>
+          <textarea id="d-text"></textarea>
+          <label for="d-note" style="font-weight:700">Nota personal <span class="muted small">(opcional)</span></label>
+          <textarea id="d-note" style="min-height:4rem">Marta, está todo explicado acá. Lo charlamos en la próxima consulta.</textarea>
+          <label class="check"><input type="checkbox" id="d-ok"> Revisé la explicación y puede verla la paciente.</label>
+          <div class="actions"><button class="btn primary" type="button" id="d-send" disabled>Aprobar y enviar</button></div>
+        </div>
+      </div>
+      <div class="phone-wrap">
+        <div class="phone" aria-label="Pantalla del paciente">
+          <div class="ph-top"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAxhklEQVR42qV9ebhlV1Xnb+1zzr33Dfe9V6/mjFWpkKmSmKQSEMQMCB/NpASpqAiKqC0NmnyGT9SmJYloy9d8LdINiqAMQexQ0YShgCCGDCaEECHzQKqSVGpITanxjfees9fqP/Zw1j73VgL68r0vr+57595z1l57Db/1W2sT/iNfInTJ7bdnKy69VG4kssf8u7/92wIjI61Ja4uRMS4suplkGQGAZBmRtYJRAPMARgHp1a+FnyXLiNpWpOeuI2vF5D2WXk4YHYX0egS46+PXPBCu0dfGzwIwb60AwGjWI+lltNC2MgqAbdssYs6aslW1mPsH9+0r8b73LQKQoc+4aVOG5csJl15qQSQ/qSjpJxX8RsBooS/9u7/rTp922lmmMGeSoTONoZMNaLkAEywyZoxpi5VCmAsBMgEIEIAMIAJmBgEiBIIALCwAkYgA7psEImQykAiJsAjAAAjk7t9d4h9IBMKAGBIiAxKGWCYQQYz/I8uQWqBEIgRA3AqDRIgJsMZQn5n7IJplkaPMvA/A9sraLdbKQ/v37HkYv/VbM8libNzIP8lC/PgLsGlThiuucIL/whcmTl170puKdvuNmTGvbLXbJ5jOCMhQeGAwM9haQABmhrUWHIQa1EkEIgKBhJfdovjX3T/ra9xVBKL6JdGi9D9LWBlyj6cXyL1v+DfVPyYKbkDkXidjQMYAWebezxgIM2RxHmWvv7Mqq3v7Ze8rB3bu3oz3vOfQgKz+0wvgtINAxEs2bZpcecLq92Sd9u+0x8dPzrMc6PVBtrLMwiIiFYSczIREGMxCQaBCBGGOAiY4YVkRp/5B8dkSWKKAg8BFgkypXqDwECJgEiEhcptJ4gNK/L9fWKJ00dynACIgIpBSBgHEGALIiPs9xG+9jPIsQ5GjqiosHp3ZVfV6f39o+86P46qr9uOaawyuvVZebDfQj6v1a26/9dfGu+PXjkxMrkVZApZLcpprxC0SRAQMgWUvcKmFLe553L/9IgThsN8FJIiCdRLXIqpvmMPPtWThPlk/VBB53G5xp5HS9vB5BIIQxcWMO1UAMgQQRaUB4hYUQ+52xJiCWwV6Bw8815+d/9Ds297+yR9nN9CLCX/87/9++XFnnf7Xo0um3lpYBlnbFyADOV1gERgAIgzrzUf4Fmd/YP3DMAuEvSCUCQqmKcg+GGQKVkW8hiqdDYaGUL+fW48gZECIErOn7Fb9LmEByC1A7XuUcKi+nPx2DEsY3Aq7m7QgtGxm0D989KtHt+94N66+evcLLUI2VPi33ZbjjW+0K75y47krT133ze6y5Rfni4t9dnebEYhEkGxuFgGzgIXBfkGcOQna7xxu1HD/mnjzQ0jMPFKzrLQ56mC9F0QtXnK5+iwE7eVkqfzu8ffIohZHSV20j+LotwCnUOxeIxExIsyobGW6Y2dl7dZb5GdeeRf/5m/uwjXX5LjjDn7xHeBXa8VXvvLTS45b9fXxifFps9jvgygPekggr+GITo69ubEQiHXmx5kXvxAiYLa1MINiigAkSBQVtZ+s3W/TlKrFZ04Mj3u/WogibieS1vDgoL1ZdH6B3YJQWOAQBLi3Ikjie8SbQZFUkn5XV8hMq5ydOdLbs/8N1ZVX3j1sJ9Aw4Z+0efOG0eXT/zo6PjaVVdwnQ3kMNsINeDNomb1NB9jfoPu3exjWUY0IWOuzdnaDwYzaCFpjWUU5YWEFhsLC6q1QL3Ywd8GhUwgKgpC9yUtNJLTtqe+VpXZA/pkg5P9E+TxmK4aKcm7ucLXv+VeVV111PzZuzHDjjXbQBF1zjcF73ysrz123YmLF6m+PTU6sMmVZkqFcmwOOYaPTPFamhd2Hum9lduprnBBZO1hpOFllEqhh8+s9UV/MXs5BeM1dEs0WaTdQm8X4vloDpFYQUqZShL2ZEhXy+n8yR8HHRQcZMFfUao+B8Jrqwov+H6an53HppYQ77hAX8Iav9esJRDI2ufL6kekla6gs+2RMFrcpEJ1sxS7S8bYvPqrbes7M1oJvPpSPfpxVcGbKf4v6Zh/XcK2Pfuc5jxHtfnDSnDrjRBNjNFYvQvw8FaVZ5tpPcR0gBCVjy/69GMwCq3a2Sym8Mvp7YTAgyKiyfbNkySnFiuWfxXXXMdavp3QHeNNz/C23/PbkCcf/vumXPQKKEC8zSLyTqaMWHVY2TA0rzeUopNTsiIoZKQlMQvQUDa+PdZAkZ4Q6tJUQv2uvIZLsrCSpo3rhoCMtUbmD1GZPmOvFozpz0A5ewO7zRXxKnRh5A2tLGh89ky7+2V38znf9AJs2ZbjxRsmC6Rldv37VkqVLbhpptdsEIeOzIhfRuKRKopCRLATH+L42TxJi87hHRe/cAeOinS2peJRUohXsb7QcUWDRVtROE8EnBYdOtbZzIyMPWk9IchEh1BEP1cld/AwRtRNFhcySRFDwykEAbFm9kl/2ss/j3e+eBWDMJZdeakAky6anruwuW7aUqsqSiImmwb8hM7stKs70WB/fuy3rtqdldkkY1/ZShBNt1IJ2i8WAMEgElPyt3wXBnPnP8ZkfMghyIuQAjADEUvsfcd/k/y6Du8aIW1yJoaWkTsgrklUJI5SwoUNo6J3vnjXKghlirXt+dkGCAEYqW5mpqaXZxMSVIBJc6tOI6S98YWLpySc+0Z2cWiXCVgQGPquVaGJq4cSb85GBE5AXKEvi5Jp+Dkg1RAJmI6htlYpCSCVEVgQ9tiitRel3oFsMICODnOpdYUVQMqMShvURUU4GLWPQIoPch6RWuN6FDZyKwvM1dlZ4zmCkdIygdwcUHuXDLxZCVh05sqfcsfMMXHfd0RwARpYt+YX2kunVXPZLEDIRSmCEEGLCCzlqj9cCy3WsjxABedNEKioI4Sf7RTJEScIUFo9EkHkB9SxjtipRsWAsy3Bcp41TJiZxytgo1oyMYnWrRctabXRbhbSNIePj+NIyZqsKB8sedi8sYtv8PLbOzcmW2VnsmJ/HQWuRgTBW5GgZ4xejXvjo0qVenMSMedsr0WwxxHgcSfmTsDhEApAxxLaibne1mZ5+EwNfzAEgb49szIyR2jmp8DKacBXVqK1rBXGHRPusIxHlsNwi1uEfJ84xaB1QseBw1Ye1FieOjuJV09O4ZMk0vWx6WtaNjdFUu/0fRXZpttfDkzMzuPfgAfmXvXtxz8FD2Ds3h9wYTHQ6PrrhCPhREsVxAxWUuAhxQaQOoknnTe4PQAIxWSYmy97CwBdpdNNnV61efcrD42PjywhiRYQq1mGbxFWPAuPUHHESCmKgdiH+gWpcRmmRCAwIBsCCtTja72NpUeCypUvpLatX4+Kly7BqVFVbrDMrHDNW9bADQK4yCyAYAgpjAFNH38/OzOBrO3fKF57dhvsOHwYRYaLdjoEFNdAn6CDDx9FE3mF75y4eW2omnFRHDFl5+PCeatu2s2nFNzf/wvSyZV9uGWMJRCyAZevMiqtO+FS9TqSinY9xssJ8/H8mwXtqLWJwtE0izpH2mXGo18MJ7Tbetvp4+rWTTsIZk5M+lGGUXiEMCGQQw726CqMzVo2eYQD7FxW+EgFF7vLMylp8bcd2+csnfoS7DhxAu9XCSJahYk5suVacGshDxJI01GH8rifvgxRGJdzrZXb//tfmnVZxUd5qgauKRSQTlYyw11yNkdShaf2BkjyYNzdUp+11llvfoPFien5xEcuKAh845VT6nbVrcZzX9rKqwAJk5LJFQ1Q/KQ3Fo/2vKVV/nT17IZBQTEGrqgIDyIhw+Zq19PMnnoTPP7VVPvjww9g1P4+JTts5cVH1BGmgU+xhDYHKUxBrDDqH9yvGaLcyKYoNOUBns2XAMnn8woWSqE2QzmJjHsCiMt1BfB0NZ6S1JiNgrl+iZItfPe54+sBpp2Ndtwswo19VIC9wQ018M2IVg7BEqB2FRYmgD6UAnqRQBREhpPv9qoIB4V2nnU6vPf54+b177sXNO3dgbHQ0YluhLgA4oZNHBNLPUZU9DzdIA2EVECTLzjUCrLXWwjITB1DNA1waWLMssD7WZ/9aDRUgwYTCdaJyiLCzMhE8v7iI1e02brxgA31mw4VY1+2iV1aomJERRWAthRmbZZkGMKqy5hrNa/6dzuzQqIoRMnKAWq8scfzYON306p+jPznnXMzNL0TfxWydRdDrKTEb9blLXeMg0ZAHB9kQXC18XS4wq7iyHl2XGI6F0pGGIHR4y9rcxBBV7RgFvLDU2e2exQW8ddVqfOK882lFpxM1PjfKbtPApk2DHUrsUIIJJ4XIuAiUeMEm1kpCEIpeHbkxKKsKAOFPN1xAU0WO9/3gBzLSaXsklJJ6dIS5VYRIRLXrFg3x+qK1M2UrcxGZYGuFyBUvWUJ2CjBzDAK44cAiECe6wOHRE1bREzuMpBLGTL/En552Bv7krLPImZsSWaKOFBM20gWBRGNVTZeoAT03EqAG9p+CqnUoKboEJ6HS5WTUqypcfe652L+4iA8/9BBGRkZhua4jEyVVZaVDEn1SiJZAgAkVC2aQoakcgtyFsqKwntrWE4VdpTNGhc0oH0GiMmDvTwyAii36zPjseefRO9as8doFZN46Nu1JYjki7t4wKaRsiM6kk4K7vkYSWHqg3phmTYGvgkxcQPDnGy6ku/btlbv2P4+RooUq5Apa7EHrQ+jLOiBziadE0wqGSMcEPMYzGGrsIkLQiNWumO16WCI+gNTYfA1Jixc+o7IVbrhgA96xZg16ZRmdbCLAxChTamJEabRO/aERUKkXhSQRZJoYqOhIGjmLqPfQkZUAJjP4yIYLqRD4GrfDaEmUrxJdx/ZREdc15xiDBiweZIxAyPF2uBZ0gqlzxKOscs4RfvZRU1w8H3oSCypmLFYV/nHDRfj544+nxbJETsbfjNSVlChoOoZGYrhT1YnO0DxYGr4jYTQACWNEQdNITVZGbhf89OrVuPS41ej3esh8mKlDbCQVCV+9U8rqlZNqHykwzI6LFr9jgUQVIpDSTGyAb6W2fwnBSly540ivh7855xwn/KpE4bIofxElFahBa9CM44csShRsY+FkyEKINDReGjsNCbsuvq9/71Bse8OqVUBZRjYEVOwfBOkfv9YXltoPBB/r4+YcRKpOW/N0gvaz4usEDUcsiFASi4XdmBNwcH4ef3TaafiNU9ZRr6qc8JtmVyStyFBTmaXhCzCwIKIKLaJ2SkBRKdlp2uTJ0F1W+25feSYVeAE4tdslGCNW6lo2FDQU9cHXYdx9yWDU6yqWkrNlUM7eQSCx9aKwn8ge0BG5N0+knGBGhEOLfbx6xQr82dlnU1nZBvelaTIkeUISSuEEqFJUZDwgZumtzNMGh315GEPYPV8tJIWPU01y0ZuSCEPyEKBVtABDEMsxs46EL6JUSZIQlZKNKyKAIeQiQsICS3UUneA6PplI6ruN5QzaQiD0rcWyVoFPn38BZSaDtSUMmRSXIWpEOAqtogYnR+1NAYEZaGV5hBLmej08Nz8nexYWMNfvgwUYbxVYOTJCx4+NY1whp/2ydAuBQd6LHBNLTe3j00eOAJWFaRGsguh0SCzqtSB8IsWDCqaNhXJ2QWlj46c0Eda1VA1EBezF+4bMEOYWF/FX55+PNd0uemXpEywZNL2NXKphmwYcp2VBK8sAAzw/P4/N27fhG7t2yw8PHMDuxXnMiwCV5x0ZwgiRrGq1cd7Sabz+hBPw8yevoRXj4wADfVsiMzQI5nnCi1Bz8esd+tWnn659g6fIJIYx+Eajg1RlXxuGlKY2b66yVkFEJrF/rBZFmNO4g+v4HxHvEMz0e3jlkmncdsmlsOz5C5Ru9YHEiuQF4XxHYwFaeY598/P42KOPyPVbt2Dn/AKQ5aBWC608R2ZMLIywZ2KX1kLKPlCWWD0ygne+5CV09U+dh2Wjoyh9Bk5DIqvaN7kFKZnRLgrctWMnLvvG14WKtmNJQ0MgqqbNaqcLhvBQxVHkF+YlB7MwMxl/QWCzpTczzPSQCrGckMgy/uyss2CMocqWMMbUOE0QNumfj5EIaVYaEVp5hhue/BHef/8PZcfcPEy7g/GJSbgAwmus54GKJSDLkQmQZTmoaAHC2FOW+IsHH5IvbtlKf/HSi/C2M84E4HAfhwHR0HUohdEpChyYn5ff/s53HPnTGF89o+jkQ/ZO+v6bPKVIFKMY5JjI59G1z0gD8eaIUr5OM0IxAGZ7i3j9yhX0sytXUVlVyNTqE2kUUxqIZpOdVQufjKvdXnXXXfiVO+6U5yrGeHcCnVYbYgyYjCsDEsWkjHzBRYyDxJkIlgzaRYHRiUlst1Z+9fbb5VduuUV2HDmCdlEgz3NYcXlLxYzKUyzzPEenKPD04UP4L1/5Cp6YmUFRtFBxDW1r8yUNZkidD9TfOs8jkIuCTK748xpKTlAOifGwURUW8TdLIvj9l5yuPLxpgFIN+05DqomkCFzegf3yrbfiS9t3yPjUFISc43NOzNQMaWq2WHjHp6NcymCZ0W63Qa0Wbnj2Wdy2Z7e875xz8Y7TTqdV3fGBHbB/bg5feOxRfPiBh2R/WaI9OopKJPYoJHdPgSIN0oUaiCSRYlwYYQc/jd10U5l1OiYzWU120mQlbwejyWeOEYSwo37M9fv46YkJuvNVr45JBqER6QzY/EblinTVDCjyDO/6zm3y2a1b0V2yBJVJCzL1+1MdvUVFYwyyfRHp8vAY1WLZh8zPY3mng1euXIFzlizBRJbRTGXx8KGDcvfevdg7Mw+MjaJlcrf7Q9gafUAdbiZkMK3tqLlBoQ8CtoQsLEiuaeIN0kiqkUi3WthZBgCXJf3amjXIMoNeaZGHmqt4iHcAl6GU9KrQSSuCVpHjYw88gM9u2YLx6SWoBuoppBDLOiKrOZ6NQk3Mp3yLkcdzWnkLpptjf1ni5u07cfPWp+uoIsuAdhutia7v4tFlRYq7NBTKhevP1P4khqg1bOq7fpz5zDU1L2TFGrtoNISkiYQIFtliulXgjatXO4SzCawltn846hg0mb3wHz9wAH/8gx+i3e06CMCQu+EIE6TJX40w80D+EDNa/XtlVK0A7TyHyXPIyGjCmONI/iV1qw0ib2PR4z1SswaheCCBecmCXBSsLDLYJJH4BFWaDFusX5Z4xcqVOH68i9KX9BLoV4agkjobVr8Pgvqj++7DApGM5QVYA3a6hYj0Vk+1K0YnSPvJYn3WA2zB6cKTA0iRhJNCfFKOEAW6slfYWtOpUYsW/4E04O7cnebiwTbikKHpDNFncKxJq3WVKwMAa/GaFStjwmYMNZItGtL6orAZbzutAK0ix927nsPXdu5CZ7zrnLt2DmqnQplBIs3T9B2ssUjOSQ8CicCyRW+hBzKEySIHZRkOzc4BLMhGWjBkYqjoXA/VSVYwe74QP9A/oIpwolEX0UUxiWXNXBTLLSQeCaTKGFLt94wCFhgWevn0dLTJCeI0gPM3dwENpAGfeOJxEWOQG4MqPoxJGAnUYDe7XmNRNQIFp3DNByUCer0+Rg3w9nPW4ufWrMLK8RFUEOw/Oo9vPfEs/nnrc+gbRkYGxhhUzODFvnd4xtmO3KDI84iNpTmSpDC1LsJrE+MrXTkROYAlI8XpbCRgVLPWAuEUIujbCieMjeH0iQn4InPqDKkBpSR8SYr+QeC0f+/sLL61ew+yThuWrSDLwADpe0m1XRTxKjR/Ixa/9c8GQH+xj5NG2/hfl52H81YuxQIqVK5pG6u6I3j58atw2bpdeN/muzDfKtDvMyY6Lbzq9BNx1vIpdIocP9p3AHdu24cdcz3krTxiO4IhyZykAQ0FfgTXhZw8bnKBoqHIkKxUR0DugdhanLpkChOdDqqqSrWZqIEek7ZhiSmyzMgB3LVnLw72ehjtjrvChQa3QraqHiot7VLaTBd7vpzHq4QxToK/fPUFOG3ZJPb2FnzAIDBkUNkKM9LHK9asxl+87hV4743/iovPXIM/vOR8nDw1DgZQgXH5WSfjdxcr/Plt/47NT+xAPj7qC/XsdogxCbM7UF+0LLQu5roFlHzY6Og1NW4hMjxngrVY1xmJbOSchhRPBEPgh7oVSdvOu/ft9abM+OTO/aHR/VnKnCR0cUFSRlREa1fRWujhLT91Ck5fNokDi4sO2PNmMGzaggyOlD1ctGYlrn7VBlx+7jqMdQoc7PVUJCMwhcG1r7sIh3sWd23fg6LTTpsJVSJGMAnhN0FOPYYmCUM5JDkhc2PFBlPgmzhaNNaMjzdWp1llogb0S44Gon4XBPzooUNAljXYFrUzY0VnFyHvBCkhh9UdLRw/lv12uuSE5VhEpfKHGl4R5ShLtnj7S8+CyQxmew45NRQcMtDvVxAQ3n7eKaC48wMPSFNkCKzKk1DcUV2yqXui0HhoTciVuvNRu9XVnfZg6W9gF1CSBwilgFdGhLIssXNhwdl9HcqRpmKoVlQ06N/Kb9XdnG4hKmaM5BkmOgUqG1tD6j40YVhh1TQimO31HZ/J5ycMuBZcCPKMMFf2ceKycSyf6qIsqwH7HwjMFEhqWhcVhSiPUQIQYdRIsCZn2iQpWKfKvrTdUcEmDSlyi4rLGnSSoAVZhqP9Pg5bW1M7dB+uYkBLk/7YbONWGasuhvSrCguljdfbtHkypctHvEkvqsScItzfSJZjtFF0p8BSNJSULJVN8nCI6B3Q6MOKoAolnYRJUcF/6FiRp+BaE2SjYzn21F/0rEXPY/QxxGy0ESX2VeUBmg+kYZLo6ECoKounDs+gyAhWGAxO2N0soQsUscMx0i8jxsOxrSozhIMLi3h+bsHhQizDOQHkJ66Qz0mkbp0liPcQEZNJtxH7bvdAAQj9XPCtmG5kSDPckQHzUG+nIVSTeJ8kIYXXlN+6qY4TcC2dHUHpYjEnjRFCDtu55cmdToSEBPfSDbFO8OnMC71YAkEpjDwnPLb7AGZ71WDwUfN+0ueWhmskgtFjYZIHG8KdoSEMaDsMv/CGPoJkNIQEpf+eGe3MUMfP4iEdr0W6osQcRDdOB4XQQk/9gNPqvFXgvl0HcM+2fRjt5K7nIAg87UT2xkh3O4S/44iILpYWN96/1eNUSIuPA4M//EJH5Yq8FTKi67zhw0VULBO5iUMqV4I+swwM1mgAd7XnaXI0JUIY40ULS1otlxQi9j15BaJGp6IeG5PSW0hhRAi5AxkYk8FmBv/nrkcwv1iBDJwpkvjUsODYfM0iNTdKscB71mKy08HmB5/Gw9v3ohjpuA5hStHPAOBRk7cUsCTvpAwSap0MBDCkNG6ApcyCo73+cCYaYRCCFl0Jo4jZWBFkeYaTJycEbOs+YdUqmuDs0ugwpmbdVVKfRE7ArVYbTx+aw1/e/jBG23k0L6411Sphu9DUQsBU0/B7tkJ3tI37tu3GJ29/AHl3DEIGybwXPeqGdFOHeMJusiBkwEyxl1dtF07o26LYX1xrGAue7/XUlteRzhCvrAlSyrQFTOX8ySlCZQN3b7ChQsPkyuxIEt/SYGIGAhkXk7fGRvCNx5/Fp+58FN2Rlm9jZRWY+qFTyuQwBH1rMTraxtY9h3Ht176HBZOB8qIG5EKgpyhzxA0wMcGHOCRiMoSBL3E0C2trIYB4vMU3++CZ2dkX4GNiCJttkBgbbvLilascMmpZUfmc86cgbKlr10lrbJK4+SkmnELsBAMGoTU+js/f9yQ+ecfD6I60YclBFZYEFSwq1NEPixP++Ggbj+88iD/YdCcO9C3ykdEwnEDVvuvEULhBkVd0fgkcUBHkMMYzy0UVOXRlTJrEtDg0A0TYMjNTV6dSWuvgIkiDAySRxgMAeNnKlTix06Gd/VKKovDlT2rUYKWeikU1A07P/wEUF9NQ2rtHBDYGRXcMX/j+k5hdrPDffu4cWLFY7FfIs5oyzwwYQ5gY7eDWR7bhf3/j+5jP2yhGRmBZQHlW0yF1vVfdS8ylNAdNQegGx2rv9BUbYkm7ehT3H1mGx44cxkK/79o/m8ouQ9jH2m6r3dsvS3Q7bWxcuxayuOgK/8ypAuhImYYRujQmX4PyGmCnMPmQchQTE7j54W34Hzd9DwdnexgfabnuenZd9p12jizL8Klv348PffkeJ/x2y1FwjPHSNTGEJ8IAQCWWYwkycK9IMXpNs6Nbz9GhZHKPovT5rZlnGbbNzGHLkSM1UUlnu9QwPQMkLDWNykv23evXYyTPUVkbNnOd5RIG57klrUFcv1eIQjQRWBWZYAzYGLQnu/j+zgO4etPduHfLHnRH2xgfbWNqdARP7T6E93/xdvzj959E3h1H3m6DYeIoSwLVAUN8EENpnRtJfQ4NRc7ML1z+QWQZUVYnDUQppNzsEApCzYnQX1zAuUum6KIVK1BZC2NcNYnohWiWNNDvRUSwlrF8fAz75+Zwz65dEWWMQIS8cIN8jDZouPeJisFpXThr5TjaL/GdR7dj96EFHDk6j1se2oZP3vYQdi2U6HTHISZzKqkbvakeHDi8t4RUICbJc5AwUFVExeeuL9FpG5MXNbUOcEVwVfygpCtQ4tSSxfk5vG7FcvrGG97gasK6CiZp9uv64Cj5nZ7wGchYhxYWcN6mf8JuZimKQnGBKN04NNitGv2QKKZCnPdWjxcAs1CQhWUYYcBWKBf7QK/vdlNmgDx3713koKxAUeRhVGDq8WgIAqwL9pqeIgwpK2B+TvLY1e759ZHVS40RLbHYUa8qiyArWrhz3z555vAhWju1RC2C5uSTAkVT+y+KN+J2gcWysTF88uJX4k3f/BYhy4QMpS2hpFt+GmSsWLPlukORFJUEwUoYCpiSyQwMA4vWa3V3FOsmujil06HpzohUInh2fgEP7tuPflUi77TTzN4P+wi1Y0rIzOmItWSEAnk0VBzdzb1i0BhcKmFEaLIbwsO0MoO5uT5u2PoU/vjCC11hnl6gVYg0Ht1sU3JjZ/plhTeuW4f/+bKX4r/fey863W6cZEJkEspJM8tE6NIMn2MQmyRIQdsBPMsMoVdWwOICjhsbxdvOXo+3rFuHc5ctozFHbQ8zefD4wYPyV/f9AJ966GFk3fHatuvZ1TSEcpni1CqrB7LszZd/kHJXGoapYVxCrZUxWpcBZ+AzWWD7zBH6rdNOR5HXddLUTgxLzDC0+9GAUDHj0hNPQGUZtz39DIxnQAuGdBpFuMlnm5EoS3GcTGym9oWRzI8pqObnsKrdxgcu2oBPv+oyvPklL6ETJyaoZQxKa93cDOsEvGJ8nN70klPppO44vrp1KygzSWdNYiYxhIim7CWJAGXfO+E8J8oMyFBjkmyzP6Gu9YWQjiEo8gz7js7g1O4YXbBipXPGNIx/T8d0VE3WioGrFb/m5JNoKs/pX57dThW7z5IEb5ZBzpeyV6RGpsFTaYQtytl5jELwu2efjetf+xp63dq1NNpqUa8sY7ZvvDIYj+1bzyO66LjVNDc7S3ft2IWi3aqHg4dGFKJBDdGWl+ASy34flH/mcyV12oayPF6oW20aJXDfMaNMkS/olIsLOGNsFD98y1soV8TcgTagH6MnIBKvfMDSynPctn07rrzj3/DI4cOCdgetoqgHQKlYJ7ITRABrQWH0gc9oZWEBxhj80tqT8YGXvpTWr1g+nKbe5PooeJyMwdHFRZxx/T/I/sUesiJ3DtmYlIbYJKBFyyJAVULmZiXL3nz5B2EMiULwEq1Mmp8lMr9i266fiF5kBnuOHMHKThsvX30cldbCUBpyUpqSvkhLELzw3CiZU6en8c4zz8BUUWDLgQM4cOSoMw/+nbLIeHPkD2I3s61iC9vvwfZ66BqDK9atxd9edgldtWEDrRgbQ78s/QCRpvAxpIpXU+fH2m3c+/TT9NjzB1C0O+ChRASpp82gUVIVBso+8tCqH0fJkImjuaImckqLCDQQIonbj4WQdTq49vv34fI1a3Hc5CRsWfqQWY0EOFafkhzDJ4CQGUK/rDCa5/iDiy6k/7p+Pb761FO46Zln5L7nn8dziz3YsoyUdcdzMqA8x6pWC+etOA6vX3MS3rBmDZ2yZInvF3PVt8zQYHKYNJGn7axU917j1OXLgWe3O78DUSVU3ZbEDTOuhwBCclZsMwIG551Bdfr5TxcVZ5OqmWZ5joMLC7jyrrvkpje8gaowSqox1yetC6fjpAZmAsXoyHE52VpMdkbwjnPOxjvOOZsOLyzgmSNHsGNmVg70FlFWFYoso6WjozhhdFROnujS0rHxpFGPiJCZhrbihcyiNKBKDnIRWJvgBaJzIKgcKiRlrPtfEQYNih/zSKmzpXruDjUTK6q7RMIOYQCt8XHc/NTT+OQDD+Dd553nGvVglICPMQlFGnzRIVuaIMjIoOIKbJ2PmWqP4PxVIzh/1VDJERCGPzn6S2bM4C4cSiCmY3BbaxrNE/v3pyVRxQYPfQA0WH4lNTqYcrEMZAwgc7GyopDUXPhhCkHxcAgyBHDgb1rkY+O4+u7vyktXrqQLVq9GvyyRJRGCjqiGzPBJRpDRQBRFRJEGX3Hly8XSHEwQ57aZOIPoWBB5o5ORVGekpONxHH5jsP/oDP5tx05Qu13PwqZG016oqUvdMC7GuDmpfneYxoQJ9SBUd5sMxV4CNl8nVkQAk4EpCixkOa645Vuyf35OWkUBy6wN5AtEP8dI7zG8WTBEOZkn9Oa+rywzxjdnU1JUSlHHIflJc4dS+oGWGcYYfObBB+TA7ByKvIgMP4pVkgadPhmXxjoRFEMslFbzpS4Fsh5CKgPTY+ucILAZPKgGoDUygqfm5/HWzV/HQr+PPMviOOi06D8MpEsaE9DoEhn0IzKEctC4XoaNraFG6VQazG1JsW/LjHarha379+PD93wP2dgY6oYsSiJPTUKmBlmBOLQpMYxYC2I0aCCh3Mep8NUIy3DaBA0ZGRkWoT02hjuf240rvr5ZWEQyk/vDFoYsRJPKEsNAGk74HQ6IDmddDGSlwyCCRtssqbE3fuxalmVYLEu8/ctflcMV+/i/duKEphn01SbdzxBnjDLBct9AeEGEaWCaCJFCLpHU7psFFlGTAWNxwhhYIrQnJ7F5+w784te+hpJdpcvGEy8CBD44TC+NCI/dqwxFIktzF2BwVLsiCtFAcNOgUmrNFxRFARLB22/8J9y7Zw9a42OwqryadIJaFhrSW6ecrxsFx/aIgbV7IUJgVkzQ+jncZlATwpnTKSemQRsn1ZRGBhUR2hOT+Oq2Z/H6L9+MgwvzaBVFPY8TKvwcMs1EZNBhUpPglZjypn2nwR0wMCeo0abpna/43uFWUWC218Mv3nAD/vnJJ9GanHLCb4zJUaQGipPbtbzYD1YKJAq2e4ywfcpnSwKdcGk2WvI96BBF21TtMwgAZahAaE9M4DvP7cElX/qSPLJ/n7SLIh53dWxbMrxpTYZWPxpbfwALk0HGBg1JOPzCeTot2kWBR3fvxqWf+ax8+elt0p5eJgwCTJaeI6CgZyJNFh4cvhNLS8I/MmLlIVK1Pm3/6/HtDHK9KhDdhkQNoI5S5jKRA/icOTJoj3XxyOw8fnbTP+HzDz6IVpEjz/PYKJfKnIbLmAYHXwxyOiRtykKT2iHHdCJhIFWR58jzDB//7j14xeevlx8cOozWxCSqcCRirD5SfQJTY8FJOXn9NGItwBYEPJAb8HfR70FMZlybvwxOoELj6MCa76QmyVIcXj1AICcCMtfz1Robw5HFHt75rW/Lvzy7jT58ySU4cXIKzIzSWofJiDITw6arDCEB0yDzpuGHmzhPittbDx4Wnmx89zPP4H/cdpvc/uwOULeLomijItcuCz2QiSQ5ec8F94aaQUbCW2XOsLggvLBwbyYXX3yE8vw30GqPAWAyhhISVWP2ZrPeQM3HF2lk92kUI+zo6NlIGw8+twtffORRtAzhp5Yvp5FWyzXGWas6V6jRZfOi4c/w3rTmbg3aLgJjXNNdZgwe2LkT77/lW7j61u/IM3PzKKamQJkjYJHKoiUcmSJDzrEiP+Q6bkTl76pKIJzJ7OxO2b37TwgAzEc/dhMtWfJmWFvBZFngNgrVM5vlGEkT+XIcmkcQ6pk7CVODY8nOsEW/3wdmZ3HWkilcueECbDztdJoeG3PBhLWofPOfGWiWHjYGoVkwbuAyqOef5sYg85O22Frc/vTT+PT998tNW55CnxlmdBxZ5pgTkmVe2GpKRwgQY3NiTY9PhhIGkx47w6tKbFXI8/uvl4985J05AFBv4R+k6l4OD+M6igmlh5k1G81CiK7RviEd8LqByL1sHILvCVK5MTBFC4/1FvHuW2/Fn3/vXlxx6jr80plnYsPq49AuivhefsRy2ozh6xeuTqFQVz00HOIy5WS0GeNHe/fK5i1P0pcefwL37d4rIILpdtHKc1j2A8hVlJdwXtUZlLr+G3XANwmS9m3MQFUZ9HtkevaL1uMNhGuvbWdTSx/BRPcUsDhuCZEvuelZD9SYAkyNULvZF8CDVkE3q3m4NrSRkrXoLy4As7NAnuGC6Wm8+uST6bITT8S5K1fguPHusefDvdiXtdg5M4NH9u3Fv23fIbc9ux3379+PxX4P6Iwib3dgPFdIhg3+FhkCH8mQ/1OtbGp+BGwFlNYCNpfDhx7ie+65ELffbgnXXJPjuusq8+GPXGmWL/uYWNuHMXlkfRlKszo0ent05avZUdlIapMElNX8nNDO4+khJOLGyvd7QM8dZr2k3ca6yUmcPjFJaycncdLkBFaMjmGq08FIniPPcmFh9KuK5soShxcXsXd+DtsPH5Fnjh7FU0cO45mjMzi8sOBh2zao3UaryMHiZ2QYk0LKx5iY2RzflkIYTehEALFAaYGyb0WkwIH97+KPfvSzuOaa3Kn1NdcQgJYZ7/6QpqbOAGBDX03teHyBmxAHZ6TaXTf7RX48kum9AwlLzSlFcj4NeRaCga8NW4uyKoGyBPolUFWeBUeKJJUevpnkLXkGFAWQFyiy3Gl6AA90hBWbKppBUwO6lkbOI2lvbLJu1jrtr6yFcCEHDzzIR49chNWrLa67TnIAgvXrDa64YpE+9KGrUXW/CWMYxCacHh0b1qxv1zectB2lcI5HBdUBmOlTSnJCUSzy6MYLL9iQm0ueI88ymFYbGEOSEHLokNG9zoGhIJS0XoWDJ6oQkaGupQdQsZ5WPpTaFEuy2uQ2ScnCHnb0rG6xVqQqgX4PvFj+Hj71qRIbN2YA2BnUG28UbNqUyXves8X8zCtPQrd7Iawt3THSabcL6W0ozaq/NBDc9LQJIlFF82MjAXr6SO176t5i9mN1nHwzbyrDd+aaJsK3MR7YpHjGcBR+7L5PSb0EGpxnVzOxI0MtDqcK4biwq5BZC7AQsQVZhpRlBUhLDhz8KD7+sU/rAz01kEG49lrCtm0tc/Y5d9OSpReg7PfFZHnCd2li9MFPNGN0GTi8pi7cReYyN6qSCppIIGUaAOm0HSZOe7zcJaYuCRISra1P6jPpnCFtZtBgBsajW22dJ8Vn5HC0rKPF+iZ2sRZUVZUQWnLo4B3yg39/Nd77XsEVV0Tat1FL7z7p859f5NmZjXLk4HMCtFBVVTihLm0b1bhRaKDw5sCyCnlYdYl7yntykmdj2FEIf6VuRSV9lLjOskWF+TSkxiuKJhgaT5L1ZOcgFeTieaPOdjeOY0lqssK+uML14G1QPe2QLVCVFUhaOHL4CTnw/C/j9tstHn00aSNNY7o77hBs3Jjhr//6oLz0/FvJZG9Fq92FtSXUYFFqtMtTgwQV2MDBmTqbb9JzIVEzmQnpcAdqNFwnNA914OZAf5seZ58M7XAwCel4XCdwCiKioZ3+qlgFrUisqmv+SEa2LkioqhKQNo7ObOGDB16Lz31uFwCD667jF8/lw8nP73//erNs+U00MXkaqqoPMpkY3xlMNDjSJjREBDurqC0umlLhanPirG5wM2pAkjqlYsi5iGowBqXMhER7ORl7EM0SmSQAqPG+RgjKDRAvOT9B6kVlhtiKqapECAUOH/4eP7frF3HDDc81D3J+ETBFLcKVV640q477Gxofv9w7uj4EGfyRJyk006headtqCGk/T8ovH5o761Oem/D9ELpIk9QFIDk5FQN4XDr9N2GucXqodOjW0dSdWHh3u4GFLYu1LfR6kNmZj8vWrX+IzZvnjyX8F14AwJ2y7beMueaad9Ho2LUYGz8R1gIgN0TfZOQYH/qIkCHlpoGXasGHWFvIDKKabGvmReMM4GMO3R04TJNjfuIAQUFyuE6jClVTdeqMVoTr7s3azgsAC2sJIoUIAzMzj9H83B/bT3ziq00ZDvt64bz+jjtCV4OR6677oZx+2vVEmIW1p1KrWIK8yMDWwFYMwBLAYCv+6KW61485Kfhro0vNI2NjxK74lANzI6Sm+0WHrmfD+fhbHzGizvsN15AokxOcKbwDdefquCOkrHXHjADuLC5bidiKSCQDIZNeP8Pc7JOYnflT/u533y033/woNm7M8NhjCEeXv0Dr4o/5FUwSAFx11ZSZnHwTtTpvFEMvB9GJ6HRAvptEMEDBS7tZfL2Zmke+iu7GrC+qZ//4sJdqZ+rn+XpmstRAmPIZSWmheYwJGoBiUIj4OdzIdAGUJWRhAaiqbST2TpTlTfb++7+FO+5YBIAXMjn/8QUIucKNN5q4EADwvrePYXTtGcbacyTLTjWgk5mwCqBJAKMEaoNQAMjjPMkY0fjqiyEBi6uUGqpnQTp7HCuoIuJlS1niYN0KkM9mJdY0xLMPSJ1NOzDYR8Jp5G68A3t7Y0wFESuV7RMwB/ARYd4N4FmydkvG/Fj5+ONP4NvfnmsoKeOF2U//iQVIk7YM69dLshjDTNyv/3qBsbEcc3M5ypJQFILRkjBfCMqSMBlImyOEft916gHA5CSAIwAmgX7f0+Aq97v53KDTr++91Tr2A4drWy1Ba0HwfFlfNzEBLCy4+1hWCOYLiZ8zNlahvd3i/95SAbAvaBkA/KSCD1//Hwpo/9fZWsdhAAAAAElFTkSuQmCC" alt=""><b>Chely</b><span>Marta (ficticia)</span></div>
+          <div class="ph-body" id="ph-body"></div>
+          <div class="ph-sheet" id="ph-sheet" hidden role="dialog" aria-label="Significado"><div class="row"><h4 id="sheet-t"></h4><button type="button" id="sheet-x" aria-label="Cerrar">✕</button></div><p id="sheet-d"></p></div>        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band alt" id="funciones">
+  <div class="in">
+    <div style="display:grid;gap:.6rem"><span class="eyebrow">Lo que ve el paciente</span><h2>Más que un texto: herramientas para entender.</h2><p class="lead">Tomamos lo que mejor funciona en las apps de salud de otros países y lo adaptamos para pacientes de acá.</p></div>
+    <div class="features">
+      <div class="feature"><h3>Glosario al tocar</h3><p>Cada palabra técnica aparece subrayada. Se toca y se lee qué significa, sin salir del informe.</p><span class="src">Idea probada en portales de EE.UU.</span></div>
+      <div class="feature"><h3>Valores con su rango</h3><p>Cada resultado al lado del rango del laboratorio, marcado «dentro» o «fuera», con colores suaves que no asustan.</p><span class="src">Como los informes de Midulabs (Chile)</span></div>
+      <div class="feature"><h3>Evolución en el tiempo</h3><p>Un gráfico con los valores de estudios anteriores para ver cómo vienen, sin sacar conclusiones por su cuenta.</p><span class="src">Como ChatGPT Health</span></div>
+      <div class="feature"><h3>«¿Se entendió?»</h3><p>Una pregunta al final de cada explicación. Nos dice si Chely cumple su objetivo. Es la medida principal del piloto.</p><span class="src">Como las encuestas de Scanslated</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="piloto">
+  <div class="in">
+    <div style="display:grid;gap:.6rem"><span class="eyebrow">El piloto</span><h2>Lo que queremos averiguar.</h2><p class="lead">Antes de pensar en crecer, queremos saber si Chely sirve de verdad. El piloto es gratis y en pequeño: unos pocos médicos y sus pacientes.</p></div>
+    <div class="aud">
+      <article><span class="who">Pacientes</span><h3>¿Entienden mejor sus estudios?</h3><ul><li>Si la explicación se entiende a la primera.</li><li>Si llegan a la consulta con preguntas más claras.</li><li>Si les resulta fácil de usar, también a personas mayores.</li></ul></article>
+      <article><span class="who">Médicos</span><h3>¿Les ahorra tiempo?</h3><ul><li>Cuánto tardan en revisar y aprobar una explicación.</li><li>Si reciben menos consultas de dudas.</li><li>Qué tienen que corregir más seguido.</li></ul></article>
+      <article><span class="who">Calidad</span><h3>¿Las explicaciones son correctas?</h3><ul><li>Médicos que revisan una muestra de explicaciones.</li><li>Que se respeten cifras, negaciones y dudas del informe.</li><li>Ningún error grave llega al paciente.</li></ul></article>
+      <article><span class="who">Después</span><h3>Si funciona, seguimos</h3><ul><li>Sumar más médicos y algún laboratorio.</li><li>Recién ahí ver cómo sostenerlo en el tiempo.</li><li>Siempre gratis para el paciente.</li></ul></article>
+    </div>
+  </div>
+</section>
+
+<section class="band alt" id="confianza">
+  <div class="in two">
+    <div style="display:grid;gap:1rem;align-content:start">
+      <span class="eyebrow">Cuidado de los datos</span>
+      <h2>Datos de salud, tratados como tales.</h2>
+      <ul class="plainlist">
+        <li><strong>El médico aprueba</strong> cada explicación antes de que la vea el paciente.</li>
+        <li><strong>Chely no diagnostica</strong>: no da pronósticos ni cambia tratamientos, y conserva cifras, negaciones y dudas del informe.</li>
+        <li><strong>El paciente es dueño de sus datos</strong>: decide qué médicos se vinculan, descarga sus informes y puede borrar su cuenta.</li>
+        <li><strong>Datos cifrados</strong> y registro de quién accedió a cada estudio.</li>
+        <li><strong>Asesoría legal antes de usar datos reales</strong>: Ley 25.326 de Protección de Datos Personales (datos sensibles), registro de bases ante la AAIP, Ley 26.529 de Derechos del Paciente y consulta a ANMAT sobre software de uso médico.</li>
+      </ul>
+    </div>
+    <div style="display:grid;gap:1rem;align-content:start">
+      <span class="eyebrow">Plan</span>
+      <h2>Por dónde arrancamos.</h2>
+      <div class="road">
+        <div class="r now"><span class="when">Hoy</span><div><h3>Prototipo funcionando</h3><p>Carga de estudios, explicación, perfil, historial y portal médico de prueba.</p></div></div>
+        <div class="r"><span class="when">Piloto</span><div><h3>Unos pocos médicos y sus pacientes</h3><p>Gratis. Medimos si las explicaciones se entienden, si son correctas y si ahorran consultas.</p></div></div>
+        <div class="r"><span class="when">Ajustes</span><div><h3>Mejorar con lo aprendido</h3><p>Corregimos lo que no funcione antes de sumar más gente.</p></div></div>
+        <div class="r"><span class="when">Después</span><div><h3>Decidir cómo seguir</h3><p>Si el piloto da buenos resultados, vemos cómo crecer y sostenerlo.</p></div></div>
+      </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="preguntas">
+  <div class="in">
+    <div style="display:grid;gap:.6rem"><span class="eyebrow">Preguntas frecuentes</span><h2>Lo que más nos preguntan.</h2></div>
+    <div class="faq">
+      <details><summary>¿Qué es Chely?</summary><p>Chely es una app que explica en palabras simples los informes de análisis clínicos y estudios médicos. El médico sube el informe, revisa la explicación y el paciente la lee desde su celular o computadora.</p></details>
+      <details><summary>¿Chely reemplaza al médico?</summary><p>No. Chely explica lo que dice el informe, pero no diagnostica, no da pronósticos y no indica tratamientos. Cada explicación la revisa y aprueba el médico antes de que llegue al paciente.</p></details>
+      <details><summary>¿Qué estudios puede explicar?</summary><p>Informes escritos: análisis de sangre y orina, ecografías, radiografías, tomografías y resonancias, entre otros. Chely lee el texto del informe; no interpreta las imágenes de los estudios.</p></details>
+      <details><summary>¿Cuánto cuesta?</summary><p>Durante la prueba piloto es gratis para médicos y pacientes.</p></details>
+      <details><summary>¿Cómo se cuidan mis datos?</summary><p>Los datos de salud son datos sensibles. Cada paciente decide qué médicos ven sus estudios, puede descargarlos y pedir que se borren. Antes de trabajar con datos reales nos vamos a ajustar, con asesoría legal, a la Ley 25.326 de Protección de Datos Personales y a la Ley 26.529 de Derechos del Paciente.</p></details>
+      <details><summary>¿Cómo participo de la prueba piloto?</summary><p>Completá el formulario de abajo indicando si sos médico, paciente o familiar, o representás a un laboratorio o institución. Te contactamos para empezar.</p></details>
+    </div>
+  </div>
+</section>
+
+<section class="band alt" id="sumate">
+  <div class="in">
+    <div class="join">
+      <div style="display:grid;gap:1rem;align-content:start">
+        <span class="eyebrow" style="color:var(--teal-ink);opacity:.85">Sumate</span>
+        <h2>Buscamos médicos y pacientes para probarlo.</h2>
+        <p>Si sos médico y querés probar Chely con algunos pacientes, o sos paciente o familiar y querés ayudarnos a mejorarlo, dejanos tus datos. El piloto es gratis.</p>
+        <p id="contact-line"></p>
+      </div>
+      <form id="join-form" novalidate>
+        <label for="j-role">Soy
+          <select id="j-role"><option>Médico/a</option><option>Paciente o familiar</option><option>Laboratorio o institución</option><option>Quiero ayudar de otra forma</option></select></label>
+        <label for="j-name">Nombre e institución<input id="j-name" type="text" autocomplete="organization"></label>
+        <label for="j-contact">Email o WhatsApp<input id="j-contact" type="text" autocomplete="email"></label>
+        <label for="j-msg">Contanos en qué te interesa<textarea id="j-msg"></textarea></label>
+        <button class="btn primary" type="submit">Preparar mensaje</button>
+        <div class="out" id="j-out" hidden></div>
+      </form>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="in"><span>Chely · Tus estudios, en criollo · Prueba piloto</span><span>Contacto: <span style="user-select:all">info@chely.app</span></span><span>Presentación con ejemplos ficticios. Chely no reemplaza la consulta médica.</span></div>
+</footer>
+
+<script>
+'use strict';
+// Contacto del equipo: completar antes de compartir (email o WhatsApp).
+const CONTACT = 'info@chely.app';
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/* Hero: informe técnico y su versión en criollo */
+const EX = [
+  { kind: 'Ecografía abdominal', tech: 'Hígado de tamaño conservado con <mark>aumento difuso de la ecogenicidad</mark>, <mark>compatible con esteatosis leve</mark>. No se observan lesiones focales.',
+    plain: 'Hay un poco más de grasa de lo habitual dentro del hígado ("hígado graso"). Es leve. No se vio ninguna zona rara o distinta.' },
+  { kind: 'Análisis de sangre', tech: 'Glucemia en ayunas: <mark>112 mg/dL</mark> (VR 70 - 100). Colesterol <mark>LDL: 148 mg/dL</mark> (óptimo &lt; 100).',
+    plain: 'El azúcar en sangre en ayunas dio 112, un poco arriba de lo normal (hasta 100). El "colesterol malo" dio 148, más alto de lo ideal. Conviene hablarlo con tu médico.' },
+  { kind: 'Radiografía de tórax', tech: 'Campos pulmonares sin infiltrados ni consolidaciones. Senos costodiafragmáticos libres. <mark>Leve elongación aórtica</mark>.',
+    plain: 'Los pulmones se ven limpios. La aorta, la arteria grande que sale del corazón, está un poco alargada; es frecuente con los años. Tu médico te dirá si hace falta controlarla.' },
+];
+function showEx(i) {
+  document.querySelectorAll('.switcher button').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.ex === i)));
+  $('#ex-kind').textContent = EX[i].kind; $('#ex-tech').innerHTML = EX[i].tech; $('#ex-plain').textContent = EX[i].plain;
+}
+document.querySelectorAll('.switcher button').forEach(b => b.addEventListener('click', () => showEx(+b.dataset.ex)));
+showEx(0);
+
+/* Demo médico → paciente */
+const STUDIES = [
+  { id: 'lab', name: 'Análisis de sangre', date: '12/09/2026',
+    report: `LABORATORIO · EJEMPLO FICTICIO
+Paciente: Marta Ficticia · 12/09/2026
+
+Hemoglobina: 12,9 g/dL (VR 12,0 - 16,0)
+Glucemia en ayunas: 112 mg/dL (VR 70 - 100)
+Creatinina: 0,9 mg/dL (VR 0,5 - 1,1)
+Colesterol total: 228 mg/dL (deseable < 200)
+Colesterol LDL: 148 mg/dL (óptimo < 100)
+Colesterol HDL: 52 mg/dL (deseable > 50)
+TSH: 2,1 µUI/mL (VR 0,4 - 4,0)`,
+    text: `QUÉ DICE
+- La glucemia en ayunas dio 112 mg/dL. El laboratorio marca como normal de 70 a 100.
+- El colesterol total dio 228 mg/dL y el LDL 148 mg/dL, los dos por encima de lo deseable.
+- Hemoglobina, creatinina, HDL y TSH están dentro de lo normal.
+
+EN CRIOLLO
+- Glucemia es el azúcar en la sangre sin haber comido. Está un poco alta.
+- LDL es el "colesterol malo"; HDL es el "colesterol bueno", y el tuyo está bien.
+- Creatinina muestra cómo trabajan los riñones: normal. TSH es de la tiroides: normal.
+
+PARA PREGUNTAR EN LA CONSULTA
+- ¿Tengo que repetir la glucemia o hacer otro análisis?
+- ¿Qué puedo cambiar en la comida o la actividad para el colesterol?` },
+  { id: 'eco', name: 'Ecografía abdominal', date: '21/10/2026',
+    report: `ECOGRAFÍA ABDOMINAL · EJEMPLO FICTICIO
+Paciente: Marta Ficticia · 21/10/2026
+
+Hígado de tamaño conservado, con aumento difuso de la ecogenicidad, compatible con esteatosis leve. No se observan lesiones focales.
+Vesícula no visualizada (antecedente de colecistectomía).
+Riñones sin litiasis ni dilatación.
+
+CONCLUSIÓN: Esteatosis hepática leve.`,
+    text: `QUÉ DICE
+- El hígado tiene tamaño normal y una imagen "compatible con esteatosis leve".
+- No se vio ninguna lesión en el hígado.
+- No se ve la vesícula porque te la sacaron en una operación.
+- Los riñones están bien y no tienen piedras.
+
+EN CRIOLLO
+- Esteatosis es "hígado graso": hay un poco más de grasa de lo habitual en el hígado. Es leve.
+- "Compatible con" quiere decir que la imagen lo sugiere; tu médico lo junta con los análisis.
+
+PARA PREGUNTAR EN LA CONSULTA
+- ¿El hígado graso tiene que ver con el colesterol y el azúcar?
+- ¿Cada cuánto conviene volver a controlarlo?` },
+];
+// Valores del análisis actual y de estudios anteriores (todos ficticios).
+const LAB_VALUES = [
+  { n: 'Glucemia en ayunas', key: 'glu', v: 112, u: 'mg/dL', lo: 70, hi: 100, hist: [['03/2025', 101], ['09/2025', 106], ['09/2026', 112]] },
+  { n: 'Colesterol LDL', key: 'ldl', v: 148, u: 'mg/dL', lo: null, hi: 100, txt: 'óptimo < 100', hist: [['03/2025', 139], ['09/2025', 151], ['09/2026', 148]] },
+  { n: 'Colesterol total', v: 228, u: 'mg/dL', lo: null, hi: 200, txt: 'deseable < 200' },
+  { n: 'Colesterol HDL', v: 52, u: 'mg/dL', lo: 50, hi: null, txt: 'deseable > 50' },
+  { n: 'Hemoglobina', v: 12.9, u: 'g/dL', lo: 12, hi: 16 },
+  { n: 'Creatinina', v: 0.9, u: 'mg/dL', lo: 0.5, hi: 1.1 },
+  { n: 'TSH', v: 2.1, u: 'µUI/mL', lo: 0.4, hi: 4.0 },
+];
+const GLOSS = {
+  'glucemia': ['Glucemia', 'Cantidad de azúcar (glucosa) en la sangre. «En ayunas» quiere decir sin haber comido en las horas anteriores.'],
+  'ldl': ['Colesterol LDL', 'Es el llamado «colesterol malo». En exceso se puede acumular en las paredes de las arterias.'],
+  'hdl': ['Colesterol HDL', 'Es el llamado «colesterol bueno». Ayuda a sacar el colesterol de la sangre.'],
+  'hemoglobina': ['Hemoglobina', 'Proteína de los glóbulos rojos que lleva el oxígeno por el cuerpo.'],
+  'creatinina': ['Creatinina', 'Sustancia que eliminan los riñones. Su valor ayuda a ver cómo están funcionando.'],
+  'tsh': ['TSH', 'Hormona que regula la tiroides, la glándula del cuello que controla el ritmo del cuerpo.'],
+  'esteatosis': ['Esteatosis', 'Acumulación de grasa dentro de un órgano. En el hígado se la llama «hígado graso».'],
+  'compatible con': ['Compatible con', 'La imagen sugiere eso, pero no lo confirma por sí sola. El médico lo junta con otros datos.'],
+  'lesión': ['Lesión', 'Zona del órgano que se ve distinta del resto. Puede ser algo sin importancia o algo a estudiar.'],
+  'vesícula': ['Vesícula', 'Bolsita debajo del hígado que guarda la bilis. Se puede sacar con una operación sin problemas para la digestión.'],
+  'piedras': ['Piedras (litiasis)', 'Cristales duros que se forman en los riñones o en la vesícula, llamados también cálculos.'],
+};
+const D = { study: 0, generated: false, sent: {}, evo: 'glu', survey: {} };
+function renderStudies() {
+  const host = $('#studies'); host.innerHTML = '';
+  STUDIES.forEach((s, i) => {
+    const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-pressed', String(i === D.study));
+    b.innerHTML = esc(s.name) + '<small>' + esc(s.date) + (D.sent[s.id] ? ' · enviado' : '') + '</small>';
+    b.onclick = () => { D.study = i; D.generated = false; renderDoctor(); };
+    host.append(b);
+  });
+}
+function renderDoctor() {
+  renderStudies();
+  const s = STUDIES[D.study];
+  $('#d-report').textContent = s.report;
+  $('#d-progress').hidden = true;
+  $('#d-edit').hidden = !D.generated;
+  $('#d-gen').disabled = false;
+  $('#d-gen').textContent = D.sent[s.id] ? 'Volver a generar' : 'Generar explicación';
+  if (D.generated) { $('#d-text').value = s.text; $('#d-ok').checked = false; $('#d-send').disabled = true; }
+}
+let genTimer;
+$('#d-gen').addEventListener('click', () => {
+  const steps = ['Leyendo el informe', 'Buscando los términos a explicar', 'Escribiendo en palabras simples', 'Revisando cifras y negaciones'];
+  const p = $('#d-progress'); p.hidden = false; $('#d-edit').hidden = true; $('#d-gen').disabled = true;
+  let i = 0; clearInterval(genTimer);
+  const paint = () => { p.innerHTML = steps.map((t, k) => `<div class="${k < i ? 'done' : k === i ? 'run' : ''}">${k < i ? '✓' : k === i ? '…' : '○'} ${t}</div>`).join(''); };
+  paint();
+  genTimer = setInterval(() => { i++; paint(); if (i >= steps.length) { clearInterval(genTimer); D.generated = true; $('#d-gen').disabled = false; $('#d-edit').hidden = false; $('#d-text').value = STUDIES[D.study].text; $('#d-ok').checked = false; $('#d-send').disabled = true; } }, 550);
+});
+$('#d-ok').addEventListener('change', e => { $('#d-send').disabled = !e.target.checked; });
+$('#d-send').addEventListener('click', () => {
+  const s = STUDIES[D.study];
+  D.sent[s.id] = { text: $('#d-text').value.trim(), note: $('#d-note').value.trim(), at: new Date() };
+  D.last = s.id; D.generated = false;
+  renderDoctor(); renderPhone();
+});
+const TERM_RE = new RegExp('(^|[^\\p{L}])(' + Object.keys(GLOSS).sort((a, b) => b.length - a.length).join('|') + ')(?![\\p{L}])', 'giu');
+function withTerms(text, seen) {
+  // Marca solo la primera aparición de cada término en la explicación.
+  return esc(text).replace(TERM_RE, (m, pre, word) => {
+    const k = word.toLowerCase(); if (seen.has(k)) return m; seen.add(k);
+    return `${pre}<button type="button" class="term" data-t="${esc(k)}">${word}</button>`;
+  });
+}
+function phoneSection(text) {
+  const out = []; let list = null; const seen = new Set();
+  for (const raw of text.split('\n')) {
+    const l = raw.trim(); if (!l) continue;
+    if (/^[A-ZÁÉÍÓÚÑ ]{4,}$/.test(l)) { list = null; out.push(`<h4>${esc(l.charAt(0) + l.slice(1).toLowerCase())}</h4>`); continue; }
+    if (l.startsWith('- ')) { if (!list) { list = []; out.push(list); } list.push(`<li>${withTerms(l.slice(2), seen)}</li>`); continue; }
+    list = null; out.push(`<p>${withTerms(l, seen)}</p>`);
+  }
+  return out.map(x => Array.isArray(x) ? `<ul>${x.join('')}</ul>` : x).join('');
+}
+function renderPhone() {
+  const body = $('#ph-body');
+  const ids = Object.keys(D.sent);
+  if (!ids.length) { body.innerHTML = '<div class="ph-empty"><b>Todavía no hay estudios</b><span>Cuando tu médico te envíe uno, lo vas a ver acá explicado.</span></div>'; return; }
+  const order = [D.last, ...ids.filter(x => x !== D.last)];
+  body.innerHTML = order.map((id, k) => {
+    const s = STUDIES.find(x => x.id === id), d = D.sent[id];
+    return `<div class="ph-card">${k === 0 ? '<span class="pill ok" style="justify-self:start">Nuevo</span>' : ''}
+      <b>${esc(s.name)} · ${esc(s.date)}</b>
+      ${d.note ? `<div class="ph-note"><b>Dra. Ejemplo:</b> ${esc(d.note)}</div>` : ''}
+      ${phoneSection(d.text)}
+      <span class="muted" style="font-size:.7rem">Revisado por tu médico. No reemplaza la consulta.</span>
+      ${surveyHtml(id)}</div>
+      ${id === 'lab' ? valuesHtml() + evoHtml() : ''}`;
+  }).join('');
+  body.scrollTop = 0;
+}
+function surveyHtml(id) {
+  if (D.survey[id]) return `<div class="survey"><b>Gracias. Nos ayuda a mejorar las explicaciones.</b></div>`;
+  return `<div class="survey" data-id="${id}"><b>¿Se entendió?</b><button type="button" data-a="si">Sí</button><button type="button" data-a="mas">Más o menos</button><button type="button" data-a="no">No</button></div>`;
+}
+function fmtN(n) { return String(n).replace('.', ','); }
+function valuesHtml() {
+  const rows = LAB_VALUES.map(x => {
+    const out = (x.lo != null && x.v < x.lo) ? 'Por debajo del rango' : (x.hi != null && x.v > x.hi) ? 'Por encima del rango' : null;
+    const top = Math.max(x.hi ?? x.v, x.v) * 1.35, from = x.lo ?? 0, to = x.hi ?? top;
+    const pct = n => Math.min(100, Math.max(0, n / top * 100));
+    const range = x.txt || `${fmtN(x.lo)} a ${fmtN(x.hi)}`;
+    return `<div class="val"><span class="nm">${withTerms(x.n, new Set())}</span><span class="num">${fmtN(x.v)} <small class="muted">${esc(x.u)}</small></span>
+      <div class="rng"><span class="track" aria-hidden="true"><span class="rband" style="left:${pct(from)}%;width:${pct(to) - pct(from)}%"></span><span class="dot" style="left:${pct(x.v)}%"></span></span>
+      <span>${esc(range)}</span><span class="chip ${out ? 'out' : 'in'}">${out || 'Dentro del rango'}</span></div></div>`;
+  }).join('');
+  return `<div class="ph-card"><h4>Tus valores</h4><span class="muted" style="font-size:.7rem">La franja verde es el rango de referencia del laboratorio. Estar fuera no es un diagnóstico: lo interpreta tu médico.</span><div class="vals">${rows}</div></div>`;
+}
+function evoHtml() {
+  const series = LAB_VALUES.filter(x => x.hist);
+  const x = series.find(s => s.key === D.evo) || series[0];
+  const W = 280, H = 140, L = 30, R = 12, T = 14, B = 26;
+  const vals = x.hist.map(h => h[1]);
+  const lo = Math.min(...vals, x.lo ?? Infinity, x.hi ?? Infinity), hi = Math.max(...vals, x.hi ?? -Infinity);
+  const raw = ((hi - lo) * 1.4 || 20) / 4, mag = 10 ** Math.floor(Math.log10(raw));
+  const stepN = [1, 2, 2.5, 5, 10].map(m => m * mag).find(m => m >= raw);
+  const y0 = Math.floor((lo - stepN * 0.5) / stepN) * stepN, y1 = Math.ceil((hi + stepN * 0.5) / stepN) * stepN;
+  const sx = i => L + 18 + i * (W - L - R - 36) / (vals.length - 1), sy = v => T + (y1 - v) * (H - T - B) / (y1 - y0);
+  const bandTop = sy(Math.min(x.hi ?? y1, y1)), bandBot = sy(Math.max(x.lo ?? y0, y0));
+  const ticks = []; for (let t = y0; t <= y1 + 1e-9; t += stepN) ticks.push(+t.toFixed(2));
+  const pts = vals.map((v, i) => `${sx(i)},${sy(v)}`).join(' ');
+  const svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Evolución de ${esc(x.n)}: ${x.hist.map(h => h[0] + ' ' + h[1]).join(', ')}">
+    <rect x="${L}" y="${bandTop}" width="${W - L - R}" height="${Math.max(0, bandBot - bandTop)}" fill="var(--ok)" opacity=".14"/>
+    ${ticks.map(t => `<line x1="${L}" x2="${W - R}" y1="${sy(t)}" y2="${sy(t)}" stroke="var(--line)" stroke-width="1"/><text x="${L - 5}" y="${sy(t) + 3}" font-size="9" text-anchor="end" fill="var(--muted)">${t}</text>`).join('')}
+    <polyline points="${pts}" fill="none" stroke="var(--teal)" stroke-width="2.5" stroke-linejoin="round"/>
+    ${vals.map((v, i) => `<circle cx="${sx(i)}" cy="${sy(v)}" r="${i === vals.length - 1 ? 5 : 3.5}" fill="${i === vals.length - 1 ? 'var(--teal)' : 'var(--paper)'}" stroke="var(--teal)" stroke-width="2"/>
+      <text x="${sx(i)}" y="${sy(v) - 9}" font-size="10" font-weight="700" text-anchor="middle" fill="var(--fg)">${v}</text>
+      <text x="${sx(i)}" y="${H - 8}" font-size="9" text-anchor="middle" fill="var(--muted)">${x.hist[i][0]}</text>`).join('')}
+  </svg>`;
+  const tabs = series.map(s => `<button type="button" data-evo="${s.key}" aria-pressed="${s.key === x.key}">${esc(s.n)}</button>`).join('');
+  return `<div class="ph-card evo"><h4>Cómo vienen tus valores</h4><div class="evo-tabs">${tabs}</div>${svg}
+    <span class="muted" style="font-size:.7rem">${esc(x.u)} · Franja verde: ${esc(x.txt || 'rango de referencia')}. Datos de estudios anteriores guardados en Chely. Si cambió algo, lo valora tu médico.</span></div>`;
+}
+$('#ph-body').addEventListener('click', e => {
+  const t = e.target.closest('.term');
+  if (t) { const g = GLOSS[t.dataset.t]; $('#sheet-t').textContent = g[0]; $('#sheet-d').textContent = g[1]; $('#ph-sheet').hidden = false; return; }
+  const ev = e.target.closest('[data-evo]');
+  if (ev) { D.evo = ev.dataset.evo; const card = $('#ph-body .evo'); card.outerHTML = evoHtml(); return; }
+  const a = e.target.closest('.survey button');
+  if (a) { const id = a.closest('.survey').dataset.id; D.survey[id] = a.dataset.a; a.closest('.survey').outerHTML = surveyHtml(id); }
+});
+$('#sheet-x').addEventListener('click', () => { $('#ph-sheet').hidden = true; });
+
+renderDoctor(); renderPhone();
+
+/* Sumate: arma el mensaje para copiar (la página no envía datos a ningún lado) */
+(function contactLine() {
+  const el = $('#contact-line');
+  if (!CONTACT) { el.textContent = 'Contacto: lo publicamos en breve.'; return; }
+  el.innerHTML = 'Escribinos a <a href="mailto:' + esc(CONTACT) + '" style="color:inherit;font-weight:700;user-select:all">' + esc(CONTACT) + '</a> ';
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'btn sm'; b.textContent = 'Copiar correo'; b.style.marginLeft = '.4rem';
+  b.onclick = async () => { try { await navigator.clipboard.writeText(CONTACT); b.textContent = 'Copiado'; } catch { b.textContent = 'Seleccioná el correo y copialo'; } };
+  el.append(b);
+})();
+$('#join-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const msg = `Hola, equipo de Chely. Soy ${$('#j-name').value.trim() || '(nombre)'} (${$('#j-role').value}).\nContacto: ${$('#j-contact').value.trim() || '(email o WhatsApp)'}\n${$('#j-msg').value.trim()}`;
+  const out = $('#j-out'); out.hidden = false; out.textContent = '';
+  const pre = document.createElement('div'); pre.textContent = msg; pre.style.userSelect = 'all';
+  const hint = document.createElement('b');
+  out.append(hint, pre);
+  try { await navigator.clipboard.writeText(msg); hint.textContent = 'Mensaje copiado. ' + (CONTACT ? 'Pegalo en un mail o WhatsApp a ' + CONTACT + '.' : 'Pegalo en un mail o WhatsApp al equipo.'); }
+  catch { hint.textContent = 'Seleccioná y copiá este mensaje:'; }
+});
+</script>
+</body>
+</html>
