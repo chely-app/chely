@@ -67,8 +67,8 @@ await pp.click('.feedback >> text=Sí'); await pp.waitForSelector('text=Gracias 
 // Piloto sin médico: la paciente sube su propio estudio.
 await pp.click('text=Mis estudios'); await pp.click('text=Subir un estudio');
 await pp.fill('#up-title', 'Mi análisis de octubre'); await pp.fill('#up-text', 'Glucemia en ayunas: 118 mg/dL (VR 70 - 100)');
-await pp.click('button:has-text("Subir estudio")'); await pp.waitForSelector('#own-report'); step('paciente sube su propio estudio');
-await pp.click('text=Explicar mi estudio'); await pp.waitForSelector('text=sin revisión médica');
+await pp.click('button:has-text("Subir estudio")'); step('paciente sube su propio estudio');
+await pp.waitForSelector('text=sin revisión médica');  // se explica solo, sin tocar otro botón
 await pp.screenshot({ path: out + '/9-estudio-propio.png', fullPage: true }); step('la IA lo explica con aviso de «sin revisión médica»');
 await pp.click('text=Mi cuenta'); await pp.waitForSelector('text=Quién vio tus estudios');
 await pp.screenshot({ path: out + '/8-paciente-cuenta.png', fullPage: true }); step('ve el registro de accesos');

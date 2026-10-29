@@ -290,7 +290,7 @@ function navFor(items) {
 }
 function go(page, extra = {}) {
   window.onbeforeunload = null;
-  state.page = page; state.studyId = extra.studyId || null; state.patientId = extra.patientId ?? (page === 'paciente' || page === 'estudio-medico' ? state.patientId : null);
+  state.page = page; state.studyId = extra.studyId || null; state.autoExplain = !!extra.autoExplain; state.patientId = extra.patientId ?? (page === 'paciente' || page === 'estudio-medico' ? state.patientId : null);
   render(); window.scrollTo({ top: 0 });
 }
 async function signOut() { await sb.auth.signOut(); state.me = null; state.page = null; render(); }
@@ -615,7 +615,7 @@ function patientUpload() {
       if (upErr) toast('El estudio se guardó, pero el archivo no se pudo subir. Podés pegar el texto.');
       else await sb.from('studies').update({ file_path: path, file_name: f.name, file_type: f.type }).eq('id', st.id);
     }
-    go('mi-estudio', { studyId: st.id });
+    go('mi-estudio', { studyId: st.id, autoExplain: true });
   });
   m.append(h('div', { class: 'row' }, h('button', { class: 'btn quiet sm', onclick: () => go('estudios') }, '‹ Mis estudios')));
   m.append(h('div', { class: 'card' }, h('h1', {}, 'Subir un estudio'),
@@ -644,21 +644,26 @@ async function patientOwnStudy() {
     s.report_text = report.value.trim(); return true;
   };
   const readBtn = h('button', { class: 'btn' }, 'Leer el archivo');
-  readBtn.addEventListener('click', async () => {
-    const done = busy(readBtn, 'Leyendo el archivo… puede tardar un minuto');
+  const explainBtn = h('button', { class: 'btn primary big' }, 'Explicar mi estudio');
+  const readFile = async () => {
+    status.className = 'alert info'; status.textContent = 'Chely está leyendo tu archivo. Puede tardar un minuto; no cierres esta pantalla.';
+    const done = busy(readBtn, 'Leyendo el archivo…');
     const { data, error } = await sb.functions.invoke('ia', { body: { action: 'transcribir', study_id: s.id } });
     done();
-    if (error) { status.className = 'alert bad'; status.textContent = await fnError(error); return; }
-    report.value = data.text; await saveText();
+    if (error) { status.className = 'alert bad'; status.textContent = await fnError(error); return false; }
+    report.value = data.text;
+    return saveText();
+  };
+  readBtn.addEventListener('click', async () => {
+    if (!await readFile()) return;
     status.className = 'alert ok'; status.textContent = 'Listo, Chely leyó el archivo. Revisá que el texto sea igual al del informe y tocá «Explicar mi estudio».';
   });
-  const explainBtn = h('button', { class: 'btn primary big' }, 'Explicar mi estudio');
-  explainBtn.addEventListener('click', async () => {
+  const explainStudy = async () => {
     if (!report.value.trim()) { status.className = 'alert bad'; status.textContent = 'Falta el texto del informe. Tocá «Leer el archivo» o pegalo.'; return; }
     // Con archivo y un texto tan corto, seguramente falta leer el archivo.
-    if (s.file_path && report.value.trim().length < 150) { status.className = 'alert bad'; status.textContent = 'El texto es muy corto para ser el informe completo. Tocá «Leer el archivo» y después «Explicar mi estudio».'; return; }
+    if (s.file_path && report.value.trim().length < 40) { status.className = 'alert bad'; status.textContent = 'El texto es muy corto para ser el informe completo. Tocá «Leer el archivo» y después «Explicar mi estudio».'; return; }
     if (!await saveText()) return;
-    status.className = 'alert info'; status.textContent = 'Chely está leyendo tu estudio y escribiendo la explicación. Puede tardar hasta dos minutos; no cierres esta pantalla.';
+    status.className = 'alert info'; status.textContent = 'Chely está escribiendo la explicación de tu estudio. Puede tardar hasta dos minutos; no cierres esta pantalla.';
     const done = busy(explainBtn, 'Escribiendo la explicación…');
     const { data, error } = await sb.functions.invoke('ia', { body: { action: 'explicar', study_id: s.id } });
     if (error) { done(); status.className = 'alert bad'; status.textContent = await fnError(error); return; }
@@ -668,7 +673,8 @@ async function patientOwnStudy() {
     done();
     if (e2) { status.className = 'alert bad'; status.textContent = errorText(e2); return; }
     go('estudio', { studyId: s.id });
-  });
+  };
+  explainBtn.addEventListener('click', explainStudy);
   m.append(h('div', { class: 'row' }, h('button', { class: 'btn quiet sm', onclick: () => go('estudios') }, '‹ Mis estudios')));
   m.append(h('div', { class: 'card' }, h('div', { class: 'row' }, h('h1', { class: 'grow' }, s.title), h('span', { class: 'pill' }, fmtDate(s.study_date))),
     s.file_path ? h('div', { class: 'row' }, h('span', { class: 'grow muted' }, 'Archivo: ' + (s.file_name || 'informe')), h('button', { class: 'btn quiet sm', onclick: () => openOriginal(s) }, 'Ver archivo'), readBtn) : null,
@@ -677,7 +683,13 @@ async function patientOwnStudy() {
     h('div', { class: 'row' }, explainBtn),
     h('p', { class: 'muted small' }, 'La explicación la escribe una inteligencia artificial y no la revisa un médico. Puede tener errores: llevala a tu consulta.'),
     h('div', { class: 'row' }, h('button', { class: 'btn danger sm', onclick: () => deleteOwnStudy(s) }, 'Borrar este estudio'))));
-  if (s.file_path && !s.report_text) readBtn.click();
+  // Recién subido: leer el archivo (si hace falta) y explicar, sin más botones.
+  if (state.autoExplain) {
+    state.autoExplain = false;
+    status.scrollIntoView({ block: 'center' });
+    if (s.file_path && !s.report_text && !await readFile()) return;
+    await explainStudy();
+  } else if (s.file_path && !s.report_text) readBtn.click();
 }
 // Lo que ve el paciente. El médico usa la misma vista como vista previa.
 function studyView(s, doctorName, allStudies, preview) {
