@@ -629,6 +629,8 @@ function patientUpload() {
 
 // Estudio propio sin explicar: revisar el texto y pedir la explicación.
 async function patientOwnStudy() {
+  // Se toma y se apaga antes de esperar nada: si la pantalla se vuelve a dibujar, no explica dos veces.
+  const autoExplain = state.autoExplain; state.autoExplain = false;
   loading();
   let studies;
   try { studies = await loadPatientStudies(); } catch (e) { return showError(e, patientOwnStudy); }
@@ -684,8 +686,7 @@ async function patientOwnStudy() {
     h('p', { class: 'muted small' }, 'La explicación la escribe una inteligencia artificial y no la revisa un médico. Puede tener errores: llevala a tu consulta.'),
     h('div', { class: 'row' }, h('button', { class: 'btn danger sm', onclick: () => deleteOwnStudy(s) }, 'Borrar este estudio'))));
   // Recién subido: leer el archivo (si hace falta) y explicar, sin más botones.
-  if (state.autoExplain) {
-    state.autoExplain = false;
+  if (autoExplain) {
     status.scrollIntoView({ block: 'center' });
     if (s.file_path && !s.report_text && !await readFile()) return;
     await explainStudy();
