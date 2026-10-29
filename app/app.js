@@ -360,7 +360,7 @@ async function viewAuth() {
   shell();
   const m = mainEl();
   const invite = pendingInvite();
-  if (!authTab) authTab = invite ? 'crear' : 'entrar';
+  if (!authTab) authTab = invite || location.hash === '#crear' ? 'crear' : 'entrar';
   const box = h('div', { class: 'card auth' });
   if (invite) {
     const info = h('div', { class: 'alert info' }, 'Revisando tu invitación…');
