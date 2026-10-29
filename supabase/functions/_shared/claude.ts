@@ -2,9 +2,9 @@
 // No depende de Deno, para poder probarlo con Node.
 import Anthropic from "@anthropic-ai/sdk";
 
-export const MODEL = "claude-opus-5-5";
-// Si el modelo declina por política, la API reintenta con el modelo alternativo que corresponda.
-const FALLBACK_BETA = "server-side-fallback-2026-07-01";
+// Claude Haiku 5.5: el modelo más económico. Un estudio (leer + explicar) cuesta menos de un centavo de dólar.
+// No tiene reintento automático con otro modelo: si declina, se informa el error.
+export const MODEL = "claude-haiku-5-5";
 
 export class ChelyAIError extends Error {
   constructor(message: string, public status = 502) {
@@ -130,7 +130,7 @@ function textOf(message: Anthropic.Beta.BetaMessage): string {
 
 function checkStop(message: Anthropic.Beta.BetaMessage) {
   if (message.stop_reason === "refusal") {
-    throw new ChelyAIError("La IA no pudo procesar este informe. Escribí la explicación a mano.", 422);
+    throw new ChelyAIError("La IA no pudo procesar este informe. Probá de nuevo o revisá el texto.", 422);
   }
   if (message.stop_reason === "max_tokens") {
     throw new ChelyAIError("La respuesta de la IA quedó incompleta. Probá de nuevo.", 502);
@@ -139,11 +139,7 @@ function checkStop(message: Anthropic.Beta.BetaMessage) {
 
 async function call(client: Anthropic, params: Anthropic.Beta.MessageCreateParamsNonStreaming) {
   try {
-    return await client.beta.messages.create({
-      ...params,
-      betas: [FALLBACK_BETA],
-      fallbacks: "default",
-    });
+    return await client.beta.messages.create(params);
   } catch (error) {
     if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) {
       throw new ChelyAIError("La clave de la IA no es válida. Avisale al equipo de Chely.", 500);
@@ -181,7 +177,7 @@ export async function transcribe(
   const message = await call(client, {
     model: MODEL,
     max_tokens: 16000,
-    output_config: { effort: "medium" },
+    output_config: { effort: "low" },
     messages: [{ role: "user", content: [block, { type: "text", text: TRANSCRIBE_PROMPT }] }],
   });
   checkStop(message);

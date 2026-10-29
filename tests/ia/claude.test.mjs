@@ -36,8 +36,8 @@ const sample = { aviso_urgente: "", explicacion: "## Qué dice tu estudio\n- Glu
   const { result } = await explain(client, { estudio: { titulo: "Análisis", fecha: "2026-10-01", texto: "Glucemia 112 mg/dL" },
     anteriores: [{ titulo: "Análisis previo", fecha: "2026-03-01", texto: "Glucemia 101 mg/dL" }], edad: 72, revisadoPorMedico: true });
   const b = calls[0].body;
-  assert.equal(b.model, "claude-opus-5-5"); ok("usa claude-opus-5-5");
-  assert.equal(b.fallbacks, "default"); assert.match(calls[0].headers.get("anthropic-beta"), /server-side-fallback-2026-07-01/); ok("fallback por política activado");
+  assert.equal(b.model, "claude-haiku-5-5"); ok("usa claude-haiku-5-5");
+  assert.equal(b.fallbacks, undefined); ok("sin fallback: Haiku no lo admite");
   assert.equal(b.output_config.format.type, "json_schema"); assert.equal(b.output_config.effort, "high"); ok("pide JSON estructurado con esfuerzo alto");
   assert.equal(b.thinking, undefined); assert.equal(b.temperature, undefined); ok("sin parámetros que el modelo rechaza");
   assert.equal(b.system[0].cache_control.type, "ephemeral"); ok("instrucciones fijas en caché");
@@ -52,7 +52,7 @@ const sample = { aviso_urgente: "", explicacion: "## Qué dice tu estudio\n- Glu
 { // Rechazo por política.
   const { client } = fakeClient(() => [200, msg("", "refusal")]);
   await assert.rejects(explain(client, { estudio: { titulo: "x", fecha: "2026-10-01", texto: "x" }, anteriores: [], edad: null, revisadoPorMedico: true }),
-    (e) => e instanceof ChelyAIError && e.status === 422); ok("rechazo → mensaje para escribir a mano");
+    (e) => e instanceof ChelyAIError && e.status === 422); ok("rechazo → error 422 con mensaje claro");
 }
 { // Respuesta cortada.
   const { client } = fakeClient(() => [200, msg('{"explic', "max_tokens")]);
