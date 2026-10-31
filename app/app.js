@@ -575,10 +575,21 @@ async function patientStudy() {
 }
 async function deleteOwnStudy(s) {
   if (!await confirmBox({ title: 'Borrar el estudio', text: 'Se borran el estudio, su explicación y el archivo. No se puede deshacer.', ok: 'Borrar', danger: true })) return;
-  if (s.file_path) await sb.storage.from('estudios').remove([s.file_path]);
-  const { error } = await sb.from('studies').delete().eq('id', s.id);
-  if (error) return toast(errorText(error));
-  toast('Estudio borrado.'); go('estudios');
+  try {
+    if (s.storage_backend === 'debian') {
+      if (!s.storage_file_id) throw new Error('El archivo de Debian no tiene identificador. No se borró el estudio.');
+      await archivoDebian('delete', s.id, s.storage_file_id);
+    } else if (s.file_path) {
+      const { error: fileError } = await sb.storage.from('estudios').remove([s.file_path]);
+      if (fileError) throw fileError;
+    }
+    const { error } = await sb.from('studies').delete().eq('id', s.id);
+    if (error) throw error;
+    toast('Estudio borrado.');
+    go('estudios');
+  } catch (error) {
+    toast('No se pudo completar la eliminación: ' + errorText(error));
+  }
 }
 
 
