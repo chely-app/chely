@@ -504,7 +504,7 @@ async function renderPatient() {
 }
 async function loadPatientStudies() {
   const { data, error } = await sb.from('studies')
-    .select('id, title, study_date, status, self_uploaded, report_text, published_at, first_viewed_at, doctor_id, explanation, glossary, lab_values, doctor_note, file_path, file_name, file_type, feedback, ai_generated_at')
+    .select('id, title, study_date, status, self_uploaded, report_text, published_at, first_viewed_at, doctor_id, explanation, glossary, lab_values, doctor_note, file_path, file_name, file_type, storage_backend, storage_file_id, feedback, ai_generated_at')
     .order('study_date', { ascending: false });
   if (error) throw error;
   return data;
@@ -581,6 +581,19 @@ async function deleteOwnStudy(s) {
   toast('Estudio borrado.'); go('estudios');
 }
 
+
+// Las solicitudes de archivos pasan por una Edge Function autenticada.
+async function archivoDebian(action, studyId, fileId = null, file = null) {
+  const body = new FormData();
+  body.append('action', action);
+  body.append('study_id', studyId);
+  if (fileId) body.append('file_id', fileId);
+  if (file) body.append('file', file, file.name);
+  const { data, error } = await sb.functions.invoke('archivo', { body });
+  if (error) throw new Error(await fnError(error));
+  return data;
+}
+
 // El paciente sube un estudio propio.
 // Selector de archivo propio: el del navegador muestra sus textos en el idioma del sistema.
 function filePicker(input) {
@@ -610,10 +623,14 @@ function patientUpload() {
     const { data: st, error } = await sb.from('studies').insert({ patient_id: state.me.id, doctor_id: null, self_uploaded: true, title: title.value.trim(), study_date: date, report_text: f ? '' : text.value.trim() }).select('id').single();
     if (error) { btn.disabled = false; btn.textContent = 'Subir estudio'; msg.className = 'alert bad'; msg.textContent = errorText(error); return; }
     if (f) {
-      const path = `${state.me.id}/${st.id}/${safeFileName(f.name)}`;
-      const { error: upErr } = await sb.storage.from('estudios').upload(path, f, { contentType: f.type, upsert: false });
-      if (upErr) toast('El estudio se guardó, pero el archivo no se pudo subir. Podés pegar el texto.');
-      else await sb.from('studies').update({ file_path: path, file_name: f.name, file_type: f.type }).eq('id', st.id);
+      try {
+        await archivoDebian('upload', st.id, null, f);
+      } catch (e) {
+        btn.disabled = false; btn.textContent = 'Subir estudio';
+        msg.className = 'alert bad';
+        msg.textContent = 'El estudio se creó, pero el archivo no se pudo guardar: ' + errorText(e) + '. Podés volver a la lista y corregirlo.';
+        return;
+      }
     }
     go('mi-estudio', { studyId: st.id, autoExplain: true });
   });
@@ -725,6 +742,19 @@ function studyView(s, doctorName, allStudies, preview) {
   return parts;
 }
 async function openOriginal(s) {
+  if (s.storage_backend === 'debian') {
+    if (!s.storage_file_id) return toast('Este estudio no tiene archivo registrado.');
+    try {
+      const blob = await archivoDebian('download', s.id, s.storage_file_id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url; link.download = s.file_name || 'estudio-original';
+      document.body.append(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      sb.rpc('log_study_access', { p_study: s.id, p_action: 'original_descargado' });
+    } catch (e) { toast('No se pudo descargar el archivo: ' + errorText(e)); }
+    return;
+  }
   const win = window.open('', '_blank');
   const { data, error } = await sb.storage.from('estudios').createSignedUrl(s.file_path, 300);
   if (error || !data) { if (win) win.close(); return toast('No se pudo abrir el archivo. Probá de nuevo.'); }
@@ -1048,7 +1078,13 @@ async function doctorStudy() {
   } }, 'Retirar'));
   else actions.append(h('button', { class: 'btn danger', onclick: async () => {
     if (!await confirmBox({ title: 'Borrar el borrador', text: 'Se borran el estudio y su archivo. No se puede deshacer.', ok: 'Borrar', danger: true })) return;
-    if (s.file_path) await sb.storage.from('estudios').remove([s.file_path]);
+    if (s.storage_backend === 'debian' && s.storage_file_id) {
+      try { await archivoDebian('delete', s.id, s.storage_file_id); }
+      catch (e) { return toast('No se pudo borrar el archivo: ' + errorText(e)); }
+    } else if (s.file_path) {
+      const { error: delErr } = await sb.storage.from('estudios').remove([s.file_path]);
+      if (delErr) return toast(errorText(delErr));
+    }
     const { error: e } = await sb.from('studies').delete().eq('id', s.id);
     if (e) return toast(errorText(e));
     dirty = false; toast('Borrador borrado.'); go('paciente', { patientId: s.patient_id });
