@@ -101,7 +101,7 @@ Deno.serve(async (req) => {
     return answer({ error: 'Servidor de archivos no disponible' }, 503);
   }
   if (!response.ok) {
-    if (action === 'upload' && [500, 502, 503, 504, 520, 521, 522, 523, 524].includes(response.status)) {
+    if (action === 'upload' && response.status >= 500) {
       return emergencyUpload(sessionSb, user.id, studyId, file as File);
     }
     const safe: Record<number, string> = {
