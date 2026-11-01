@@ -386,7 +386,8 @@ async function viewAuth() {
   const msg = h('div', { role: 'alert' });
   const email = h('input', { type: 'email', id: 'auth-email', autocomplete: 'email', required: true });
   const pass = h('input', { type: 'password', id: 'auth-pass', autocomplete: authTab === 'crear' ? 'new-password' : 'current-password', required: true, minlength: authTab === 'crear' ? 8 : null });
-  const showPass = h('label', { class: 'check small' }, h('input', { type: 'checkbox', onchange: e => { pass.type = e.target.checked ? 'text' : 'password'; } }), 'Mostrar contraseña');
+  const confirmPass = authTab === 'crear' ? h('input', { type: 'password', id: 'auth-pass-confirm', autocomplete: 'new-password', required: true, minlength: 8 }) : null;
+  const showPass = h('label', { class: 'check small' }, h('input', { type: 'checkbox', onchange: e => { pass.type = e.target.checked ? 'text' : 'password'; if (confirmPass) confirmPass.type = pass.type; } }), 'Mostrar contraseña');
   const form = h('form', { class: 'stack', novalidate: true });
   let name = null;
   if (authTab === 'crear') {
@@ -394,7 +395,9 @@ async function viewAuth() {
     form.append(h('label', { class: 'field', for: 'auth-name' }, 'Nombre y apellido', name));
   }
   form.append(h('label', { class: 'field', for: 'auth-email' }, 'Correo electrónico', email),
-    h('label', { class: 'field', for: 'auth-pass' }, 'Contraseña', authTab === 'crear' ? h('span', { class: 'hint' }, 'Al menos 8 caracteres.') : null, pass), showPass, msg);
+    h('label', { class: 'field', for: 'auth-pass' }, 'Contraseña', authTab === 'crear' ? h('span', { class: 'hint' }, 'Al menos 8 caracteres.') : null, pass));
+  if (confirmPass) form.append(h('label', { class: 'field', for: 'auth-pass-confirm' }, 'Confirmar contraseña', confirmPass));
+  form.append(showPass, msg);
   const submit = h('button', { class: 'btn primary big', type: 'submit' }, authTab === 'crear' ? 'Crear cuenta' : 'Entrar');
   form.append(submit);
   form.addEventListener('submit', async e => {
@@ -402,6 +405,7 @@ async function viewAuth() {
     const em = email.value.trim(), pw = pass.value;
     if (!/^\S+@\S+\.\S+$/.test(em)) { msg.className = 'alert bad'; msg.textContent = 'Revisá el correo electrónico.'; return; }
     if (authTab === 'crear' && (!name.value.trim() || pw.length < 8)) { msg.className = 'alert bad'; msg.textContent = !name.value.trim() ? 'Escribí tu nombre y apellido.' : 'La contraseña tiene que tener al menos 8 caracteres.'; return; }
+    if (confirmPass && pw !== confirmPass.value) { msg.className = 'alert bad'; msg.textContent = 'Las contraseñas no coinciden. Revisalas e intentá de nuevo.'; return; }
     submit.disabled = true; submit.textContent = 'Un momento…';
     let error, data;
     if (authTab === 'crear') {
