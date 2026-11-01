@@ -16,6 +16,41 @@ const answer = (body: unknown, status = 200) => new Response(JSON.stringify(body
 });
 const isUuid = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 
+
+const ALLOWED = new Set(['application/pdf', 'image/jpeg', 'image/png']);
+async function emergencyUpload(sb: ReturnType<typeof createClient>, userId: string, studyId: string, file: File): Promise<Response> {
+  // Respaldo de archivos nuevos únicamente: respetar titularidad y RLS.
+  if (!ALLOWED.has(file.type)) return answer({ error: 'Formato de archivo no admitido' }, 415);
+  const { data: study, error: lookupError } = await sb.from('studies')
+    .select('id,patient_id,doctor_id,self_uploaded,file_path,storage_file_id,storage_backend')
+    .eq('id', studyId).maybeSingle();
+  if (lookupError) return answer({ error: 'No se pudo comprobar el estudio para el respaldo' }, 503);
+  if (!study || study.patient_id !== userId || !study.self_uploaded || study.doctor_id) {
+    return answer({ error: 'Carga no autorizada' }, 403);
+  }
+  if (study.file_path || study.storage_file_id) {
+    return answer({ error: 'El estudio ya tiene un archivo registrado' }, 409);
+  }
+  const objectPath = userId + '/' + studyId + '/' + crypto.randomUUID();
+  const { error: uploadError } = await sb.storage.from('estudios').upload(objectPath, file, {
+    contentType: file.type, upsert: false, cacheControl: '0',
+  });
+  if (uploadError) return answer({ error: 'No se pudo guardar el respaldo temporal en Supabase' }, 503);
+  // Actualización condicional: no sustituir una carga Debian concurrente.
+  const { data: changed, error: updateError } = await sb.from('studies')
+    .update({ storage_backend: 'supabase', storage_file_id: null, file_path: objectPath,
+      file_name: file.name.slice(0, 255), file_type: file.type })
+    .eq('id', studyId).eq('patient_id', userId).eq('self_uploaded', true)
+    .is('file_path', null).is('storage_file_id', null)
+    .select('id');
+  if (updateError || !changed || changed.length !== 1) {
+    // No eliminar si no se puede demostrar que la actualización no ocurrió:
+    // un huérfano es recuperable; un archivo borrado no lo es.
+    return answer({ error: 'Archivo temporal guardado, pero no se pudo confirmar su registro. Contactá soporte antes de volver a subirlo.' }, 503);
+  }
+  return answer({ study_id: studyId, storage_backend: 'supabase', temporary: true }, 201);
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
   if (req.method !== 'POST') return answer({ error: 'Método no permitido' }, 405);
@@ -42,6 +77,10 @@ Deno.serve(async (req) => {
   if (action === 'upload') {
     if (!(file instanceof File) || !file.size || file.size > MAX) return answer({ error: 'Archivo inválido o superior a 20 MB' }, 413);
   }
+  const sessionSb = createClient(PROJECT, publicKey, {
+    global: { headers: { Authorization: bearer } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
   const endpoint = `https://api.chely.app/storage/studies/${studyId}/files${action === 'upload' ? '' : `/${fileId}`}`;
   const headers: Record<string, string> = {
     Authorization: bearer,
@@ -57,8 +96,14 @@ Deno.serve(async (req) => {
       headers, body: action === 'upload' ? uploadBody : undefined,
       signal: AbortSignal.timeout(60000),
     });
-  } catch { return answer({ error: 'Servidor de archivos no disponible' }, 503); }
+  } catch {
+    if (action === 'upload') return emergencyUpload(sessionSb, user.id, studyId, file as File);
+    return answer({ error: 'Servidor de archivos no disponible' }, 503);
+  }
   if (!response.ok) {
+    if (action === 'upload' && [502, 503, 504].includes(response.status)) {
+      return emergencyUpload(sessionSb, user.id, studyId, file as File);
+    }
     const safe: Record<number, string> = {
       400: 'Solicitud inválida', 401: 'Sesión no válida', 403: 'Acceso no autorizado',
       404: 'Archivo o estudio no disponible', 409: 'El archivo ya existe o cambió de estado',
