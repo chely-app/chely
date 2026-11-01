@@ -576,12 +576,27 @@ async function patientStudy() {
 async function deleteOwnStudy(s) {
   if (!await confirmBox({ title: 'Borrar el estudio', text: 'Se borran el estudio, su explicación y el archivo. No se puede deshacer.', ok: 'Borrar', danger: true })) return;
   try {
-    if (s.storage_backend === 'debian') {
-      if (!s.storage_file_id) throw new Error('El archivo de Debian no tiene identificador. No se borró el estudio.');
-      await archivoDebian('delete', s.id, s.storage_file_id);
-    } else if (s.file_path) {
-      const { error: fileError } = await sb.storage.from('estudios').remove([s.file_path]);
-      if (fileError) throw fileError;
+    // La marca en file_path permite detectar archivos Debian incluso si un campo
+    // de ubicación no llegó al navegador. Nunca enviar una ruta debian: a Storage.
+    const path = String(s.file_path || '');
+    const markedDebian = path.startsWith('debian:');
+    const backend = s.storage_backend;
+    const isDebian = backend === 'debian' || markedDebian;
+    if (isDebian) {
+      const fromPath = markedDebian ? path.slice('debian:'.length) : null;
+      const fileId = s.storage_file_id || fromPath;
+      const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (!fileId || !uuid.test(fileId) || (s.storage_file_id && fromPath && s.storage_file_id !== fromPath)) {
+        throw new Error('La referencia del archivo en Debian es inválida o inconsistente. No se borró el estudio.');
+      }
+      await archivoDebian('delete', s.id, fileId);
+    } else if (backend === 'supabase' || (!backend && !markedDebian)) {
+      if (path) {
+        const { error: fileError } = await sb.storage.from('estudios').remove([path]);
+        if (fileError) throw fileError;
+      }
+    } else {
+      throw new Error('Almacenamiento del estudio desconocido. No se borró el estudio.');
     }
     const { error } = await sb.from('studies').delete().eq('id', s.id);
     if (error) throw error;
