@@ -94,14 +94,14 @@ Deno.serve(async (req) => {
     response = await fetch(endpoint, {
       method: action === 'upload' ? 'POST' : action === 'download' ? 'GET' : 'DELETE',
       headers, body: action === 'upload' ? uploadBody : undefined,
-      signal: AbortSignal.timeout(60000),
+      signal: AbortSignal.timeout(action === 'upload' ? 15000 : 60000),
     });
   } catch {
     if (action === 'upload') return emergencyUpload(sessionSb, user.id, studyId, file as File);
     return answer({ error: 'Servidor de archivos no disponible' }, 503);
   }
   if (!response.ok) {
-    if (action === 'upload' && [502, 503, 504].includes(response.status)) {
+    if (action === 'upload' && [500, 502, 503, 504, 520, 521, 522, 523, 524].includes(response.status)) {
       return emergencyUpload(sessionSb, user.id, studyId, file as File);
     }
     const safe: Record<number, string> = {
