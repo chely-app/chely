@@ -270,6 +270,10 @@ function renderEvolution(studies) {
 /* ---------------- estado y arranque ---------------- */
 const state = { session: null, me: null, page: null, studyId: null, patientId: null, recovery: false, busy: false };
 let sb = null;
+// Borrador efímero: no persiste documentos médicos en disco ni localStorage.
+let uploadDraft = null;
+function clearUploadDraft() { uploadDraft = null; }
+
 
 function shell(nav) {
   const top = $('#top'); top.innerHTML = '';
@@ -293,7 +297,7 @@ function go(page, extra = {}) {
   state.page = page; state.studyId = extra.studyId || null; state.autoExplain = !!extra.autoExplain; state.patientId = extra.patientId ?? (page === 'paciente' || page === 'estudio-medico' ? state.patientId : null);
   render(); window.scrollTo({ top: 0 });
 }
-async function signOut() { await sb.auth.signOut(); state.me = null; state.page = null; render(); }
+async function signOut() { clearUploadDraft(); await sb.auth.signOut(); state.me = null; state.page = null; render(); }
 function mainEl() { const m = $('#main'); m.innerHTML = ''; return m; }
 function loading(msg = 'Cargando…') { const m = mainEl(); m.append(h('div', { class: 'card row' }, h('span', { class: 'spinner' }), msg)); }
 
@@ -632,15 +636,22 @@ function filePicker(input) {
 
 function patientUpload() {
   const m = mainEl();
-  let date = todayISO();
-  const title = h('input', { type: 'text', id: 'up-title', placeholder: 'Ej.: Análisis de sangre' });
+  if (!uploadDraft) uploadDraft = { title: '', date: todayISO(), text: '', file: null };
+  let date = uploadDraft.date;
+
+  const title = h('input', { type: 'text', id: 'up-title', placeholder: 'Ej.: Análisis de sangre', value: uploadDraft.title });
   const file = h('input', { type: 'file', id: 'up-file', accept: UPLOAD_TYPES.join(',') });
-  const text = h('textarea', { id: 'up-text', class: 'report', placeholder: 'O pegá acá el texto del informe…' });
+  const text = h('textarea', { id: 'up-text', class: 'report', placeholder: 'O pegá acá el texto del informe…' }, uploadDraft.text);
   const msg = h('div', { role: 'alert' });
+  // Conservar el File en memoria si la navegación interna o una sesión redibujan la página.
+  // No se guarda el contenido del informe en almacenamiento permanente del navegador.
+  title.addEventListener('input', () => { uploadDraft.title = title.value; });
+  text.addEventListener('input', () => { uploadDraft.text = text.value; });
+  file.addEventListener('change', () => { uploadDraft.file = file.files[0] || null; });
   const btn = h('button', { class: 'btn primary big' }, 'Subir estudio');
   btn.addEventListener('click', async () => {
     msg.className = ''; msg.textContent = '';
-    const f = file.files[0];
+    const f = file.files[0] || uploadDraft?.file;
     if (!title.value.trim()) { msg.className = 'alert bad'; msg.textContent = 'Escribí qué estudio es (por ejemplo, «Análisis de sangre»).'; return; }
     if (!date) { msg.className = 'alert bad'; msg.textContent = 'Revisá la fecha: usá día/mes/año.'; return; }
     if (!f && !text.value.trim()) { msg.className = 'alert bad'; msg.textContent = 'Elegí el archivo del informe o pegá su texto.'; return; }
@@ -658,14 +669,16 @@ function patientUpload() {
         return;
       }
     }
+    clearUploadDraft();
     go('mi-estudio', { studyId: st.id, autoExplain: true });
   });
   m.append(h('div', { class: 'row' }, h('button', { class: 'btn quiet sm', onclick: () => go('estudios') }, '‹ Mis estudios')));
   m.append(h('div', { class: 'card' }, h('h1', {}, 'Subir un estudio'),
     h('p', { class: 'muted' }, 'Solo informes escritos: análisis, ecografías, radiografías, etc. Chely no interpreta las imágenes de las placas.'),
     h('div', { class: 'grid2' }, h('label', { class: 'field', for: 'up-title' }, '¿Qué estudio es?', title),
-      h('div', { class: 'field' }, h('label', { for: 'up-date', style: 'font-weight:700' }, 'Fecha del estudio'), datePicker({ id: 'up-date', value: date, onChange: iso => { date = iso; } }))),
+      h('div', { class: 'field' }, h('label', { for: 'up-date', style: 'font-weight:700' }, 'Fecha del estudio'), datePicker({ id: 'up-date', value: date, onChange: iso => { date = iso; uploadDraft.date = iso; } }))),
     h('label', { class: 'field', for: 'up-file' }, 'Archivo del informe ', h('span', { class: 'hint' }, 'PDF o foto (JPG, PNG), hasta 20 MB.'), filePicker(file)),
+    uploadDraft.file ? h('p', { class: 'hint' }, 'Archivo conservado en esta pestaña: ' + uploadDraft.file.name) : null,
     h('label', { class: 'field', for: 'up-text' }, 'O el texto del informe ', h('span', { class: 'hint' }, '(solo si no tenés el archivo; si subís el archivo, Chely lo lee solo)'), text),
     msg, h('div', { class: 'row' }, btn)));
 }
