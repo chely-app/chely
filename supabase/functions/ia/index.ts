@@ -3,8 +3,6 @@ import Anthropic from "@anthropic-ai/sdk";
 import { ChelyAIError, explain, MODEL, transcribe, type StudyForAI } from "./_shared/claude.ts";
 import { cors, fail, withCors, json, serviceClient, userClient } from "./_shared/http.ts";
 
-const DAILY_LIMIT = Number(Deno.env.get("AI_DAILY_LIMIT") ?? "60");
-const PATIENT_DAILY_LIMIT = Number(Deno.env.get("AI_DAILY_LIMIT_PACIENTE") ?? "10");
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const MAX_PREVIOUS_CHARS = 40000;
 const anthropic = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY"), timeout: 140_000, maxRetries: 1 });
@@ -101,12 +99,8 @@ Deno.serve(withCors(async (req) => {
   if (!isDoctor && !(study.self_uploaded && study.patient_id === userId)) {
     return fail("Solo podés usar la IA con los estudios que subiste vos.", 403);
   }
-  const limit = isDoctor ? DAILY_LIMIT : PATIENT_DAILY_LIMIT;
+  // Sin límite diario: se siguen registrando los tokens en ai_usage para controlar costos.
   const admin = serviceClient();
-  const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
-  const { count } = await admin.from("ai_usage").select("id", { count: "exact", head: true })
-    .eq("doctor_id", userId).gte("at", since);
-  if ((count ?? 0) >= limit) return fail(`Llegaste al máximo de ${limit} usos de la IA en 24 horas. Probá de nuevo mañana.`, 429);
 
   try {
     if (body.action === "transcribir") {
