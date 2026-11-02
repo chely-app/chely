@@ -90,6 +90,40 @@ async function contextHash(value: unknown): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest)).map(x => x.toString(16).padStart(2, "0")).join("");
 }
+// Hecho por ChatGPT · 2026-11-02 · Replica opt-in: NUNCA activar antes de
+// asegurar instalación, borrado y reconciliación en Debian.
+async function tryMirrorLatest(
+  admin: ReturnType<typeof serviceClient>, bearer: string,
+  patientId: string, signature: string,
+): Promise<void> {
+  if (Deno.env.get("CHELY_DEBIAN_SUMMARY_SYNC_ENABLED") !== "1") return;
+  const clientId = Deno.env.get("CF_ACCESS_CLIENT_ID");
+  const clientSecret = Deno.env.get("CF_ACCESS_CLIENT_SECRET");
+  if (!clientId || !clientSecret) return;
+  try {
+    const response = await fetch("https://api.chely.app/sync/patient-latest", {
+      method: "POST",
+      headers: {
+        "Authorization": bearer,
+        "CF-Access-Client-Id": clientId,
+        "CF-Access-Client-Secret": clientSecret,
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!response.ok) return; // Pendiente para reintento, nunca fingir exito.
+    const ack = await response.json();
+    if (ack?.status !== "stored" || ack?.source_signature !== signature) return;
+    // Comparar la firma evita marcar 'synced' una explicación reemplazada
+    // por otra durante la transferencia.
+    const { error } = await admin.from("patient_latest_explanations")
+      .update({ debian_sync_status: "synced", debian_synced_at: new Date().toISOString() })
+      .eq("patient_id", patientId).eq("source_signature", signature);
+    if (error) console.warn("No pudimos confirmar la replica Debian");
+  } catch {
+    // El original en Supabase sigue disponible; no cobrar otra llamada IA.
+  }
+}
+
 Deno.serve(withCors(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return fail("Método no permitido.", 405);
@@ -201,7 +235,10 @@ Deno.serve(withCors(async (req) => {
       const { data: previousLatest, error: latestReadErr } = await admin.from("patient_latest_explanations")
         .select("source_study_id,source_signature").eq("patient_id", study.patient_id).maybeSingle();
       if (latestReadErr) throw new ChelyAIError("No pudimos consultar la copia vigente.", 503);
-      if (previousLatest?.source_study_id === study.id && previousLatest?.source_signature === signature) return;
+      if (previousLatest?.source_study_id === study.id && previousLatest?.source_signature === signature) {
+        await tryMirrorLatest(admin, bearer, study.patient_id, signature);
+        return;
+      }
       const now = new Date().toISOString();
       const { error: latestError } = await admin.from("patient_latest_explanations").upsert({
         patient_id: study.patient_id, source_study_id: study.id, explanation: text,
@@ -211,6 +248,7 @@ Deno.serve(withCors(async (req) => {
         debian_sync_status: "pending", debian_synced_at: null
       }, { onConflict: "patient_id" });
       if (latestError) throw new ChelyAIError("La explicacion se guardo en el estudio, pero no en la copia de respaldo.", 503);
+      await tryMirrorLatest(admin, bearer, study.patient_id, signature);
     };
     if (!body.force && study.ai_context_sha256 === signature && existingText) {
       await saveLatest(existingText, study.glossary, study.lab_values);
