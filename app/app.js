@@ -867,7 +867,7 @@ function studySourceChooser(prefix, draft = {}) {
   const gallery = h('input', { type: 'file', id: prefix + '-gallery', accept: 'image/jpeg,image/png,image/webp' });
   const pdf = h('input', { type: 'file', id: prefix + '-pdf', accept: '.pdf,application/pdf' });
   const report = h('textarea', { id: prefix + '-text', class: 'report', placeholder: 'Pegá acá el texto del informe…' }, draft.text || '');
-  report.addEventListener('input', () => { draft.text = report.value; });
+  report.addEventListener('input', () => { draft.text = report.value; root.dispatchEvent(new CustomEvent('study-report-input', { detail: { text: report.value } })); });
   const url = h('input', { type: 'url', id: prefix + '-url', placeholder: 'https://portal-medico.com/estudio.pdf', autocomplete: 'off', value: draft.url || '' });
   url.addEventListener('input', () => { imported = null; draft.url = url.value; });
   const importInfo = h('div', { class: 'hint', role: 'status', 'aria-live': 'polite' });
@@ -979,8 +979,8 @@ function filePicker(input, buttonLabel = 'Elegir archivo') {
 
 function patientUpload() {
   const m = mainEl();
-  if (!uploadDraft) uploadDraft = { title: '', date: todayISO(), text: '', file: null, mode: 'foto', url: '' };
-  let date = uploadDraft.date || todayISO();
+  if (!uploadDraft) uploadDraft = { title: '', date: null, text: '', file: null, mode: 'foto', url: '' };
+  let date = uploadDraft.date || null;
   const source = studySourceChooser('up', uploadDraft);
   const title = h('input', { type: 'text', id: 'up-title', maxlength: 180,
     placeholder: 'Ej.: Análisis de sangre', value: uploadDraft.title || '' });
@@ -992,6 +992,14 @@ function patientUpload() {
   title.addEventListener('input', () => { uploadDraft.title = title.value; });
   const refresh = () => { meta.hidden = source.getMode() !== 'texto'; };
   source.root.addEventListener('study-method-change', refresh);
+  source.root.addEventListener('study-report-input', e => {
+    const info = metadataFromReport(e.detail.text);
+    if (!title.value.trim() && info.title) { title.value = info.title; uploadDraft.title = info.title; }
+    if (!date && info.date) {
+      date = info.date; uploadDraft.date = info.date;
+      meta.querySelector('#up-date').value = fmtDate(info.date);
+    }
+  });
   refresh();
   const btn = h('button', { class: 'btn primary big', type: 'button' }, 'Continuar con el estudio');
   btn.addEventListener('click', async () => {
@@ -1707,13 +1715,19 @@ async function minorStudiesPanel(host,minor){
   const draft={mode:'foto',text:'',file:null,url:''};
   const source=studySourceChooser('minor-study',draft);
   const title=h('input',{type:'text',id:'minor-study-title',maxlength:180,placeholder:'Ej.: Análisis de sangre'});
-  let date=todayISO();
+  let date=null;
   const picker=datePicker({id:'minor-study-date',value:date,onChange:iso=>{date=iso;}});
   const meta=h('div',{class:'study-manual-meta grid2'},
     h('label',{class:'field',for:'minor-study-title'},'¿Qué estudio es?',title),
     h('div',{class:'field'},h('label',{for:'minor-study-date'},'Fecha del estudio'),picker));
   const sync=()=>{meta.hidden=source.getMode()!=='texto';};
-  source.root.addEventListener('study-method-change',sync);sync();
+  source.root.addEventListener('study-method-change',sync);
+  source.root.addEventListener('study-report-input',e=>{
+    const info=metadataFromReport(e.detail.text);
+    if(!title.value.trim()&&info.title)title.value=info.title;
+    if(!date&&info.date){date=info.date;picker.querySelector('input').value=fmtDate(info.date);}
+  });
+  sync();
   const status=h('div',{role:'status'});
   const save=h('button',{class:'btn primary big',type:'button'},'Continuar con el estudio');
   save.addEventListener('click',async()=>{
