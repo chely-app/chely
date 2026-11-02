@@ -105,6 +105,19 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); outline
 .consent ul { margin: 0; padding-left: 1.2rem; display: grid; gap: .3rem; }
 
 .list { display: grid; gap: .6rem; }
+/* Hecho por ChatGPT · 2026-11-02 · Visor de 3-4 estudios con scroll
+   independiente. El límite se adapta a móviles y a los tamaños A+/A−. */
+.studies-scroll-list {
+  max-height: clamp(20rem, 55vh, 27rem);
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  padding: .15rem .3rem .15rem .1rem;
+  align-content: start;
+  min-height: 0;
+  min-width: 0;
+}
 .item { border: 1px solid var(--line); border-radius: 1rem; padding: .9rem 1rem; background: var(--bg); display: grid; gap: .35rem; text-align: left; cursor: pointer; width: 100%; }
 .item:hover { border-color: var(--accent); }
 .item .row { gap: .5rem; }
