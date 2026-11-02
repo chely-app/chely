@@ -1293,6 +1293,15 @@ async function patientOwnStudy() {
   };
   const readBtn = h('button', { class: 'btn' }, 'Leer el archivo');
   const explainBtn = h('button', { class: 'btn primary big' }, 'Explicar mi estudio');
+  const saveWithoutAI = h('button', { class: 'btn', type: 'button' }, 'Guardar datos sin explicar');
+  saveWithoutAI.addEventListener('click', async () => {
+    saveWithoutAI.disabled = true;
+    try {
+      if (!await saveText() || !await saveMetadata()) return;
+      status.className = 'alert ok';
+      status.textContent = 'Datos y texto guardados sin usar IA. Podés continuar con otro estudio y pedir la explicación cuando quieras.';
+    } finally { saveWithoutAI.disabled = false; }
+  });
   const readFile = async () => {
     status.className = 'alert info'; status.textContent = 'Chely está leyendo tu archivo. Puede tardar un minuto; no cierres esta pantalla.';
     const done = busy(readBtn, 'Leyendo el archivo…');
@@ -1351,7 +1360,7 @@ async function patientOwnStudy() {
     s.file_path ? h('div', { class: 'row' }, h('span', { class: 'grow muted' }, 'Archivo: ' + (s.file_name || 'informe')), h('button', { class: 'btn quiet sm', onclick: () => openOriginal(s) }, 'Ver archivo'), readBtn) : null,
     h('label', { class: 'field', for: 'own-report' }, 'Texto del informe ', h('span', { class: 'hint' }, 'Es lo que lee Chely. Revisá que esté completo y sin errores.'), report),
     status,
-    h('div', { class: 'row' }, explainBtn),
+    h('div', { class: 'row' }, saveWithoutAI, explainBtn),
     h('p', { class: 'muted small' }, 'La explicación la escribe una inteligencia artificial y no la revisa un médico. Puede tener errores: llevala a tu consulta.'),
     h('div', { class: 'row' }, h('button', { class: 'btn danger sm', onclick: () => deleteOwnStudy(s) }, 'Borrar este estudio'))));
   // Hecho por ChatGPT · 2026-11-02 · Nunca llamar a IA al entrar ni al subir.
