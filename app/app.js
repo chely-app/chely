@@ -436,12 +436,18 @@ function viewForgot() {
 function viewNewPassword() {
   shell();
   const m = mainEl();
+  // Hecho por ChatGPT · 2026-11-02 · Confirmación de contraseña también en recuperación.
   const pass = h('input', { type: 'password', id: 'new-pass', autocomplete: 'new-password', minlength: 8 });
+  const confirmPass = h('input', { type: 'password', id: 'new-pass-confirm', autocomplete: 'new-password', minlength: 8 });
   const msg = h('div', { role: 'alert' });
-  const form = h('form', { class: 'stack' }, h('label', { class: 'field', for: 'new-pass' }, 'Contraseña nueva', h('span', { class: 'hint' }, 'Al menos 8 caracteres.'), pass), msg, h('button', { class: 'btn primary big', type: 'submit' }, 'Guardar contraseña'));
+  const form = h('form', { class: 'stack' },
+    h('label', { class: 'field', for: 'new-pass' }, 'Contraseña nueva', h('span', { class: 'hint' }, 'Al menos 8 caracteres.'), pass),
+    h('label', { class: 'field', for: 'new-pass-confirm' }, 'Confirmar contraseña nueva', confirmPass),
+    msg, h('button', { class: 'btn primary big', type: 'submit' }, 'Guardar contraseña'));
   form.addEventListener('submit', async e => {
     e.preventDefault();
     if (pass.value.length < 8) { msg.className = 'alert bad'; msg.textContent = 'La contraseña tiene que tener al menos 8 caracteres.'; return; }
+    if (pass.value !== confirmPass.value) { msg.className = 'alert bad'; msg.textContent = 'Las contraseñas no coinciden.'; return; }
     const { error } = await sb.auth.updateUser({ password: pass.value });
     if (error) { msg.className = 'alert bad'; msg.textContent = errorText(error); return; }
     state.recovery = false; toast('Contraseña actualizada.'); render();
@@ -919,17 +925,35 @@ async function patientDoctors() {
 }
 
 /* ---------------- mi cuenta (paciente y médico) ---------------- */
+/* Hecho por ChatGPT · 2026-11-02 · Ficha de salud privada; registro sólo para administradores. */
+const HEALTH_COVERAGE_SUGGESTIONS = [
+  'OSDE', 'Swiss Medical', 'Galeno', 'Sancor Salud', 'Medicus',
+  'Accord Salud', 'Prevención Salud', 'Unión Personal', 'OSECAC',
+  'OSDEPYM', 'OSPEDYC', 'OSPAT', 'OSPRERA', 'PAMI', 'IOMA',
+  'INSSSEP', 'Jerárquicos Salud', 'Hospital Italiano', 'Avalian',
+  'Federada Salud', 'OSECAC', 'OSPE', 'OSPEDYC'
+];
+function healthCoverageSuggestions() {
+  const list = h('datalist', { id: 'health-coverage-options' });
+  for (const name of [...new Set(HEALTH_COVERAGE_SUGGESTIONS)].sort((a, b) => a.localeCompare(b, 'es'))) {
+    list.append(h('option', { value: name }));
+  }
+  return list;
+}
 async function accountView() {
   const m = mainEl();
   const me = state.me;
-  const name = h('input', { type: 'text', id: 'acc-name', value: me.full_name, autocomplete: 'name' });
+  const name = h('input', { type: 'text', id: 'acc-name', value: me.full_name, autocomplete: 'name', maxlength: 120 });
   let birth = me.birth_date;
-  const saveBtn = h('button', { class: 'btn primary' }, 'Guardar');
+  const saveBtn = h('button', { class: 'btn primary', type: 'button' }, 'Guardar');
   saveBtn.addEventListener('click', async () => {
     if (!name.value.trim()) return toast('Escribí tu nombre.');
-    const { error } = await sb.from('profiles').update({ full_name: name.value.trim(), birth_date: birth || null }).eq('id', me.id);
-    if (error) return toast(errorText(error));
-    me.full_name = name.value.trim(); me.birth_date = birth || null; toast('Datos guardados.');
+    saveBtn.disabled = true;
+    try {
+      const { error } = await sb.from('profiles').update({ full_name: name.value.trim(), birth_date: birth || null }).eq('id', me.id);
+      if (error) return toast(errorText(error));
+      me.full_name = name.value.trim(); me.birth_date = birth || null; toast('Datos guardados.');
+    } finally { saveBtn.disabled = false; }
   });
   m.append(h('div', { class: 'card' }, h('h1', {}, 'Mi cuenta'), h('p', { class: 'muted' }, me.email),
     h('div', { class: 'grid2' }, h('label', { class: 'field', for: 'acc-name' }, 'Nombre y apellido', name),
@@ -937,25 +961,106 @@ async function accountView() {
         datePicker({ id: 'acc-birth', value: me.birth_date, onChange: iso => { birth = iso; } })) : null),
     h('div', { class: 'row' }, saveBtn)));
 
+  if (me.role === 'patient') {
+    const card = h('div', { class: 'card' }, h('h2', {}, 'Mis datos de salud'),
+      h('p', { class: 'muted small' }, 'Todos los campos son opcionales. Esta información se guarda en una ficha privada, distinta del perfil público de tu cuenta.'));
+    m.append(card);
+    const { data: details, error: detailsError } = await sb.from('patient_health_details')
+      .select('document_type,document_number,height_cm,weight_kg,allergies,health_coverage').eq('id', me.id).maybeSingle();
+    if (detailsError) {
+      card.append(h('div', { class: 'alert bad' }, 'No pudimos cargar tus datos de salud. ', errorText(detailsError)));
+    } else {
+      const docType = h('select', { id: 'health-doc-type' },
+        h('option', { value: '' }, 'Sin especificar'), h('option', { value: 'DNI' }, 'DNI'), h('option', { value: 'CUIT' }, 'CUIT'));
+      docType.value = details?.document_type || '';
+      const docNumber = h('input', { id: 'health-document', type: 'text', inputmode: 'numeric', autocomplete: 'off',
+        maxlength: 16, placeholder: 'Solo números', value: details?.document_number || '' });
+      const height = h('input', { id: 'health-height', type: 'number', min: 40, max: 250, step: '0.1', placeholder: 'Ej.: 170',
+        value: details?.height_cm == null ? '' : String(details.height_cm) });
+      const weight = h('input', { id: 'health-weight', type: 'number', min: 1, max: 400, step: '0.1', placeholder: 'Ej.: 70',
+        value: details?.weight_kg == null ? '' : String(details.weight_kg) });
+      const coverage = h('input', { id: 'health-coverage', type: 'text', list: 'health-coverage-options', maxlength: 160,
+        autocomplete: 'off', placeholder: 'Buscá o escribí tu obra social / prepaga',
+        value: details?.health_coverage || '' });
+      const allergies = Array.isArray(details?.allergies) ? [...details.allergies] : [];
+      const allergyInput = h('input', { id: 'health-allergy', type: 'text', maxlength: 120, placeholder: 'Ej.: penicilina' });
+      const allergyList = h('div', { class: 'allergy-tags', 'aria-live': 'polite' });
+      function drawAllergies() {
+        allergyList.replaceChildren(...allergies.map((allergy, index) => h('span', { class: 'allergy-tag' },
+          h('span', {}, allergy),
+          h('button', { type: 'button', class: 'allergy-remove', 'aria-label': 'Quitar alergia: ' + allergy,
+            onclick: () => { allergies.splice(index, 1); drawAllergies(); } }, '×'))));
+        if (!allergies.length) allergyList.append(h('span', { class: 'muted small' }, 'Todavía no agregaste alergias.'));
+      }
+      function addAllergy() {
+        const a = allergyInput.value.trim();
+        if (!a) return;
+        if (allergies.length >= 20) return toast('Podés registrar hasta 20 alergias.');
+        if (allergies.some(v => normalize(v) === normalize(a))) return toast('Esa alergia ya está registrada.');
+        allergies.push(a); allergyInput.value = ''; drawAllergies();
+      }
+      const addBtn = h('button', { type: 'button', class: 'btn quiet sm', onclick: addAllergy }, 'Agregar alergia');
+      allergyInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addAllergy(); } });
+      drawAllergies();
+
+      const saveHealthBtn = h('button', { class: 'btn primary', type: 'button' }, 'Guardar datos de salud');
+      saveHealthBtn.addEventListener('click', async () => {
+        const digits = docNumber.value.replace(/[\s.-]/g, '');
+        const dt = docType.value;
+        if ((digits && !dt) || (!digits && dt)) return toast('Elegí DNI o CUIT y completá el número, o dejá ambos vacíos.');
+        if (dt === 'DNI' && !/^\d{7,8}$/.test(digits)) return toast('El DNI debe tener entre 7 y 8 números.');
+        if (dt === 'CUIT' && !/^\d{11}$/.test(digits)) return toast('El CUIT debe tener 11 números.');
+        const cm = height.value.trim() ? Number(height.value) : null;
+        const kg = weight.value.trim() ? Number(weight.value) : null;
+        if (cm != null && (!Number.isFinite(cm) || cm < 40 || cm > 250)) return toast('Revisá la altura en centímetros.');
+        if (kg != null && (!Number.isFinite(kg) || kg < 1 || kg > 400)) return toast('Revisá el peso en kilogramos.');
+        if (allergies.join('|').length > 2500) return toast('La lista de alergias es demasiado larga.');
+        const payload = { id: me.id, document_type: dt || null, document_number: digits || null,
+          height_cm: cm, weight_kg: kg, allergies, health_coverage: coverage.value.trim() || null,
+          updated_at: new Date().toISOString() };
+        saveHealthBtn.disabled = true;
+        try {
+          const { error } = await sb.from('patient_health_details').upsert(payload, { onConflict: 'id' });
+          if (error) return toast(errorText(error));
+          toast('Tus datos de salud se guardaron correctamente.');
+        } finally { saveHealthBtn.disabled = false; }
+      });
+      card.append(
+        h('div', { class: 'grid2' },
+          h('label', { class: 'field', for: 'health-doc-type' }, 'Tipo de documento', docType),
+          h('label', { class: 'field', for: 'health-document' }, 'Número de DNI o CUIT', docNumber),
+          h('label', { class: 'field', for: 'health-height' }, 'Altura (cm)', height),
+          h('label', { class: 'field', for: 'health-weight' }, 'Peso (kg)', weight)),
+        h('div', { class: 'field health-allergy-field' },
+          h('label', { for: 'health-allergy', style: 'font-weight:700' }, 'Alergias'),
+          h('div', { class: 'row' }, allergyInput, addBtn), allergyList,
+          h('span', { class: 'hint' }, 'Agregá cada alergia por separado. Podés quitarla cuando quieras.')),
+        h('label', { class: 'field', for: 'health-coverage' }, 'Obra social o prepaga', coverage,
+          h('span', { class: 'hint' }, 'Escribí para buscar entre sugerencias o poné el nombre manualmente.')),
+        healthCoverageSuggestions(),
+        h('div', { class: 'row' }, saveHealthBtn));
+    }
+  }
+
+  /* Hecho por ChatGPT · 2026-11-02 · Confirmación también al cambiar contraseña desde Mi cuenta. */
   const pass = h('input', { type: 'password', id: 'acc-pass', autocomplete: 'new-password', minlength: 8 });
-  m.append(h('div', { class: 'card' }, h('h2', {}, 'Cambiar la contraseña'), h('label', { class: 'field', for: 'acc-pass' }, 'Contraseña nueva', h('span', { class: 'hint' }, 'Al menos 8 caracteres.'), pass),
-    h('div', { class: 'row' }, h('button', { class: 'btn', onclick: async () => {
-      if (pass.value.length < 8) return toast('La contraseña tiene que tener al menos 8 caracteres.');
+  const passConfirm = h('input', { type: 'password', id: 'acc-pass-confirm', autocomplete: 'new-password', minlength: 8 });
+  const changePass = h('button', { class: 'btn', type: 'button' }, 'Cambiar contraseña');
+  changePass.addEventListener('click', async () => {
+    if (pass.value.length < 8) return toast('La contraseña tiene que tener al menos 8 caracteres.');
+    if (pass.value !== passConfirm.value) return toast('Las contraseñas no coinciden.');
+    changePass.disabled = true;
+    try {
       const { error } = await sb.auth.updateUser({ password: pass.value });
       if (error) return toast(errorText(error));
-      pass.value = ''; toast('Contraseña actualizada.');
-    } }, 'Cambiar contraseña'))));
-
-  if (me.role === 'patient') {
-    const logCard = h('div', { class: 'card' }, h('h2', {}, 'Quién vio tus estudios'), h('p', { class: 'muted small' }, 'Registro de las últimas acciones sobre tus estudios.'));
-    m.append(logCard);
-    const { data: log } = await sb.from('access_log').select('actor_id, action, at, study_id').order('at', { ascending: false }).limit(30);
-    const names = await namesFor((log || []).map(l => l.actor_id));
-    const LABEL = { estudio_creado: 'cargó un estudio', estudio_publicado: 'publicó un estudio', estudio_retirado: 'retiró un estudio', visto_por_paciente: 'abrió un estudio', visto_por_medico: 'abrió un estudio',
-      original_descargado: 'abrió un informe original', medico_vinculado: 'vinculó un médico', medico_desvinculado: 'dejó de compartir con un médico', 'consentimiento_paciente-v1': 'aceptó el consentimiento', 'consentimiento_paciente-v2': 'aceptó el consentimiento' };
-    if (!log || !log.length) logCard.append(h('p', { class: 'muted' }, 'Todavía no hay registros.'));
-    else logCard.append(h('div', { class: 'list' }, ...log.map(l => h('div', { class: 'small' }, h('strong', {}, fmtDateTime(l.at)), ' · ', l.actor_id === me.id ? 'Vos' : (names[l.actor_id] || 'Un médico'), ' ', LABEL[l.action] || l.action))));
-  }
+      pass.value = ''; passConfirm.value = ''; toast('Contraseña actualizada.');
+    } finally { changePass.disabled = false; }
+  });
+  m.append(h('div', { class: 'card' }, h('h2', {}, 'Cambiar la contraseña'),
+    h('div', { class: 'grid2' },
+      h('label', { class: 'field', for: 'acc-pass' }, 'Contraseña nueva', h('span', { class: 'hint' }, 'Al menos 8 caracteres.'), pass),
+      h('label', { class: 'field', for: 'acc-pass-confirm' }, 'Confirmar contraseña nueva', passConfirm)),
+    h('div', { class: 'row' }, changePass)));
 
   m.append(h('div', { class: 'card' }, h('h2', {}, 'Borrar mi cuenta'),
     h('p', {}, me.role === 'patient' ? 'Se borran tu cuenta, tus estudios, sus explicaciones y los archivos originales. No se puede deshacer.' : 'Se borra tu cuenta. Los estudios que publicaste siguen disponibles para tus pacientes.'),
