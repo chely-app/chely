@@ -598,6 +598,34 @@ async function adminLog() {
     !data.length ? h('p', { class: 'muted' }, 'Todavía no hay cambios.')
       : h('div', { class: 'list' }, ...data.map(l => h('div', { class: 'small' }, h('strong', {}, fmtDateTime(l.at)), ' · ', l.admin_email || 'Alguien del equipo', ' ',
         LABEL[l.action] || l.action, ' ', l.target_email || 'una cuenta borrada', l.detail ? ` (${RL(l.detail)})` : '')))));
+
+  // Hecho por ChatGPT · 2026-11-02 · Registro de estudios visible sólo al admin;
+  // la función RPC aplica autorización en Supabase y la tabla no permite SELECT al paciente.
+  const { data: access, error: accessError } = await sb.rpc('admin_study_access_log');
+  if (accessError) {
+    mainEl().append(h('div', { class: 'card' }, h('p', { class: 'alert bad' }, errorText(accessError))));
+    return;
+  }
+  const ACTIONS = { estudio_creado: 'cargó un estudio', estudio_publicado: 'publicó un estudio',
+    estudio_retirado: 'retiró un estudio', visto_por_paciente: 'abrió un estudio',
+    visto_por_medico: 'abrió un estudio', original_descargado: 'abrió un informe original',
+    medico_vinculado: 'vinculó un médico', medico_desvinculado: 'desvinculó un médico' };
+  const rows = access || [];
+  const auditCard = h('div', { class: 'card' },
+    h('h2', {}, 'Auditoría de estudios'),
+    h('p', { class: 'muted small' }, 'Últimas 100 acciones. Acceso restringido a administradores. No se muestran textos médicos.'));
+  if (!rows.length) {
+    auditCard.append(h('p', { class: 'muted' }, 'Todavía no hay movimientos.'));
+  } else {
+    const list = h('div', { class: 'list' });
+    for (const item of rows) {
+      list.append(h('div', { class: 'small' },
+        h('strong', {}, fmtDateTime(item.at)), ' · ', item.actor_email || 'Sistema', ' ',
+        ACTIONS[item.action] || item.action, ' · Paciente: ', item.patient_email || 'Cuenta eliminada'));
+    }
+    auditCard.append(list);
+  }
+  mainEl().append(auditCard);
 }
 
 /* ---------------- paciente ---------------- */
