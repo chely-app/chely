@@ -1447,6 +1447,153 @@ async function minorHealthPanel(host, minor) {
     healthCoverageSuggestions(),h('div',{class:'row'},save));
 }
 
+
+/* ---------------- estudios privados del menor ---------------- */
+/* Hecho por ChatGPT · 2026-11-02 · Estudios + archivos aislados de los pacientes adultos. */
+async function minorStudiesPanel(host,minor){
+  const card=h('div',{class:'card'},h('h2',{},'Estudios de '+minor.full_name),
+    h('p',{class:'muted small'},'Los adultos vinculados pueden subir, ver y modificar estos estudios. Los archivos se guardan en un espacio privado de Chely.'));
+  host.append(card);
+  const {data:studies,error}=await sb.from('minor_studies').select('*')
+    .eq('minor_id',minor.id).order('study_date',{ascending:false});
+  if(error)return card.append(h('div',{class:'alert bad'},errorText(error)));
+  const upload=h('details',{class:'minor-upload'},
+    h('summary',{},'Subir un estudio (PDF, foto o texto)'));
+  const title=h('input',{type:'text',id:'minor-study-title',maxlength:180,placeholder:'Ej.: Análisis de sangre'});
+  const report=h('textarea',{id:'minor-study-report',class:'report',placeholder:'Pegá acá el texto del estudio si ya lo tenés.'});
+  const file=h('input',{type:'file',accept:'.pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp'});
+  let date=todayISO();
+  const picker=datePicker({id:'minor-study-date',value:date,onChange:iso=>{date=iso;}});
+  const status=h('div',{role:'status'});
+  const save=h('button',{class:'btn primary',type:'button'},'Guardar estudio');
+  save.addEventListener('click',async()=>{
+    const chosen=file.files?.[0]||null;
+    if(title.value.trim().length<2||!date||date>todayISO())return toast('Completá título y fecha válidos.');
+    if(!chosen&&!report.value.trim())return toast('Adjuntá un PDF o imagen, o pegá el texto.');
+    if(chosen&&(!['application/pdf','image/jpeg','image/png','image/webp'].includes(chosen.type)||
+      !chosen.size||chosen.size>MAX_UPLOAD))return toast('El archivo debe ser PDF o imagen de hasta 20 MB.');
+    save.disabled=true;status.className='alert info';status.textContent='Guardando el estudio…';
+    try{
+      const {data:created,error:e}=await sb.from('minor_studies').insert({
+        minor_id:minor.id,created_by:state.me.id,title:title.value.trim(),
+        study_date:date,report_text:report.value.trim()
+      }).select('id').single();
+      if(e||!created)throw e||new Error('No se pudo crear el estudio.');
+      if(chosen){
+        const path=minor.id+'/'+created.id+'/'+crypto.randomUUID();
+        const {error:uploadError}=await sb.storage.from('estudios-menores').upload(path,chosen,
+          {contentType:chosen.type,upsert:false,cacheControl:'0'});
+        if(uploadError)throw new Error('Se creó el estudio, pero falló el archivo: '+errorText(uploadError));
+        const {error:meta}=await sb.from('minor_studies').update({
+          file_path:path,file_name:chosen.name.slice(0,255),
+          file_type:chosen.type,updated_by:state.me.id
+        }).eq('id',created.id);
+        if(meta)throw new Error('Archivo cargado sin confirmar el registro. Contactá soporte: '+errorText(meta));
+      }
+      state.minorStudyId=created.id;
+      toast('Estudio guardado. Podés pedirle a Chely que lo lea y explique.');
+      minorManagement();
+    }catch(e){status.className='alert bad';status.textContent=errorText(e);}
+    finally{save.disabled=false;}
+  });
+  upload.append(
+    h('div',{class:'grid2'},
+      h('label',{class:'field',for:'minor-study-title'},'Nombre del estudio',title),
+      h('div',{class:'field'},h('label',{for:'minor-study-date'},'Fecha del estudio'),picker)),
+    h('label',{class:'field'},'Archivo PDF o imagen',filePicker(file)),
+    h('label',{class:'field',for:'minor-study-report'},'Texto del informe (opcional)',report),
+    status,h('div',{class:'row'},save));
+  card.append(upload);
+  if(!(studies||[]).length)card.append(h('p',{class:'muted'},'Este menor todavía no tiene estudios registrados.'));
+  for(const study of studies||[])card.append(h('button',{class:'item',type:'button',onclick:()=>{
+    state.minorStudyId=study.id;minorManagement();
+  }},h('span',{class:'grow'},study.title),h('span',{class:'pill'},fmtDate(study.study_date)),
+    h('span',{class:'pill '+(study.explanation?'ok':'warn')},study.explanation?'Explicado':'Pendiente')));
+  const selected=(studies||[]).find(x=>x.id===state.minorStudyId);
+  if(selected)minorStudyEditor(host,selected);
+}
+async function minorOpenFile(study){
+  const {data,error}=await sb.storage.from('estudios-menores').createSignedUrl(study.file_path,120);
+  if(error||!data?.signedUrl)return toast('No pudimos acceder al archivo.');
+  window.open(data.signedUrl,'_blank','noopener,noreferrer');
+}
+function minorStudyEditor(host,study){
+  const box=h('div',{class:'card'},h('h3',{},'Estudio: '+study.title));
+  const title=h('input',{id:'minor-edit-title',type:'text',maxlength:180,value:study.title});
+  let date=study.study_date;
+  const picker=datePicker({id:'minor-edit-date',value:date,onChange:iso=>{date=iso;}});
+  const report=h('textarea',{id:'minor-edit-report',class:'report'},study.report_text||'');
+  const status=h('div',{role:'status'});
+  const save=async()=>{
+    if(title.value.trim().length<2||!date||date>todayISO())return toast('Título o fecha inválidos.'),false;
+    const {error}=await sb.from('minor_studies').update({
+      title:title.value.trim(),study_date:date,report_text:report.value.trim(),updated_by:state.me.id
+    }).eq('id',study.id);
+    if(error)return toast(errorText(error)),false;
+    study.title=title.value.trim();study.study_date=date;study.report_text=report.value.trim();
+    return true;
+  };
+  const read=h('button',{class:'btn',type:'button',onclick:async()=>{
+    read.disabled=true;status.className='alert info';status.textContent='Chely está leyendo el archivo…';
+    try{
+      const {data,error}=await sb.functions.invoke('ia-menores',{body:{action:'transcribir',study_id:study.id}});
+      if(error)throw new Error(await fnError(error));
+      report.value=data.text||'';
+      if(!await save())throw new Error('No se pudo guardar el texto transcripto.');
+      status.className='alert ok';status.textContent='Texto leído. Revisá que coincida con el informe original.';
+    }catch(e){status.className='alert bad';status.textContent=errorText(e);}
+    finally{read.disabled=false;}
+  }},'Leer archivo con IA');
+  const explain=h('button',{class:'btn primary',type:'button',onclick:async()=>{
+    if(!report.value.trim())return toast('Primero pegá el texto o leé el archivo.');
+    if(!await save())return;
+    explain.disabled=true;status.className='alert info';status.textContent='Chely está preparando la explicación…';
+    try{
+      const {data,error}=await sb.functions.invoke('ia-menores',{body:{action:'explicar',study_id:study.id}});
+      if(error)throw new Error(await fnError(error));
+      const text=(data.aviso_urgente?'## Aviso importante del informe\n'+data.aviso_urgente+'\n\n':'')+data.explicacion;
+      const {error:up}=await sb.from('minor_studies').update({
+        explanation:text,glossary:data.glosario||[],lab_values:data.valores||[],
+        ai_model:data.model||null,ai_generated_at:new Date().toISOString(),updated_by:state.me.id
+      }).eq('id',study.id);
+      if(up)throw up;
+      toast('Explicación guardada para los adultos vinculados.');minorManagement();
+    }catch(e){status.className='alert bad';status.textContent=errorText(e);}
+    finally{explain.disabled=false;}
+  }},'Explicar con IA');
+  box.append(
+    h('div',{class:'grid2'},
+      h('label',{class:'field',for:'minor-edit-title'},'Título',title),
+      h('div',{class:'field'},h('label',{for:'minor-edit-date'},'Fecha'),picker)),
+    study.file_path?h('div',{class:'row'},h('span',{class:'muted grow'},study.file_name||'Archivo'),
+      h('button',{class:'btn quiet sm',type:'button',onclick:()=>minorOpenFile(study)},'Ver original')):null,
+    h('label',{class:'field',for:'minor-edit-report'},'Texto del informe',report),
+    status,h('div',{class:'row'},
+      h('button',{class:'btn',type:'button',onclick:async()=>{if(await save())toast('Cambios guardados.');}},'Guardar cambios'),
+      study.file_path?read:null,explain),
+    h('p',{class:'muted small'},'Explicación generada por inteligencia artificial sin revisión médica. Consultá con un profesional.'));
+  if(study.explanation){
+    box.append(h('h3',{},'Explicación en palabras claras'),renderExplanation(study.explanation,study.glossary||[]));
+    const vals=renderValues(study.lab_values||[]);if(vals)box.append(vals);
+  }
+  box.append(h('div',{class:'row'},
+    h('button',{class:'btn quiet',type:'button',onclick:()=>printStudyCopy(study)},'Guardar copia en PDF'),
+    typeof navigator.share==='function'?h('button',{class:'btn quiet',type:'button',onclick:()=>shareStudyCopy(study)},'Enviar copia'):null,
+    h('button',{class:'btn danger sm',type:'button',onclick:async()=>{
+      if(!await confirmBox({title:'Eliminar estudio del menor',
+        text:'Se eliminará para todos los adultos vinculados. No se puede deshacer.',
+        ok:'Eliminar estudio',danger:true}))return;
+      if(study.file_path){
+        const {error:removeError}=await sb.storage.from('estudios-menores').remove([study.file_path]);
+        if(removeError)return toast(errorText(removeError));
+      }
+      const {error}=await sb.from('minor_studies').delete().eq('id',study.id);
+      if(error)return toast(errorText(error));
+      state.minorStudyId=null;toast('Estudio eliminado.');minorManagement();
+    }},'Eliminar estudio')));
+  host.append(box);
+}
+
 /* ---------------- médico ---------------- */
 async function renderDoctor() {
   if (!['pacientes', 'paciente', 'estudio-medico', 'cuenta'].includes(state.page)) state.page = 'pacientes';
