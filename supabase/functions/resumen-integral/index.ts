@@ -234,7 +234,9 @@ async function buildFinal(items:Item[],studies:Study[],
       const dateB=byId.get(b.study_id);
       const aDate=dateA?.title==="Estudio por identificar"?null:dateA?.study_date;
       const bDate=dateB?.title==="Estudio por identificar"?null:dateB?.study_date;
-      return (aDate||"9999-99-99").localeCompare(bDate||"9999-99-99");
+      // Mostrar primero los estudios clínicamente más recientes; sin fecha,
+      // conservarlos para contexto y posible revisión, sin inventar cronología.
+      return (bDate||"0000-00-00").localeCompare(aDate||"0000-00-00");
     });
   const included=chronological.map((i,n)=>{
     const s=byId.get(i.study_id);
@@ -246,9 +248,26 @@ async function buildFinal(items:Item[],studies:Study[],
   if(!included.length) throw Error("No hay informes analizados para elaborar la conclusión.");
   const omitted=items.filter(i=>i.status==="review").length;
   const excluded=items.filter(i=>i.status==="excluded").length;
+  const lastUploaded=studies.slice().sort((a,b) =>
+    String(b.created_at||"").localeCompare(String(a.created_at||"")))[0];
+  const lastUploadedIndex=lastUploaded
+    ? chronological.findIndex(i=>i.study_id===lastUploaded.id) : -1;
+  const lastUploadedItem=lastUploaded
+    ? items.find(i=>i.study_id===lastUploaded.id) : null;
   const prompt={today:localDate(),health,
     included:included.length,needs_manual_review:omitted,exact_copies_omitted:excluded,
     last_confirmed_date:lastDate,
+    ultimo_archivo_cargado: lastUploaded ? {
+      referencia: lastUploadedIndex<0 ? null : "E"+String(lastUploadedIndex+1).padStart(3,"0"),
+      tipo: lastUploaded.title==="Estudio por identificar"
+        ? "Tipo médico pendiente de confirmar" : lastUploaded.title,
+      fecha_clinica_confirmada: lastUploaded.title==="Estudio por identificar"
+        ? null : lastUploaded.study_date,
+      estado: lastUploadedItem?.status || "no analizado",
+      advertencia: "Fecha de carga NO equivale a fecha médica; revisar el texto del informe y su ficha."
+    } : null,
+    // Enviamos primero las fichas fechadas más recientes, no los diagnósticos
+    // históricos como si fueran hechos clínicos actuales.
     notes:included};
   const answerSystem=SYSTEM.replace(
     "750 a 1400 palabras como máximo",
@@ -258,7 +277,15 @@ async function buildFinal(items:Item[],studies:Study[],
     "No desarrolles razonamientos extensos ni copies íntegramente las fichas. " +
     "Referenciá solo los informes pertinentes por E001, E002, etc. " +
     "Si hay documentos para revisión, explicitá el número y que la conclusión es PARCIAL, " +
-    "sin atribuirles hallazgos no interpretados.";
+    "sin atribuirles hallazgos no interpretados. " +
+    "PRIORIDAD CLÍNICA: en Hallazgos principales documentados empezá por " +
+    "los estudios clínicamente más recientes y por el último archivo incorporado " +
+    "si su fecha y contenido lo justifican. Después compará hacia atrás. " +
+    "Los diagnósticos de hace varios años son ANTECEDENTES y no deben dominar " +
+    "la descripción de situación reciente ni tomarse como enfermedad activa hoy. " +
+    "Si la última fecha médica no está confirmada, explicalo; podés mencionar " +
+    "la fecha escrita dentro de la ficha como no verificada, sin inferirla del día de carga. " +
+    "No afirmes mejoría, progresión, remisión ni estado actual si los estudios no lo demuestran.";
   const request={role:"user" as const,
     content:"Elaborá una sola conclusión longitudinal EN ESPAÑOL, no más de 700 palabras, " +
       "con seis apartados. Respetá las limitaciones y NO inventes información. " +

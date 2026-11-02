@@ -443,3 +443,10 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); outline
   min-width:0;
 }
 .history-review-item .row { gap:.5rem; }
+
+/* Historial: priorizar el informe reciente ya guardado. */
+.history-latest-study{display:grid;gap:.65rem;padding:1rem;border:1px solid var(--line);border-radius:1rem;background:var(--surface-2);min-width:0}
+.history-latest-study .explanation{overflow-wrap:anywhere}
+.history-recent-list{margin:.5rem 0}
+.history-recent-list>summary{cursor:pointer;font-weight:700}
+.history-recent-list .stack{margin-top:.75rem}
