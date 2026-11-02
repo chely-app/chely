@@ -112,3 +112,13 @@ Este archivo documenta los cambios realizados por distintos colaboradores (human
 **Archivo:** `app/app.js`, función `errorText`.
 - El error de Supabase para un correo mal escrito ("Unable to validate email address: invalid format") se mostraba en inglés. Ahora se muestra en español y sugiere revisar espacios o un punto al final.
 
+
+## 2026-11-02 — Hecho por ChatGPT (cuatro vías de ingreso de informes)
+**Archivos:** `app/app.js` y `app/styles.css`.
+- La pantalla «Subir un estudio» ofrece cuatro métodos grandes, con foto primero: cámara o galería, PDF, pegar texto y enlace del portal.
+- Sólo se ve el contenido del método elegido. En «Pegar texto» se ofrecen nombre y fecha; se pueden sugerir automáticamente si el texto incluye encabezados reconocibles.
+- Con fotos, PDF o archivos importados, Chely crea el estudio provisionalmente como «Estudio por identificar», lee el archivo con la función IA existente y sugiere nombre y fecha al usuario para revisión antes de generar la explicación. La fecha real nunca se sustituye silenciosamente por la fecha de carga: en listas se muestra «Fecha por confirmar» mientras no se verifique.
+- Los enlaces HTTPS **solo pueden importar directamente PDF o JPG/PNG/WebP públicos cuando el navegador permite CORS**. Nunca se envían cookies ni contraseñas a terceros. Los enlaces de portales que requieren inicio de sesión se abren para que el usuario descargue el documento y después lo adjunte manualmente.
+- Se aplica el mismo selector a estudios personales y al módulo de menores; no cambia autenticación, permisos de estudios, RLS, Storage ni el motor de IA.
+- Se conserva el borrador en memoria de la pestaña (sin guardar datos médicos en localStorage). El archivo original, si se sube, sigue protegido por los mecanismos existentes.
+- Comprobación de sintaxis JS y casos de inferencia de metadatos realizados. Pendiente: prueba de interfaz, permisos de cámara, enlace CORS y carga real en PC y móvil.

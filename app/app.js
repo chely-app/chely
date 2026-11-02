@@ -704,7 +704,7 @@ async function patientStudies() {
     list.append(h('button', { class: 'item', onclick: () => go(pending ? 'mi-estudio' : 'estudio', { studyId: s.id }) },
       h('div', { class: 'row' }, h('h3', {}, s.title),
         pending ? h('span', { class: 'pill warn' }, 'Sin explicar') : !s.self_uploaded && !s.first_viewed_at ? h('span', { class: 'pill bad' }, 'Nuevo') : null,
-        h('span', { class: 'pill' }, fmtDate(s.study_date))),
+        h('span', { class: 'pill' }, s.title === STUDY_PENDING_TITLE ? 'Fecha por confirmar' : fmtDate(s.study_date))),
       h('span', { class: 'muted small' }, s.self_uploaded ? 'Subido por vos' : `Enviado por ${names[s.doctor_id] || 'tu médico'} el ${fmtDate(s.published_at)}`)));
   }
   card.append(list);
@@ -788,62 +788,273 @@ async function archivoDebian(action, studyId, fileId = null, file = null) {
   return data;
 }
 
+
+/* ---------------- cuatro formas simples de subir un estudio ---------------- */
+/* Hecho por ChatGPT · 2026-11-02 · Foto primero, luego PDF, texto o enlace.
+   Los enlaces se importan desde el navegador sin cookies ni credenciales; si
+   el portal requiere sesión o bloquea CORS, se pide descargar el archivo. */
+const STUDY_PENDING_TITLE = 'Estudio por identificar';
+const STUDY_UPLOAD_MODES = [
+  { id: 'foto', icon: '📷', name: 'Sacar una foto', help: 'Fotografiá el informe con el celular.' },
+  { id: 'pdf', icon: '📄', name: 'Subir PDF', help: 'Elegí un PDF que tengas guardado.' },
+  { id: 'texto', icon: '📝', name: 'Pegar texto', help: 'Copiá y pegá el informe escrito.' },
+  { id: 'enlace', icon: '🔗', name: 'Usar un enlace', help: 'Importá un PDF o una imagen desde un vínculo público.' }
+];
+function studyUploadFileValid(file, mode) {
+  if (!file || !file.size || file.size > MAX_UPLOAD || !UPLOAD_TYPES.includes(file.type)) return false;
+  if (mode === 'foto' && !file.type.startsWith('image/')) return false;
+  if (mode === 'pdf' && file.type !== 'application/pdf') return false;
+  return true;
+}
+function urlIsImportable(value) {
+  try {
+    const u = new URL(String(value).trim());
+    const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    if (u.protocol !== 'https:' || u.username || u.password || u.port && u.port !== '443'
+      || host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')
+      || host.endsWith('.internal') || !host.includes('.')
+      || /^(\d{1,3}\.){3}\d{1,3}$/.test(host) || host.includes(':')) return false;
+    return true;
+  } catch { return false; }
+}
+async function fileFromPublicLink(value) {
+  if (!urlIsImportable(value)) throw new Error('Ingresá un enlace HTTPS público válido, sin contraseñas ni direcciones locales.');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+  try {
+    const response = await fetch(String(value).trim(), {
+      credentials: 'omit', mode: 'cors', referrerPolicy: 'no-referrer',
+      redirect: 'follow', signal: controller.signal
+    });
+    if (!response.ok || !urlIsImportable(response.url)) throw new Error('El portal no permitió importar el archivo.');
+    const headerSize = Number(response.headers.get('content-length') || 0);
+    if (headerSize > MAX_UPLOAD) throw new Error('El archivo supera el límite de 20 MB.');
+    if (!response.body) throw new Error('El enlace no contiene un archivo que Chely pueda leer.');
+    let size = 0;
+    const chunks = [], reader = response.body.getReader();
+    try {
+      while (true) {
+        const { done, value: chunk } = await reader.read();
+        if (done) break;
+        size += chunk.byteLength;
+        if (size > MAX_UPLOAD) { await reader.cancel(); throw new Error('El archivo supera el límite de 20 MB.'); }
+        chunks.push(chunk);
+      }
+    } finally { reader.releaseLock(); }
+    const bytes = new Uint8Array(size);
+    let pos = 0; for (const chunk of chunks) { bytes.set(chunk,pos);pos+=chunk.length; }
+    const isPdf = bytes.length > 5 && String.fromCharCode(...bytes.slice(0,5)) === '%PDF-';
+    const isPng = bytes.length > 8 && bytes[0] === 137 && bytes[1] === 80 && bytes[2] === 78 && bytes[3] === 71;
+    const isJpg = bytes.length > 3 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
+    const isWebp = bytes.length > 12 && String.fromCharCode(...bytes.slice(0,4)) === 'RIFF'
+      && String.fromCharCode(...bytes.slice(8,12)) === 'WEBP';
+    const mime = isPdf ? 'application/pdf' : isPng ? 'image/png' : isJpg ? 'image/jpeg' : isWebp ? 'image/webp' : null;
+    if (!mime) throw new Error('El enlace no entrega directamente un PDF o una foto. Abrí el portal, descargá el informe y subilo desde «Subir PDF» o «Sacar una foto».');
+    const ext = { 'application/pdf': 'pdf', 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' }[mime];
+    return new File([bytes], 'informe-importado.' + ext, { type: mime });
+  } catch (error) {
+    if (error.name === 'AbortError') throw new Error('El enlace tardó demasiado en responder. Descargá el archivo desde el portal.');
+    if (error instanceof TypeError) throw new Error('Este portal no permite importar directamente el archivo. Abrilo, descargá el PDF o imagen y subilo a Chely.');
+    throw error;
+  } finally { clearTimeout(timeout); }
+}
+function studySourceChooser(prefix, draft = {}) {
+  let mode = STUDY_UPLOAD_MODES.some(x => x.id === draft.mode) ? draft.mode : 'foto';
+  let imported = null;
+  const options = h('div', { class: 'study-method-grid', role: 'group', 'aria-label': 'Cómo querés subir tu estudio' });
+  const body = h('div', { class: 'study-method-body' });
+  const photo = h('input', { type: 'file', id: prefix + '-photo', accept: 'image/jpeg,image/png,image/webp', capture: 'environment' });
+  const gallery = h('input', { type: 'file', id: prefix + '-gallery', accept: 'image/jpeg,image/png,image/webp' });
+  const pdf = h('input', { type: 'file', id: prefix + '-pdf', accept: '.pdf,application/pdf' });
+  const report = h('textarea', { id: prefix + '-text', class: 'report', placeholder: 'Pegá acá el texto del informe…' }, draft.text || '');
+  report.addEventListener('input', () => { draft.text = report.value; root.dispatchEvent(new CustomEvent('study-report-input', { detail: { text: report.value } })); });
+  const url = h('input', { type: 'url', id: prefix + '-url', placeholder: 'https://portal-medico.com/estudio.pdf', autocomplete: 'off', value: draft.url || '' });
+  url.addEventListener('input', () => { imported = null; draft.url = url.value; });
+  const importInfo = h('div', { class: 'hint', role: 'status', 'aria-live': 'polite' });
+  const importButton = h('button', { type: 'button', class: 'btn primary' }, 'Importar archivo del enlace');
+  importButton.addEventListener('click', async () => {
+    if (!urlIsImportable(url.value)) return toast('Pegá un enlace HTTPS público válido.');
+    importButton.disabled = true;
+    importInfo.textContent = 'Intentando importar el informe…';
+    try {
+      imported = await fileFromPublicLink(url.value);
+      importInfo.textContent = 'Archivo importado: ' + imported.name + '. Ahora podés continuar.';
+    } catch (e) { imported = null; importInfo.textContent = errorText(e); }
+    finally { importButton.disabled = false; }
+  });
+  const open = h('button', { type: 'button', class: 'btn quiet sm',
+    onclick: () => {
+      if (!urlIsImportable(url.value)) return toast('Primero pegá un enlace HTTPS válido.');
+      window.open(url.value.trim(), '_blank', 'noopener,noreferrer');
+    } }, 'Abrir portal para descargar');
+  const buttons = [];
+  const panels = {
+    foto: h('div', { class: 'study-source-panel' },
+      h('p', { class: 'muted' }, 'Usá la cámara para fotografiar el informe o elegí una foto ya guardada. Procurá que se lea todo el texto.'),
+      h('div', { class: 'study-photo-options' },
+        h('label', { class: 'field', for: prefix + '-photo' }, 'Sacar foto con la cámara', filePicker(photo, 'Abrir cámara')),
+        h('label', { class: 'field', for: prefix + '-gallery' }, 'Elegir una foto guardada', filePicker(gallery, 'Elegir foto')))),
+    pdf: h('div', { class: 'study-source-panel' },
+      h('p', { class: 'muted' }, 'Elegí el informe en PDF. Chely intentará leer su título y fecha automáticamente.'),
+      h('label', { class: 'field', for: prefix + '-pdf' }, 'Archivo PDF', filePicker(pdf, 'Elegir PDF'))),
+    texto: h('div', { class: 'study-source-panel' },
+      h('p', { class: 'muted' }, 'Si pegás solamente el cuerpo del informe, completá el nombre y la fecha debajo.'),
+      h('label', { class: 'field', for: prefix + '-text' }, 'Texto del informe', report)),
+    enlace: h('div', { class: 'study-source-panel' },
+      h('p', { class: 'muted' }, 'Pegá un enlace directo a un PDF o imagen. Si el portal pide usuario o contraseña, abrilo y descargá el archivo desde allí.'),
+      h('label', { class: 'field', for: prefix + '-url' }, 'Enlace del portal médico', url),
+      h('div', { class: 'row' }, importButton, open), importInfo,
+      h('p', { class: 'hint' }, 'Solo se pueden importar enlaces públicos que permitan la descarga. No ingreses contraseñas de portales médicos en Chely.'))
+  };
+  const root = h('div', { class: 'study-source' }, h('h2', {}, '¿Cómo querés enviar tu estudio?'), options, body);
+  const render = () => {
+    buttons.forEach((button, i) => {
+      const active = STUDY_UPLOAD_MODES[i].id === mode;
+      button.setAttribute('aria-pressed', String(active));
+      button.classList.toggle('active', active);
+    });
+    body.replaceChildren(panels[mode]);
+    draft.mode = mode;
+    root.dispatchEvent(new CustomEvent('study-method-change', { detail: { mode } }));
+  };
+  STUDY_UPLOAD_MODES.forEach(item => {
+    const button = h('button', { type: 'button', class: 'study-method',
+      onclick: () => { mode = item.id; imported = null; draft.file = null; photo.value = ''; gallery.value = ''; pdf.value = ''; render(); } },
+      h('span', { class: 'study-method-icon', 'aria-hidden': 'true' }, item.icon),
+      h('strong', {}, item.name),
+      h('span', { class: 'muted small' }, item.help));
+    buttons.push(button); options.append(button);
+  });
+  photo.addEventListener('change', () => { if (photo.files?.length) gallery.value = ''; draft.file = photo.files?.[0] || null; });
+  gallery.addEventListener('change', () => { if (gallery.files?.length) photo.value = ''; draft.file = gallery.files?.[0] || null; });
+  pdf.addEventListener('change', () => { draft.file = pdf.files?.[0] || null; });
+  render();
+  return {
+    root, getMode: () => mode, getText: () => report.value.trim(),
+    getFile: () => mode === 'foto' ? (photo.files?.[0] || gallery.files?.[0] || draft.file || null)
+      : mode === 'pdf' ? (pdf.files?.[0] || draft.file || null)
+      : mode === 'enlace' ? imported : null,
+    getLink: () => url.value.trim()
+  };
+}
+/* Hecho por ChatGPT · 2026-11-02 · Metadatos sugeridos tras leer el documento.
+   Se solicita confirmación cuando los datos no aparecen explícitos. */
+function metadataFromReport(text) {
+  const header = String(text || '').slice(0, 5000);
+  const lines = header.split(/\n/).map(x => x.trim()).filter(Boolean).slice(0, 35);
+  const first = lines.join(' \n ');
+  let title = null;
+  const titled = first.match(/(?:tipo de estudio|estudio realizado|pr[aá]ctica|examen|tipo de informe)\s*[:\-]\s*([^\n]{5,90})/i);
+  if (titled) title = titled[1].trim();
+  else {
+    const types = [
+      ['Hemograma',/\bhemograma\b/i], ['Análisis de laboratorio',/\b(laboratorio|bioqu[ií]mica|glucemia|perfil lip[ií]dico|colesterol|hematolog[ií]a)\b/i],
+      ['Ecografía',/\b(ecograf[ií]a|ecogr[aá]fico|ultrasonido)\b/i],
+      ['Radiografía',/\b(radiograf[ií]a|rayos\s*x)\b/i], ['Tomografía',/\b(tomograf[ií]a|tomogr[aá]fico|tac)\b/i],
+      ['Resonancia magnética',/\b(resonancia magn[eé]tica|rmn)\b/i],
+      ['Electrocardiograma',/\b(electrocardiograma|electrocardiogr[aá]fico|ecg)\b/i]
+    ];
+    title = types.find(([, re]) => re.test(first))?.[0] || null;
+  }
+  const explicit = first.match(/(?:fecha\s+(?:del?\s+)?(?:estudio|informe|extracci[oó]n|realizaci[oó]n|an[aá]lisis|toma|emisi[oó]n)|realizado\s+el)\s*[:\-]?\s*(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4}|\d{4}-\d{2}-\d{2})/i);
+  const unlabeled = lines.slice(0, 15).filter(line => !/nacimiento|\bf\.?\s*nac\.?/i.test(line))
+    .map(line => line.match(/^fecha\s*[:\-]\s*(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4}|\d{4}-\d{2}-\d{2})\b/i))
+    .find(Boolean);
+  const candidate = (explicit || unlabeled)?.[1] || '';
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(candidate) ? candidate : parseDMY(candidate);
+  return { title: title ? title.slice(0, 180) : null,
+    date: date && date <= todayISO() && date >= '1910-01-01' ? date : null };
+}
+
+
 // El paciente sube un estudio propio.
 // Selector de archivo propio: el del navegador muestra sus textos en el idioma del sistema.
-function filePicker(input) {
+function filePicker(input, buttonLabel = 'Elegir archivo') {
   input.className = 'file-input';
   const none = 'Ningún archivo elegido';
   const name = h('span', { class: 'hint' }, none);
   input.addEventListener('change', () => { name.textContent = input.files[0]?.name || none; });
-  return h('span', { class: 'filepick' }, input, h('span', { class: 'btn', 'aria-hidden': 'true' }, 'Elegir archivo'), name);
+  return h('span', { class: 'filepick' }, input, h('span', { class: 'btn', 'aria-hidden': 'true' }, buttonLabel), name);
 }
 
 function patientUpload() {
   const m = mainEl();
-  if (!uploadDraft) uploadDraft = { title: '', date: todayISO(), text: '', file: null };
-  let date = uploadDraft.date;
-
-  const title = h('input', { type: 'text', id: 'up-title', placeholder: 'Ej.: Análisis de sangre', value: uploadDraft.title });
-  const file = h('input', { type: 'file', id: 'up-file', accept: UPLOAD_TYPES.join(',') });
-  const text = h('textarea', { id: 'up-text', class: 'report', placeholder: 'O pegá acá el texto del informe…' }, uploadDraft.text);
+  if (!uploadDraft) uploadDraft = { title: '', date: null, text: '', file: null, mode: 'foto', url: '' };
+  let date = uploadDraft.date || null;
+  const source = studySourceChooser('up', uploadDraft);
+  const title = h('input', { type: 'text', id: 'up-title', maxlength: 180,
+    placeholder: 'Ej.: Análisis de sangre', value: uploadDraft.title || '' });
+  const meta = h('div', { class: 'study-manual-meta grid2' },
+    h('label', { class: 'field', for: 'up-title' }, '¿Qué estudio es?', title),
+    h('div', { class: 'field' }, h('label', { for: 'up-date', style: 'font-weight:700' }, 'Fecha del estudio'),
+      datePicker({ id: 'up-date', value: date, onChange: iso => { date = iso; uploadDraft.date = iso; } })));
   const msg = h('div', { role: 'alert' });
-  // Conservar el File en memoria si la navegación interna o una sesión redibujan la página.
-  // No se guarda el contenido del informe en almacenamiento permanente del navegador.
   title.addEventListener('input', () => { uploadDraft.title = title.value; });
-  text.addEventListener('input', () => { uploadDraft.text = text.value; });
-  file.addEventListener('change', () => { uploadDraft.file = file.files[0] || null; });
-  const btn = h('button', { class: 'btn primary big' }, 'Subir estudio');
+  const refresh = () => { meta.hidden = source.getMode() !== 'texto'; };
+  source.root.addEventListener('study-method-change', refresh);
+  source.root.addEventListener('study-report-input', e => {
+    const info = metadataFromReport(e.detail.text);
+    if (!title.value.trim() && info.title) { title.value = info.title; uploadDraft.title = info.title; }
+    if (!date && info.date) {
+      date = info.date; uploadDraft.date = info.date;
+      meta.querySelector('#up-date').value = fmtDate(info.date);
+    }
+  });
+  refresh();
+  const btn = h('button', { class: 'btn primary big', type: 'button' }, 'Continuar con el estudio');
   btn.addEventListener('click', async () => {
     msg.className = ''; msg.textContent = '';
-    const f = file.files[0] || uploadDraft?.file;
-    if (!title.value.trim()) { msg.className = 'alert bad'; msg.textContent = 'Escribí qué estudio es (por ejemplo, «Análisis de sangre»).'; return; }
-    if (!date) { msg.className = 'alert bad'; msg.textContent = 'Revisá la fecha: usá día/mes/año.'; return; }
-    if (!f && !text.value.trim()) { msg.className = 'alert bad'; msg.textContent = 'Elegí el archivo del informe o pegá su texto.'; return; }
-    if (f && (!UPLOAD_TYPES.includes(f.type) || f.size > MAX_UPLOAD)) { msg.className = 'alert bad'; msg.textContent = 'El archivo tiene que ser PDF, JPG o PNG de hasta 20 MB. Si es Word, guardalo como PDF.'; return; }
-    btn.disabled = true; btn.replaceChildren(h('span', { class: 'spinner' }), ' Subiendo…');
-    const { data: st, error } = await sb.from('studies').insert({ patient_id: state.me.id, doctor_id: null, self_uploaded: true, title: title.value.trim(), study_date: date, report_text: f ? '' : text.value.trim() }).select('id').single();
-    if (error) { btn.disabled = false; btn.textContent = 'Subir estudio'; msg.className = 'alert bad'; msg.textContent = errorText(error); return; }
-    if (f) {
-      try {
-        await archivoDebian('upload', st.id, null, f);
-      } catch (e) {
-        btn.disabled = false; btn.textContent = 'Subir estudio';
+    const mode = source.getMode();
+    const f = source.getFile();
+    const pasted = source.getText();
+    if (mode === 'texto') {
+      if (!pasted) { msg.className = 'alert bad'; msg.textContent = 'Pegá el texto del informe.'; return; }
+      if (title.value.trim().length < 2 || !date) {
+        msg.className = 'alert bad'; msg.textContent = 'Completá el nombre y la fecha del informe.'; return;
+      }
+    } else {
+      if (!f) {
         msg.className = 'alert bad';
-        msg.textContent = 'El estudio se creó, pero el archivo no se pudo guardar: ' + errorText(e) + '. Podés volver a la lista y corregirlo.';
+        msg.textContent = mode === 'enlace' ? 'Primero importá el archivo desde el enlace o descargalo desde el portal.'
+          : 'Elegí una foto o archivo PDF para continuar.';
         return;
       }
+      if (!studyUploadFileValid(f,mode)) {
+        msg.className = 'alert bad'; msg.textContent = 'El archivo debe ser PDF o una imagen válida de hasta 20 MB.'; return;
+      }
     }
-    clearUploadDraft();
-    go('mi-estudio', { studyId: st.id, autoExplain: true });
+    btn.disabled = true; btn.replaceChildren(h('span', { class: 'spinner' }), ' Guardando…');
+    try {
+      const autoMetadata = mode !== 'texto';
+      // La base requiere título y fecha mientras se reconoce el documento.
+      // «Estudio por identificar» indica al editor que debe solicitar confirmación.
+      const { data: st, error } = await sb.from('studies').insert({
+        patient_id: state.me.id, doctor_id: null, self_uploaded: true,
+        title: autoMetadata ? STUDY_PENDING_TITLE : title.value.trim(),
+        study_date: autoMetadata ? todayISO() : date,
+        report_text: autoMetadata ? '' : pasted
+      }).select('id').single();
+      if (error || !st) throw error || new Error('No se pudo crear el estudio.');
+      if (autoMetadata) {
+        try { await archivoDebian('upload', st.id, null, f); }
+        catch (e) { throw new Error('El estudio fue creado, pero falló la carga del archivo: ' +
+          errorText(e) + '. Podés volver a la lista y corregirlo.'); }
+      }
+      clearUploadDraft();
+      go('mi-estudio', { studyId: st.id, autoExplain: !autoMetadata });
+    } catch (e) {
+      msg.className = 'alert bad'; msg.textContent = errorText(e);
+      btn.disabled = false; btn.textContent = 'Continuar con el estudio';
+    }
   });
-  m.append(h('div', { class: 'row' }, h('button', { class: 'btn quiet sm', onclick: () => go('estudios') }, '‹ Mis estudios')));
-  m.append(h('div', { class: 'card' }, h('h1', {}, 'Subir un estudio'),
-    h('p', { class: 'muted' }, 'Solo informes escritos: análisis, ecografías, radiografías, etc. Chely no interpreta las imágenes de las placas.'),
-    h('div', { class: 'grid2' }, h('label', { class: 'field', for: 'up-title' }, '¿Qué estudio es?', title),
-      h('div', { class: 'field' }, h('label', { for: 'up-date', style: 'font-weight:700' }, 'Fecha del estudio'), datePicker({ id: 'up-date', value: date, onChange: iso => { date = iso; uploadDraft.date = iso; } }))),
-    h('label', { class: 'field', for: 'up-file' }, 'Archivo del informe ', h('span', { class: 'hint' }, 'PDF o foto (JPG, PNG), hasta 20 MB.'), filePicker(file)),
-    uploadDraft.file ? h('p', { class: 'hint' }, 'Archivo conservado en esta pestaña: ' + uploadDraft.file.name) : null,
-    h('label', { class: 'field', for: 'up-text' }, 'O el texto del informe ', h('span', { class: 'hint' }, '(solo si no tenés el archivo; si subís el archivo, Chely lo lee solo)'), text),
+  m.append(h('div', { class: 'row' },
+    h('button', { class: 'btn quiet sm', onclick: () => go('estudios') }, '‹ Mis estudios')));
+  m.append(h('div', { class: 'card' },
+    h('h1', {}, 'Subir un estudio'),
+    h('p', { class: 'muted' }, 'Elegí la forma más fácil para vos. Chely lee informes escritos, no interpreta imágenes diagnósticas como radiografías o placas.'),
+    source.root, meta,
+    h('p', { class: 'hint study-file-guidance' },
+      'Con una foto, un PDF o un archivo importado, Chely intentará identificar el nombre y la fecha. Vas a poder confirmarlos antes de recibir la explicación.'),
     msg, h('div', { class: 'row' }, btn)));
 }
 
@@ -859,6 +1070,29 @@ async function patientOwnStudy() {
   const m = mainEl();
   const report = h('textarea', { id: 'own-report', class: 'report' }, s.report_text);
   const status = h('div', { role: 'status' });
+  // Hecho por ChatGPT · 2026-11-02 · El archivo se lee y propone título y fecha;
+  // si no se detectan, se solicitan antes de generar la explicación.
+  const pending = s.title === STUDY_PENDING_TITLE;
+  const metaTitle = h('input', { type: 'text', id: 'own-title', maxlength: 180,
+    value: pending ? '' : s.title, placeholder: 'Ej.: Ecografía abdominal' });
+  let selectedDate = pending ? null : s.study_date;
+  const metaPicker = datePicker({ id: 'own-date', value: selectedDate,
+    onChange: iso => { selectedDate = iso; } });
+  const metadataNote = h('p', { class: 'hint', role: 'status' },
+    pending ? 'Chely está leyendo el informe para sugerir el nombre y la fecha. Revisalos antes de continuar.'
+      : 'Podés corregir el nombre y la fecha antes de explicar el estudio.');
+  const saveMetadata = async () => {
+    const name = metaTitle.value.trim();
+    if (name.length < 2 || !selectedDate || selectedDate > todayISO()) {
+      status.className = 'alert bad';
+      status.textContent = 'Revisá el nombre y la fecha del informe. Si Chely no pudo identificarlos, completalos.';
+      return false;
+    }
+    const { error } = await sb.from('studies').update({ title: name, study_date: selectedDate }).eq('id', s.id);
+    if (error) { status.className = 'alert bad'; status.textContent = errorText(error); return false; }
+    s.title = name; s.study_date = selectedDate;
+    return true;
+  };
   const busy = (btn, label) => { btn.disabled = true; const old = btn.textContent; btn.replaceChildren(h('span', { class: 'spinner' }), ' ' + label); return () => { btn.disabled = false; btn.textContent = old; }; };
   const saveText = async () => {
     const { error } = await sb.from('studies').update({ report_text: report.value.trim() }).eq('id', s.id);
@@ -874,6 +1108,17 @@ async function patientOwnStudy() {
     done();
     if (error) { status.className = 'alert bad'; status.textContent = await fnError(error); return false; }
     report.value = data.text;
+    if (s.title === STUDY_PENDING_TITLE) {
+      const suggested = metadataFromReport(data.text);
+      if (suggested.title) metaTitle.value = suggested.title;
+      if (suggested.date) {
+        selectedDate = suggested.date;
+        metaPicker.querySelector('input').value = fmtDate(suggested.date);
+      }
+      metadataNote.textContent = suggested.title && suggested.date
+        ? 'Chely sugirió estos datos del informe. Confirmá que sean correctos antes de explicar.'
+        : 'No encontramos con seguridad todos los datos. Completá el nombre y la fecha antes de explicar.';
+    }
     return saveText();
   };
   readBtn.addEventListener('click', async () => {
@@ -884,7 +1129,7 @@ async function patientOwnStudy() {
     if (!report.value.trim()) { status.className = 'alert bad'; status.textContent = 'Falta el texto del informe. Tocá «Leer el archivo» o pegalo.'; return; }
     // Con archivo y un texto tan corto, seguramente falta leer el archivo.
     if (s.file_path && report.value.trim().length < 40) { status.className = 'alert bad'; status.textContent = 'El texto es muy corto para ser el informe completo. Tocá «Leer el archivo» y después «Explicar mi estudio».'; return; }
-    if (!await saveText()) return;
+    if (!await saveText() || !await saveMetadata()) return;
     status.className = 'alert info'; status.textContent = 'Chely está escribiendo la explicación de tu estudio. Puede tardar hasta dos minutos; no cierres esta pantalla.';
     const done = busy(explainBtn, 'Escribiendo la explicación…');
     const { data, error } = await sb.functions.invoke('ia', { body: { action: 'explicar', study_id: s.id } });
@@ -898,7 +1143,12 @@ async function patientOwnStudy() {
   };
   explainBtn.addEventListener('click', explainStudy);
   m.append(h('div', { class: 'row' }, h('button', { class: 'btn quiet sm', onclick: () => go('estudios') }, '‹ Mis estudios')));
-  m.append(h('div', { class: 'card' }, h('div', { class: 'row' }, h('h1', { class: 'grow' }, s.title), h('span', { class: 'pill' }, fmtDate(s.study_date))),
+  m.append(h('div', { class: 'card' },
+    h('h1', {}, pending ? 'Revisar datos del informe' : s.title),
+    h('div', { class: 'grid2' },
+      h('label', { class: 'field', for: 'own-title' }, 'Nombre del estudio', metaTitle),
+      h('div', { class: 'field' }, h('label', { for: 'own-date' }, 'Fecha del estudio'), metaPicker)),
+    metadataNote,
     s.file_path ? h('div', { class: 'row' }, h('span', { class: 'grow muted' }, 'Archivo: ' + (s.file_name || 'informe')), h('button', { class: 'btn quiet sm', onclick: () => openOriginal(s) }, 'Ver archivo'), readBtn) : null,
     h('label', { class: 'field', for: 'own-report' }, 'Texto del informe ', h('span', { class: 'hint' }, 'Es lo que lee Chely. Revisá que esté completo y sin errores.'), report),
     status,
@@ -1460,56 +1710,70 @@ async function minorStudiesPanel(host,minor){
     .eq('minor_id',minor.id).order('study_date',{ascending:false});
   if(error)return card.append(h('div',{class:'alert bad'},errorText(error)));
   const upload=h('details',{class:'minor-upload'},
-    h('summary',{},'Subir un estudio (PDF, foto o texto)'));
+    h('summary',{},'Agregar un estudio'));
+  // Hecho por ChatGPT · 2026-11-02 · Misma carga accesible de adultos: foto, PDF, texto o enlace.
+  const draft={mode:'foto',text:'',file:null,url:''};
+  const source=studySourceChooser('minor-study',draft);
   const title=h('input',{type:'text',id:'minor-study-title',maxlength:180,placeholder:'Ej.: Análisis de sangre'});
-  const report=h('textarea',{id:'minor-study-report',class:'report',placeholder:'Pegá acá el texto del estudio si ya lo tenés.'});
-  const file=h('input',{type:'file',accept:'.pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp'});
-  let date=todayISO();
+  let date=null;
   const picker=datePicker({id:'minor-study-date',value:date,onChange:iso=>{date=iso;}});
+  const meta=h('div',{class:'study-manual-meta grid2'},
+    h('label',{class:'field',for:'minor-study-title'},'¿Qué estudio es?',title),
+    h('div',{class:'field'},h('label',{for:'minor-study-date'},'Fecha del estudio'),picker));
+  const sync=()=>{meta.hidden=source.getMode()!=='texto';};
+  source.root.addEventListener('study-method-change',sync);
+  source.root.addEventListener('study-report-input',e=>{
+    const info=metadataFromReport(e.detail.text);
+    if(!title.value.trim()&&info.title)title.value=info.title;
+    if(!date&&info.date){date=info.date;picker.querySelector('input').value=fmtDate(info.date);}
+  });
+  sync();
   const status=h('div',{role:'status'});
-  const save=h('button',{class:'btn primary',type:'button'},'Guardar estudio');
+  const save=h('button',{class:'btn primary big',type:'button'},'Continuar con el estudio');
   save.addEventListener('click',async()=>{
-    const chosen=file.files?.[0]||null;
-    if(title.value.trim().length<2||!date||date>todayISO())return toast('Completá título y fecha válidos.');
-    if(!chosen&&!report.value.trim())return toast('Adjuntá un PDF o imagen, o pegá el texto.');
-    if(chosen&&(!['application/pdf','image/jpeg','image/png','image/webp'].includes(chosen.type)||
-      !chosen.size||chosen.size>MAX_UPLOAD))return toast('El archivo debe ser PDF o imagen de hasta 20 MB.');
+    const mode=source.getMode(), chosen=source.getFile(), pasted=source.getText();
+    if(mode==='texto'){
+      if(!pasted)return toast('Pegá el texto del informe.');
+      if(title.value.trim().length<2||!date||date>todayISO())return toast('Completá el nombre y la fecha.');
+    }else{
+      if(!chosen)return toast(mode==='enlace'?'Primero importá el documento del enlace.':'Elegí una foto o PDF.');
+      if(!studyUploadFileValid(chosen,mode))return toast('Archivo no admitido o mayor a 20 MB.');
+    }
     save.disabled=true;status.className='alert info';status.textContent='Guardando el estudio…';
     try{
+      const isFile=mode!=='texto';
       const {data:created,error:e}=await sb.from('minor_studies').insert({
-        minor_id:minor.id,created_by:state.me.id,title:title.value.trim(),
-        study_date:date,report_text:report.value.trim()
+        minor_id:minor.id,created_by:state.me.id,
+        title:isFile?STUDY_PENDING_TITLE:title.value.trim(),
+        study_date:isFile?todayISO():date,report_text:isFile?'':pasted
       }).select('id').single();
       if(e||!created)throw e||new Error('No se pudo crear el estudio.');
-      if(chosen){
+      if(isFile){
         const path=minor.id+'/'+created.id+'/'+crypto.randomUUID();
         const {error:uploadError}=await sb.storage.from('estudios-menores').upload(path,chosen,
           {contentType:chosen.type,upsert:false,cacheControl:'0'});
         if(uploadError)throw new Error('Se creó el estudio, pero falló el archivo: '+errorText(uploadError));
-        const {error:meta}=await sb.from('minor_studies').update({
+        const {error:metaError}=await sb.from('minor_studies').update({
           file_path:path,file_name:chosen.name.slice(0,255),
           file_type:chosen.type,updated_by:state.me.id
         }).eq('id',created.id);
-        if(meta)throw new Error('Archivo cargado sin confirmar el registro. Contactá soporte: '+errorText(meta));
+        if(metaError)throw new Error('Archivo cargado sin confirmar el registro: '+errorText(metaError));
+        state.minorAutoRead=created.id;
       }
       state.minorStudyId=created.id;
-      toast('Estudio guardado. Podés pedirle a Chely que lo lea y explique.');
+      toast(isFile?'Estudio guardado. Chely intentará leer el documento.':'Texto guardado. Podés pedir la explicación.');
       minorManagement();
     }catch(e){status.className='alert bad';status.textContent=errorText(e);}
     finally{save.disabled=false;}
   });
-  upload.append(
-    h('div',{class:'grid2'},
-      h('label',{class:'field',for:'minor-study-title'},'Nombre del estudio',title),
-      h('div',{class:'field'},h('label',{for:'minor-study-date'},'Fecha del estudio'),picker)),
-    h('label',{class:'field'},'Archivo PDF o imagen',filePicker(file)),
-    h('label',{class:'field',for:'minor-study-report'},'Texto del informe (opcional)',report),
+  upload.append(source.root,meta,
+    h('p',{class:'hint'},'Con foto, PDF o enlace importado, Chely intentará completar título y fecha después de leer el documento.'),
     status,h('div',{class:'row'},save));
   card.append(upload);
   if(!(studies||[]).length)card.append(h('p',{class:'muted'},'Este menor todavía no tiene estudios registrados.'));
   for(const study of studies||[])card.append(h('button',{class:'item',type:'button',onclick:()=>{
     state.minorStudyId=study.id;minorManagement();
-  }},h('span',{class:'grow'},study.title),h('span',{class:'pill'},fmtDate(study.study_date)),
+  }},h('span',{class:'grow'},study.title),h('span',{class:'pill'},study.title===STUDY_PENDING_TITLE?'Fecha por confirmar':fmtDate(study.study_date)),
     h('span',{class:'pill '+(study.explanation?'ok':'warn')},study.explanation?'Explicado':'Pendiente')));
   const selected=(studies||[]).find(x=>x.id===state.minorStudyId);
   if(selected)minorStudyEditor(host,selected);
@@ -1521,13 +1785,26 @@ async function minorOpenFile(study){
 }
 function minorStudyEditor(host,study){
   const box=h('div',{class:'card'},h('h3',{},'Estudio: '+study.title));
-  const title=h('input',{id:'minor-edit-title',type:'text',maxlength:180,value:study.title});
-  let date=study.study_date;
+  // Hecho por ChatGPT · 2026-11-02 · Revisión del título/fecha sugeridos en archivos pediátricos.
+  const pending=study.title===STUDY_PENDING_TITLE;
+  const title=h('input',{id:'minor-edit-title',type:'text',maxlength:180,
+    placeholder:'Ej.: Ecografía abdominal',value:pending?'':study.title});
+  let date=pending?null:study.study_date;
   const picker=datePicker({id:'minor-edit-date',value:date,onChange:iso=>{date=iso;}});
   const report=h('textarea',{id:'minor-edit-report',class:'report'},study.report_text||'');
   const status=h('div',{role:'status'});
+  const metadataNote=h('p',{class:'hint',role:'status'},
+    pending?'Chely intentará reconocer el nombre y la fecha del informe. Revisalos antes de explicar.':'Podés editar el nombre y la fecha del estudio.');
+  const saveReport=async()=>{
+    const {error}=await sb.from('minor_studies').update({
+      report_text:report.value.trim(),updated_by:state.me.id
+    }).eq('id',study.id);
+    if(error){toast(errorText(error));return false;}
+    study.report_text=report.value.trim();
+    return true;
+  };
   const save=async()=>{
-    if(title.value.trim().length<2||!date||date>todayISO())return toast('Título o fecha inválidos.'),false;
+    if(title.value.trim().length<2||!date||date>todayISO())return toast('Revisá el nombre y la fecha del estudio antes de explicar.'),false;
     const {error}=await sb.from('minor_studies').update({
       title:title.value.trim(),study_date:date,report_text:report.value.trim(),updated_by:state.me.id
     }).eq('id',study.id);
@@ -1541,8 +1818,18 @@ function minorStudyEditor(host,study){
       const {data,error}=await sb.functions.invoke('ia-menores',{body:{action:'transcribir',study_id:study.id}});
       if(error)throw new Error(await fnError(error));
       report.value=data.text||'';
-      if(!await save())throw new Error('No se pudo guardar el texto transcripto.');
-      status.className='alert ok';status.textContent='Texto leído. Revisá que coincida con el informe original.';
+      if(!await saveReport())throw new Error('No se pudo guardar el texto transcripto.');
+      if(study.title===STUDY_PENDING_TITLE){
+        const suggested=metadataFromReport(data.text);
+        if(suggested.title)title.value=suggested.title;
+        if(suggested.date){
+          date=suggested.date;picker.querySelector('input').value=fmtDate(suggested.date);
+        }
+        metadataNote.textContent=suggested.title&&suggested.date
+          ? 'Chely sugirió estos datos. Confirmá que sean correctos.'
+          : 'Falta identificar el título o la fecha: completalos para poder explicar.';
+      }
+      status.className='alert ok';status.textContent='Texto leído. Revisá los datos y el informe antes de explicar.';
     }catch(e){status.className='alert bad';status.textContent=errorText(e);}
     finally{read.disabled=false;}
   }},'Leer archivo con IA');
@@ -1565,8 +1852,9 @@ function minorStudyEditor(host,study){
   }},'Explicar con IA');
   box.append(
     h('div',{class:'grid2'},
-      h('label',{class:'field',for:'minor-edit-title'},'Título',title),
-      h('div',{class:'field'},h('label',{for:'minor-edit-date'},'Fecha'),picker)),
+      h('label',{class:'field',for:'minor-edit-title'},'Nombre del estudio',title),
+      h('div',{class:'field'},h('label',{for:'minor-edit-date'},'Fecha del estudio'),picker)),
+    metadataNote,
     study.file_path?h('div',{class:'row'},h('span',{class:'muted grow'},study.file_name||'Archivo'),
       h('button',{class:'btn quiet sm',type:'button',onclick:()=>minorOpenFile(study)},'Ver original')):null,
     h('label',{class:'field',for:'minor-edit-report'},'Texto del informe',report),
@@ -1594,6 +1882,10 @@ function minorStudyEditor(host,study){
       state.minorStudyId=null;toast('Estudio eliminado.');minorManagement();
     }},'Eliminar estudio')));
   host.append(box);
+  if(state.minorAutoRead===study.id && study.file_path){
+    state.minorAutoRead=null;
+    read.click();
+  }
 }
 
 /* ---------------- médico ---------------- */
