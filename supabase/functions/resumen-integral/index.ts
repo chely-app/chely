@@ -81,7 +81,7 @@ const WORK_WINDOW_MS=92000;
 const STALE_AFTER_MS=165000;
 const BRIEF_SCHEMA = {
   type:"object",additionalProperties:false,required:["items"],
-  properties:{items:{type:"array",minItems:1,maxItems:BATCH_SIZE,
+  properties:{items:{type:"array",minItems:1,description:"Una ficha por cada informe recibido; como máximo ocho.",
     items:{type:"object",additionalProperties:false,
       required:["ref","summary","issue"],
       properties:{ref:{type:"string"},summary:{type:"string"},
@@ -386,7 +386,15 @@ async function processJob(admin:ReturnType<typeof serviceClient>,
     }).eq("patient_id",job.patient_id).eq("job_id",job.job_id)
       .eq("status","running").eq("attempts",attempt);
   }catch(error){
-    const reason=error instanceof Error?error.message:"No se pudo continuar la evaluación.";
+    // Los errores de API no indican defectos en documentos médicos.
+    // Evitar exponer el JSON interno o datos técnicos de la API al paciente.
+    const reason=error instanceof Anthropic.APIError
+      ? error.status === 400
+        ? "Error de formato de la solicitud a la IA. No hay ningún estudio defectuoso. Los avances guardados se conservan."
+        : error.status === 429
+          ? "El servicio de IA alcanzó su límite temporal. Los avances guardados se conservan."
+          : "El servicio de IA no respondió correctamente. Los avances guardados se conservan."
+      : error instanceof Error ? error.message : "No se pudo continuar la evaluación.";
     console.warn("history-partial-job",error instanceof Error?error.name:"desconocido");
     await setJobError(admin,job,attempt,reason);
   }
