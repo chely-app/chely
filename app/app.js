@@ -704,7 +704,7 @@ async function patientStudies() {
     list.append(h('button', { class: 'item', onclick: () => go(pending ? 'mi-estudio' : 'estudio', { studyId: s.id }) },
       h('div', { class: 'row' }, h('h3', {}, s.title),
         pending ? h('span', { class: 'pill warn' }, 'Sin explicar') : !s.self_uploaded && !s.first_viewed_at ? h('span', { class: 'pill bad' }, 'Nuevo') : null,
-        h('span', { class: 'pill' }, fmtDate(s.study_date))),
+        h('span', { class: 'pill' }, s.title === STUDY_PENDING_TITLE ? 'Fecha por confirmar' : fmtDate(s.study_date))),
       h('span', { class: 'muted small' }, s.self_uploaded ? 'Subido por vos' : `Enviado por ${names[s.doctor_id] || 'tu médico'} el ${fmtDate(s.published_at)}`)));
   }
   card.append(list);
@@ -1756,7 +1756,7 @@ async function minorStudiesPanel(host,minor){
   if(!(studies||[]).length)card.append(h('p',{class:'muted'},'Este menor todavía no tiene estudios registrados.'));
   for(const study of studies||[])card.append(h('button',{class:'item',type:'button',onclick:()=>{
     state.minorStudyId=study.id;minorManagement();
-  }},h('span',{class:'grow'},study.title),h('span',{class:'pill'},fmtDate(study.study_date)),
+  }},h('span',{class:'grow'},study.title),h('span',{class:'pill'},study.title===STUDY_PENDING_TITLE?'Fecha por confirmar':fmtDate(study.study_date)),
     h('span',{class:'pill '+(study.explanation?'ok':'warn')},study.explanation?'Explicado':'Pendiente')));
   const selected=(studies||[]).find(x=>x.id===state.minorStudyId);
   if(selected)minorStudyEditor(host,selected);
