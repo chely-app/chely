@@ -238,12 +238,23 @@ function renderHistoryEasyRead(fullText) {
   const list = h('ul', { class: 'chely-history-easy-list' });
   for (const sentence of sentences.slice(0, 8))
     list.append(h('li', {}, historyPlainText(sentence)));
-  const heading = h('h3', {}, 'Lo principal, en palabras más simples');
+  const heading = h('h3', {}, 'Lo más importante, explicado de forma sencilla');
   const wrap = h('section', { class: 'chely-history-easy' }, heading,
-    h('p', {}, 'Estos son los primeros hallazgos del informe guardado, expresados con algunas palabras más comunes. No indican por sí solos cómo está tu salud hoy.'),
-    list,
-    h('p', { class: 'muted small' },
-      'Es una ayuda para leer, no una nueva evaluación médica. Si tenés dudas, conversalas con tu médico. El informe completo está debajo.'));
+    h('p', {}, 'Estos son los primeros resultados del informe ya guardado, con algunas palabras más comunes:'),
+    list);
+  const conclusion = text.match(/(?:^|\n)#{1,3}\s+Qué se puede y no se puede afirmar hoy\s*\n([\s\S]*?)(?=\n#{1,3}\s|$)/i);
+  if (conclusion) {
+    const mainPoint = conclusion[1].trim().split(/\n\s*\n/)[0]
+      ?.replace(/[*_]/g, '').replace(/\s*\n\s*/g, ' ').trim();
+    if (mainPoint) {
+      const brief = (mainPoint.match(/[^.!?]+[.!?]*/g) || [])
+        .map(x => x.trim()).filter(Boolean).slice(0, 2).join(' ');
+      wrap.append(h('h3', {}, 'Qué significa para tu salud hoy'),
+        h('p', {}, historyPlainText(brief)));
+    }
+  }
+  wrap.append(h('p', { class: 'muted small' },
+    'Es una ayuda para leer, no una nueva evaluación médica. El informe original completo está debajo y podés consultarlo con tu médico.'));
   return wrap;
 }
 
@@ -958,6 +969,8 @@ async function patientStudies() {
     historyEvaluationProgress.delete(overviewOwner);
     stopHistoryEvaluationTimerIfIdle();
   }
+  if (overall?.explanation || storedJob?.status === 'failed')
+    historyCompletionNotices.delete(overviewOwner);
   const changedHistory = !!overall && (ownHistory.length !== overall.total_studies ||
     ownHistory.some(st => st.updated_at && new Date(st.updated_at) > new Date(overall.generated_at)));
   const overviewCard = h('div', { class: 'card' },
