@@ -1538,7 +1538,10 @@ function suggestProfileNameParts(fullName) {
     family: words.slice(-familyCount).join(' ')
   };
 }
+// Hecho por ChatGPT · 2026-11-02 · Invalidar renderizados previos de Mi cuenta.
+let accountViewGeneration = 0;
 async function accountView() {
+  const generation = ++accountViewGeneration;
   const m = mainEl();
   const me = state.me;
   const suggested = suggestProfileNameParts(me.full_name);
@@ -1591,6 +1594,8 @@ async function accountView() {
     m.append(card);
     const { data: details, error: detailsError } = await sb.from('patient_health_details')
       .select('document_type,document_number,height_cm,weight_kg,allergies,health_coverage,health_coverages,blood_type').eq('id', me.id).maybeSingle();
+    // Evita que una consulta anterior añada nuevamente las tarjetas finales.
+    if (generation !== accountViewGeneration || state.page !== 'cuenta' || state.me?.id !== me.id) return;
     if (detailsError) {
       card.append(h('div', { class: 'alert bad' }, 'No pudimos cargar tus datos de salud. ', errorText(detailsError)));
     } else {
