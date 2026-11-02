@@ -1191,21 +1191,21 @@ async function minorManagement() {
       state.minorId = minor.id; minorManagement();
     } }, h('strong', {}, minor.full_name),
       h('span', { class: 'muted small' }, ' · ' + fmtDate(minor.birth_date) + ' · ' +
-        (minor.access_level === 'responsable' ? 'Responsable' : 'Consulta'))));
+        (minor.access_level === 'responsable' ? 'Responsable' : 'Adulto autorizado'))));
   }
   const minor = minors.find(item => item.id === state.minorId) || minors[0];
   state.minorId = minor.id;
   const card = h('div', { class: 'card' },
     h('h2', {}, minor.full_name),
     h('p', {}, 'Nacimiento: ' + fmtDate(minor.birth_date) + ' · Relación: ' + minor.relationship),
-    h('div', { class: 'alert info' }, 'La gestión familiar está preparada. Los estudios médicos del menor todavía no están habilitados: requieren proteger también archivos e IA. No los cargues en tu perfil personal.'));
+    h('div', { class: 'alert info' }, 'Los adultos vinculados podrán consultar y modificar los estudios del menor cuando esta función se habilite. Por seguridad, todavía no se pueden cargar informes pediátricos: debemos proteger también los archivos y la IA. No los cargues en tu perfil personal.'));
   m.append(card);
   if (minor.access_level !== 'responsable') return;
   const { data: members, error } = await sb.rpc('minor_members', { p_minor: minor.id });
   if (error) return card.append(h('div', { class: 'alert bad' }, errorText(error)));
   const adults = h('div', { class: 'card' },
     h('h3', {}, 'Personas con acceso'),
-    h('p', { class: 'muted small' }, 'Responsable puede invitar y quitar accesos. Consulta sólo puede ver.'));
+    h('p', { class: 'muted small' }, 'Los adultos vinculados podrán consultar y modificar estudios. Sólo los responsables pueden invitar y quitar personas.'));
   for (const adult of (members || [])) {
     const row = h('div', { class: 'row' },
       h('span', { class: 'grow' }, (adult.full_name || adult.email) + ' · ' +
@@ -1226,7 +1226,7 @@ async function minorManagement() {
   card.append(adults);
   const email = h('input', { id: 'minor-share-email', type: 'email', autocomplete: 'email', placeholder: 'correo@ejemplo.com' });
   const role = h('select', { id: 'minor-share-role' },
-    h('option', { value: 'consulta' }, 'Consulta (sólo lectura)'),
+    h('option', { value: 'colaborador' }, 'Adulto autorizado (consulta y modifica estudios)'),
     h('option', { value: 'responsable' }, 'Responsable (puede gestionar accesos)'));
   const result = h('div', { role: 'status' });
   const invite = h('button', { type: 'button', class: 'btn primary' }, 'Crear invitación');
