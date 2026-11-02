@@ -1421,6 +1421,7 @@ function patientUpload() {
     directory: true, id: 'bulk-pdf-folder' });
   let selectedBatch = [];
   let verifiedMissing = null;
+  let comparisonAttempted = false;
   let comparisonRunning = false;
   let stopComparisonRequested = false;
   const comparisonInfo = h('p', { role: 'status', 'aria-live': 'polite', class: 'hint' });
@@ -1430,9 +1431,10 @@ function patientUpload() {
   const chooseBatch = files => {
     const all = Array.from(files || []);
     verifiedMissing = null;
+    comparisonAttempted = false;
     missingList.replaceChildren();
     comparisonInfo.textContent = '';
-    bulkButton.textContent = 'Guardar PDF sin usar IA';
+    bulkButton.textContent = 'Guardar todos los PDF seleccionados';
     bulkButton.disabled = false;
     selectedBatch = all.filter(file => /\.pdf$/i.test(file.name));
     bulkState.textContent = selectedBatch.length + ' PDF seleccionados' +
@@ -1441,7 +1443,7 @@ function patientUpload() {
   };
   bulkFiles.addEventListener('change', () => { bulkFolder.value = ''; chooseBatch(bulkFiles.files); });
   bulkFolder.addEventListener('change', () => { bulkFiles.value = ''; chooseBatch(bulkFolder.files); });
-  const bulkButton = h('button', { type: 'button', class: 'btn primary' }, 'Guardar PDF sin usar IA');
+  const bulkButton = h('button', { type: 'button', class: 'btn primary' }, 'Guardar todos los PDF seleccionados');
   const compareButton = h('button', { type: 'button', class: 'btn' },
     'Comparar carpeta con lo que ya subí');
   const stopCompareButton = h('button', { type: 'button', class: 'btn quiet', hidden: true },
@@ -1464,10 +1466,11 @@ function patientUpload() {
     });
     if (!allowed) return;
     comparisonRunning = true;
+    comparisonAttempted = true;
     stopComparisonRequested = false;
     verifiedMissing = null;
     missingList.replaceChildren();
-    bulkButton.textContent = 'Guardar PDF sin usar IA';
+    bulkButton.textContent = 'Guardar todos los PDF seleccionados';
     bulkButton.disabled = true;
     compareButton.disabled = true;
     bulkFiles.disabled = true;
@@ -1475,6 +1478,7 @@ function patientUpload() {
     stopCompareButton.hidden = false;
     stopCompareButton.disabled = false;
     const ownerId = state.me?.id;
+    const navigationAtStart = navigationEpoch;
     try {
       const { data: stored, error } = await sb.from('studies')
         .select('id,file_path,storage_backend,storage_file_id,file_name')
@@ -1484,7 +1488,8 @@ function patientUpload() {
         throw new Error('Hay demasiados estudios para comparar en una sola operación.');
       const savedHashes = new Map();
       for (let i = 0; i < stored.length; i++) {
-        if (stopComparisonRequested || state.me?.id !== ownerId)
+        if (stopComparisonRequested || state.me?.id !== ownerId || state.page !== 'subir'
+            || navigationEpoch !== navigationAtStart)
           throw new Error('Comparación detenida sin modificar ningún archivo.');
         comparisonInfo.textContent = 'Comprobando archivo guardado ' +
           (i + 1) + ' de ' + stored.length + '…';
@@ -1494,7 +1499,8 @@ function patientUpload() {
       }
       const missing = [];
       for (let i = 0; i < chosen.length; i++) {
-        if (stopComparisonRequested || state.me?.id !== ownerId)
+        if (stopComparisonRequested || state.me?.id !== ownerId || state.page !== 'subir'
+            || navigationEpoch !== navigationAtStart)
           throw new Error('Comparación detenida sin modificar ningún archivo.');
         comparisonInfo.textContent = 'Comparando PDF de tu carpeta ' +
           (i + 1) + ' de ' + chosen.length + '…';
@@ -1522,7 +1528,7 @@ function patientUpload() {
         'Todos los archivos seleccionados tienen una copia idéntica registrada en Chely.'));
     } catch (error) {
       verifiedMissing = null;
-      bulkButton.textContent = 'Guardar PDF sin usar IA';
+      bulkButton.textContent = 'Volvé a comparar antes de guardar';
       // No ofrecer una lista incompleta si falla algún archivo o la conexión.
       comparisonInfo.textContent = 'No se pudo completar la comparación: ' +
         errorText(error) + ' No se modificaron ni subieron archivos.';
@@ -1532,7 +1538,8 @@ function patientUpload() {
       compareButton.disabled = false;
       bulkFiles.disabled = false;
       bulkFolder.disabled = false;
-      if (verifiedMissing === null) bulkButton.disabled = false;
+      // Nunca habilitar la carga masiva original si falla la comprobación.
+      if (verifiedMissing === null) bulkButton.disabled = comparisonAttempted;
     }
   });
   let activeBatch = false;
@@ -1591,7 +1598,8 @@ function patientUpload() {
       // Para volver a subir archivos, seleccionar otra vez y comparar.
       verifiedMissing = null; selectedBatch = [];
       bulkFiles.value = ''; bulkFolder.value = '';
-      bulkButton.textContent = 'Guardar PDF sin usar IA';
+      bulkButton.textContent = 'Guardar todos los PDF seleccionados';
+      comparisonAttempted = false;
       bulkButton.disabled = false;
       bulkFiles.disabled = false; bulkFolder.disabled = false;
       compareButton.disabled = false;
@@ -1599,7 +1607,7 @@ function patientUpload() {
   });
   const batchCard = h('div', { class: 'card' },
     h('h2', {}, 'Subir varios PDF o una carpeta'),
-    h('p', { class: 'muted small' }, 'Chely intentará obtener el nombre, fecha y texto del archivo en tu dispositivo, sin usar IA. Los PDF escaneados pueden requerir lectura posterior. Revisá siempre los datos detectados.'),
+    h('p', { class: 'muted small' }, 'Si ya subiste parte de una carpeta, seleccioná la carpeta completa y tocá «Comparar carpeta». Chely identificará los PDF faltantes por su contenido, aunque tengan nombres repetidos. No gastará IA ni volverá a subir los existentes. Para cargas nuevas, podés guardar todos los seleccionados.'),
     h('div', { class: 'grid2' },
       h('label', { class: 'field', for: 'bulk-pdf-files' }, 'Elegir varios PDF', bulkFiles),
       h('label', { class: 'field', for: 'bulk-pdf-folder' }, 'Elegir una carpeta completa', bulkFolder)),
