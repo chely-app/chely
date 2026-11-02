@@ -108,9 +108,19 @@ async function fnError(error) {
 /* ---------------- selector de fecha (dd/mm/aaaa con calendario) ---------------- */
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 function datePicker({ id, value, onChange, minYear = 1910 }) {
-  const wrap = h('div', { class: 'row', style: 'position:relative;flex-wrap:nowrap' });
+  // Hecho por ChatGPT · 2026-11-02 · Ícono integrado a todos los campos de fecha.
+  const wrap = h('div', { class: 'date-picker' });
   const input = h('input', { type: 'text', id, inputmode: 'numeric', placeholder: 'dd/mm/aaaa', autocomplete: 'off', value: value ? fmtDate(value) : '' });
-  const btn = h('button', { type: 'button', class: 'btn quiet', 'aria-label': 'Abrir calendario' }, 'Calendario');
+  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  icon.setAttribute('viewBox', '0 0 24 24');
+  icon.setAttribute('fill', 'none');
+  icon.setAttribute('stroke', 'currentColor');
+  icon.setAttribute('stroke-width', '1.8');
+  icon.setAttribute('stroke-linecap', 'round');
+  icon.setAttribute('stroke-linejoin', 'round');
+  icon.setAttribute('aria-hidden', 'true');
+  icon.innerHTML = '<rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M16 3v4M8 3v4M3 10h18"></path>';
+  const btn = h('button', { type: 'button', class: 'date-picker-toggle', 'aria-label': 'Abrir calendario', 'aria-haspopup': 'dialog', 'aria-expanded': 'false' }, icon);
   let pop = null;
   const set = iso => { input.value = iso ? fmtDate(iso) : ''; onChange(iso); };
   input.addEventListener('input', () => {
@@ -118,13 +128,21 @@ function datePicker({ id, value, onChange, minYear = 1910 }) {
     if (v.length > 4) v = v.slice(0, 2) + '/' + v.slice(2, 4) + '/' + v.slice(4); else if (v.length > 2) v = v.slice(0, 2) + '/' + v.slice(2);
     input.value = v; onChange(parseDMY(v));
   });
-  const close = () => { if (pop) { pop.remove(); pop = null; document.removeEventListener('pointerdown', outside, true); } };
+  const close = () => {
+    if (!pop) return;
+    pop.remove(); pop = null;
+    btn.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('pointerdown', outside, true);
+    document.removeEventListener('keydown', onEscape, true);
+  };
   const outside = e => { if (pop && !wrap.contains(e.target)) close(); };
+  const onEscape = e => { if (e.key === 'Escape' && pop) { e.preventDefault(); close(); btn.focus(); } };
   btn.addEventListener('click', () => {
     if (pop) return close();
+    btn.setAttribute('aria-expanded', 'true');
     const cur = parseDMY(input.value) || todayISO();
     let y = +cur.slice(0, 4), m = +cur.slice(5, 7) - 1;
-    pop = h('div', { class: 'card', role: 'dialog', 'aria-label': 'Calendario', style: 'position:absolute;z-index:20;top:calc(100% + .4rem);left:0;width:min(21rem,calc(100vw - 32px));box-shadow:0 10px 30px rgba(0,0,0,.2);gap:.5rem' });
+    pop = h('div', { class: 'card date-picker-popup', role: 'dialog', 'aria-label': 'Calendario' });
     const draw = () => {
       pop.innerHTML = '';
       const ySel = h('select', { 'aria-label': 'Año', style: 'min-height:2.5rem;padding:.2rem' });
@@ -150,7 +168,8 @@ function datePicker({ id, value, onChange, minYear = 1910 }) {
       }
       pop.append(g, h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn quiet sm', onclick: () => { set(todayISO()); close(); } }, 'Hoy'), h('button', { type: 'button', class: 'btn quiet sm', onclick: close }, 'Cerrar')));
     };
-    draw(); wrap.append(pop); setTimeout(() => document.addEventListener('pointerdown', outside, true));
+    draw(); wrap.append(pop);
+    setTimeout(() => { if (pop) { document.addEventListener('pointerdown', outside, true); document.addEventListener('keydown', onEscape, true); } });
   });
   wrap.append(input, btn);
   return wrap;
