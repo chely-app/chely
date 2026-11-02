@@ -1297,7 +1297,7 @@ async function patientOwnStudy() {
     status.className = 'alert info'; status.textContent = 'Chely está leyendo tu archivo. Puede tardar un minuto; no cierres esta pantalla.';
     const done = busy(readBtn, 'Leyendo el archivo…');
     const { data, error } = await pendingOnce(runningStudyReads, 'adult:'+s.id,
-      () => sb.functions.invoke('ia', { body: { action: 'transcribir', study_id: s.id } }));
+      () => sb.functions.invoke('ia', { body: { action: 'transcribir', study_id: s.id, force: !!s.report_text } }));
     done();
     if (error) { status.className = 'alert bad'; status.textContent = await fnError(error); return false; }
     report.value = data.text;
@@ -1328,7 +1328,7 @@ async function patientOwnStudy() {
     status.className = 'alert info'; status.textContent = 'Chely está escribiendo la explicación de tu estudio. Puede tardar hasta dos minutos; no cierres esta pantalla.';
     const done = busy(explainBtn, 'Escribiendo la explicación…');
     const { data, error } = await pendingOnce(runningStudyExplanations, 'adult:'+s.id,
-      () => sb.functions.invoke('ia', { body: { action: 'explicar', study_id: s.id } }));
+      () => sb.functions.invoke('ia', { body: { action: 'explicar', study_id: s.id, force: false } }));
     if (error) { done(); status.className = 'alert bad'; status.textContent = await fnError(error); return; }
     const explanation = (data.aviso_urgente ? `## Aviso importante del informe\n${data.aviso_urgente}\n\n` : '') + data.explicacion;
     const { error: e2 } = await sb.from('studies').update({ explanation, glossary: data.glosario || [], lab_values: data.valores || [],
@@ -2440,7 +2440,7 @@ async function doctorStudy() {
     btn.replaceChildren(h('span', { class: 'spinner' }), ' ' + label);
     const { data, error: e } = await pendingOnce(
       action === 'transcribir' ? runningStudyReads : runningStudyExplanations,
-      'doctor:'+s.id, () => sb.functions.invoke('ia', { body: { action, study_id: s.id } }));
+      'doctor:'+s.id, () => sb.functions.invoke('ia', { body: { action, study_id: s.id, force: action === 'transcribir' ? !!ed.report_text : !!ed.explanation } }));
     btn.disabled = false; btn.textContent = old;
     if (e) { toast(await fnError(e)); return null; }
     return data;
