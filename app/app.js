@@ -1695,50 +1695,58 @@ async function minorStudiesPanel(host,minor){
     .eq('minor_id',minor.id).order('study_date',{ascending:false});
   if(error)return card.append(h('div',{class:'alert bad'},errorText(error)));
   const upload=h('details',{class:'minor-upload'},
-    h('summary',{},'Subir un estudio (PDF, foto o texto)'));
+    h('summary',{},'Agregar un estudio'));
+  // Hecho por ChatGPT · 2026-11-02 · Misma carga accesible de adultos: foto, PDF, texto o enlace.
+  const draft={mode:'foto',text:'',file:null,url:''};
+  const source=studySourceChooser('minor-study',draft);
   const title=h('input',{type:'text',id:'minor-study-title',maxlength:180,placeholder:'Ej.: Análisis de sangre'});
-  const report=h('textarea',{id:'minor-study-report',class:'report',placeholder:'Pegá acá el texto del estudio si ya lo tenés.'});
-  const file=h('input',{type:'file',accept:'.pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp'});
   let date=todayISO();
   const picker=datePicker({id:'minor-study-date',value:date,onChange:iso=>{date=iso;}});
+  const meta=h('div',{class:'study-manual-meta grid2'},
+    h('label',{class:'field',for:'minor-study-title'},'¿Qué estudio es?',title),
+    h('div',{class:'field'},h('label',{for:'minor-study-date'},'Fecha del estudio'),picker));
+  const sync=()=>{meta.hidden=source.getMode()!=='texto';};
+  source.root.addEventListener('study-method-change',sync);sync();
   const status=h('div',{role:'status'});
-  const save=h('button',{class:'btn primary',type:'button'},'Guardar estudio');
+  const save=h('button',{class:'btn primary big',type:'button'},'Continuar con el estudio');
   save.addEventListener('click',async()=>{
-    const chosen=file.files?.[0]||null;
-    if(title.value.trim().length<2||!date||date>todayISO())return toast('Completá título y fecha válidos.');
-    if(!chosen&&!report.value.trim())return toast('Adjuntá un PDF o imagen, o pegá el texto.');
-    if(chosen&&(!['application/pdf','image/jpeg','image/png','image/webp'].includes(chosen.type)||
-      !chosen.size||chosen.size>MAX_UPLOAD))return toast('El archivo debe ser PDF o imagen de hasta 20 MB.');
+    const mode=source.getMode(), chosen=source.getFile(), pasted=source.getText();
+    if(mode==='texto'){
+      if(!pasted)return toast('Pegá el texto del informe.');
+      if(title.value.trim().length<2||!date||date>todayISO())return toast('Completá el nombre y la fecha.');
+    }else{
+      if(!chosen)return toast(mode==='enlace'?'Primero importá el documento del enlace.':'Elegí una foto o PDF.');
+      if(!studyUploadFileValid(chosen,mode))return toast('Archivo no admitido o mayor a 20 MB.');
+    }
     save.disabled=true;status.className='alert info';status.textContent='Guardando el estudio…';
     try{
+      const isFile=mode!=='texto';
       const {data:created,error:e}=await sb.from('minor_studies').insert({
-        minor_id:minor.id,created_by:state.me.id,title:title.value.trim(),
-        study_date:date,report_text:report.value.trim()
+        minor_id:minor.id,created_by:state.me.id,
+        title:isFile?STUDY_PENDING_TITLE:title.value.trim(),
+        study_date:isFile?todayISO():date,report_text:isFile?'':pasted
       }).select('id').single();
       if(e||!created)throw e||new Error('No se pudo crear el estudio.');
-      if(chosen){
+      if(isFile){
         const path=minor.id+'/'+created.id+'/'+crypto.randomUUID();
         const {error:uploadError}=await sb.storage.from('estudios-menores').upload(path,chosen,
           {contentType:chosen.type,upsert:false,cacheControl:'0'});
         if(uploadError)throw new Error('Se creó el estudio, pero falló el archivo: '+errorText(uploadError));
-        const {error:meta}=await sb.from('minor_studies').update({
+        const {error:metaError}=await sb.from('minor_studies').update({
           file_path:path,file_name:chosen.name.slice(0,255),
           file_type:chosen.type,updated_by:state.me.id
         }).eq('id',created.id);
-        if(meta)throw new Error('Archivo cargado sin confirmar el registro. Contactá soporte: '+errorText(meta));
+        if(metaError)throw new Error('Archivo cargado sin confirmar el registro: '+errorText(metaError));
+        state.minorAutoRead=created.id;
       }
       state.minorStudyId=created.id;
-      toast('Estudio guardado. Podés pedirle a Chely que lo lea y explique.');
+      toast(isFile?'Estudio guardado. Chely intentará leer el documento.':'Texto guardado. Podés pedir la explicación.');
       minorManagement();
     }catch(e){status.className='alert bad';status.textContent=errorText(e);}
     finally{save.disabled=false;}
   });
-  upload.append(
-    h('div',{class:'grid2'},
-      h('label',{class:'field',for:'minor-study-title'},'Nombre del estudio',title),
-      h('div',{class:'field'},h('label',{for:'minor-study-date'},'Fecha del estudio'),picker)),
-    h('label',{class:'field'},'Archivo PDF o imagen',filePicker(file)),
-    h('label',{class:'field',for:'minor-study-report'},'Texto del informe (opcional)',report),
+  upload.append(source.root,meta,
+    h('p',{class:'hint'},'Con foto, PDF o enlace importado, Chely intentará completar título y fecha después de leer el documento.'),
     status,h('div',{class:'row'},save));
   card.append(upload);
   if(!(studies||[]).length)card.append(h('p',{class:'muted'},'Este menor todavía no tiene estudios registrados.'));
