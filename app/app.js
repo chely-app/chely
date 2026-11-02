@@ -1394,19 +1394,47 @@ function bloodTypeField(id, selected) {
   return field;
 }
 
+/* Hecho por ChatGPT · 2026-11-02 · Separación orientativa solo en pantalla.
+   No se modifican nombres antiguos en la base hasta confirmar y guardar. */
+function suggestProfileNameParts(fullName) {
+  const words = String(fullName || '').trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return { given: '', family: '' };
+  if (words.length === 1) return { given: words[0], family: '' };
+  let familyCount = words.length >= 4 ? 2 : 1;
+  if (words.length >= 3 && /^(de|del|di|da|do|dos|van|von|du)$/i.test(words.at(-2))) familyCount = 2;
+  if (words.length >= 4 && /^(de|van)$/i.test(words.at(-3))
+      && /^(la|las|los|der|den)$/i.test(words.at(-2))) familyCount = 3;
+  return {
+    given: words.slice(0, -familyCount).join(' '),
+    family: words.slice(-familyCount).join(' ')
+  };
+}
 async function accountView() {
   const m = mainEl();
   const me = state.me;
-  const name = h('input', { type: 'text', id: 'acc-name', value: me.full_name, autocomplete: 'name', maxlength: 120 });
+  const suggested = suggestProfileNameParts(me.full_name);
+  const namesUnconfirmed = !me.given_names || !me.family_names;
+  const givenNames = h('input', { type: 'text', id: 'acc-given-names',
+    value: me.given_names || suggested.given, autocomplete: 'given-name', maxlength: 120 });
+  const familyNames = h('input', { type: 'text', id: 'acc-family-names',
+    value: me.family_names || suggested.family, autocomplete: 'family-name', maxlength: 120 });
   let birth = me.birth_date;
   const saveBtn = h('button', { class: 'btn primary', type: 'button' }, 'Guardar');
   saveBtn.addEventListener('click', async () => {
-    if (!name.value.trim()) return toast('Escribí tu nombre.');
+    const given = givenNames.value.trim().replace(/\s+/g, ' ');
+    const family = familyNames.value.trim().replace(/\s+/g, ' ');
+    if (!given || !family) return toast('Completá nombre/s y apellido/s.');
+    const full = given + ' ' + family;
+    if (full.length > 120) return toast('El nombre completo no puede superar los 120 caracteres.');
     saveBtn.disabled = true;
     try {
-      const { error } = await sb.from('profiles').update({ full_name: name.value.trim(), birth_date: birth || null }).eq('id', me.id);
+      const { error } = await sb.from('profiles').update({
+        given_names: given, family_names: family, full_name: full,
+        birth_date: birth || null
+      }).eq('id', me.id);
       if (error) return toast(errorText(error));
-      me.full_name = name.value.trim(); me.birth_date = birth || null; toast('Datos guardados.');
+      me.given_names = given; me.family_names = family; me.full_name = full;
+      me.birth_date = birth || null; toast('Datos guardados.');
     } finally { saveBtn.disabled = false; }
   });
   // Hecho por ChatGPT · 2026-11-02 · Mostrar el correo de la sesión Supabase como dato de cuenta de solo lectura.
@@ -1414,11 +1442,18 @@ async function accountView() {
     readonly: true, autocomplete: 'email', 'aria-describedby': 'acc-email-hint' });
   m.append(h('div', { class: 'card' }, h('h1', {}, 'Mi cuenta'),
     h('div', { class: 'account-fields' },
-      h('label', { class: 'field', for: 'acc-name' }, 'Nombre y apellido', name),
-      h('label', { class: 'field', for: 'acc-email' }, 'Correo electrónico de registro', registeredEmail,
+      h('div', { class: 'field' },
+        h('label', { for: 'acc-given-names' }, 'Nombre/s'), givenNames),
+      h('div', { class: 'field' },
+        h('label', { for: 'acc-family-names' }, 'Apellido/s'), familyNames),
+      h('div', { class: 'field' },
+        h('label', { for: 'acc-email' }, 'Correo electrónico de registro'), registeredEmail,
         h('span', { class: 'hint account-hint', id: 'acc-email-hint' }, 'Este correo es el que usás para entrar a Chely.')),
-      me.role === 'patient' ? h('div', { class: 'field' }, h('label', { for: 'acc-birth', style: 'font-weight:700' }, 'Fecha de nacimiento ', h('span', { class: 'hint' }, '(opcional)')),
+      me.role === 'patient' ? h('div', { class: 'field' },
+        h('label', { for: 'acc-birth' }, 'Fecha de nacimiento ', h('span', { class: 'hint' }, '(opcional)')),
         datePicker({ id: 'acc-birth', value: me.birth_date, onChange: iso => { birth = iso; } })) : null),
+    namesUnconfirmed ? h('p', { class: 'hint' },
+      'Separamos tu nombre anterior de forma orientativa. Revisá nombre/s y apellido/s antes de guardar.') : null,
     h('div', { class: 'row' }, saveBtn)));
 
   if (me.role === 'patient') {
