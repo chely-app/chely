@@ -278,7 +278,8 @@ function clearUploadDraft() { uploadDraft = null; }
 
 function shell(nav) {
   const top = $('#top'); top.innerHTML = '';
-  const brand = h('a', { class: 'brand', href: '#', onclick: e => { e.preventDefault(); go(state.me && state.me.role === 'doctor' ? 'pacientes' : state.me && state.me.role === 'admin' ? 'panel' : 'estudios'); } },
+  // Hecho por ChatGPT · 2026-11-01 · El logo de la aplicación siempre vuelve a https://chely.app/.
+  const brand = h('a', { class: 'brand', href: 'https://chely.app/', 'aria-label': 'Chely, ir a la página principal' },
     h('img', { src: 'icon-192.png', alt: '' }), h('b', {}, 'Chely'));
   const look = h('div', { class: 'look' },
     h('button', { 'aria-label': 'Letra más chica', onclick: () => { prefs.size = Math.max(1, prefs.size - 1); applyPrefs(); } }, 'A−'),
