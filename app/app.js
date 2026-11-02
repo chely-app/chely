@@ -292,9 +292,50 @@ function renderEvolution(studies) {
 /* ---------------- estado y arranque ---------------- */
 const state = { session: null, me: null, page: null, studyId: null, patientId: null, recovery: false, busy: false };
 let sb = null;
-// Borrador efímero: no persiste documentos médicos en disco ni localStorage.
+// Hecho por ChatGPT · 2026-11-02 · Los borradores clínicos y archivos sólo se
+// mantienen en RAM de esta pestaña, nunca en localStorage ni sessionStorage.
 let uploadDraft = null;
+const minorUploadDrafts = new Map();
+const studyEditDrafts = new Map();
+let navigationEpoch = 0;
+let restoredRouteUser = null;
 function clearUploadDraft() { uploadDraft = null; }
+function clearPrivateDrafts() { uploadDraft = null; minorUploadDrafts.clear(); studyEditDrafts.clear(); }
+
+// Hecho por ChatGPT · 2026-11-02 · Restaurar la sección actual con F5.
+// history.state sólo contiene identificadores y sección, no datos clínicos.
+const NAV_PAGES = new Set(['estudios','estudio','mi-estudio','subir','medicos','menores',
+  'cuenta','pacientes','paciente','estudio-medico','panel','registro']);
+const VALID_ID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+const routeId = id => typeof id === 'string' && VALID_ID.test(id) ? id : null;
+function saveRoute() {
+  if (!state.me || !state.session?.user?.id || !NAV_PAGES.has(state.page)) return;
+  const prior = history.state && typeof history.state === 'object' ? history.state : {};
+  history.replaceState({ ...prior, chelyRoute: {
+    userId: state.session.user.id, role: state.me.role, page: state.page,
+    studyId: routeId(state.studyId), patientId: routeId(state.patientId),
+    minorId: routeId(state.minorId), minorStudyId: routeId(state.minorStudyId)
+  } }, '', location.href);
+}
+function clearRoute() {
+  const prior = history.state && typeof history.state === 'object' ? history.state : {};
+  const { chelyRoute: discarded, ...rest } = prior;
+  history.replaceState(rest, '', location.href);
+}
+function restoreRoute() {
+  const uid = state.session?.user?.id;
+  if (!uid || restoredRouteUser === uid) return;
+  restoredRouteUser = uid;
+  const saved = history.state?.chelyRoute;
+  if (!saved || saved.userId !== uid || saved.role !== state.me?.role
+      || !NAV_PAGES.has(saved.page)) return;
+  state.page = saved.page;
+  state.studyId = routeId(saved.studyId);
+  state.patientId = routeId(saved.patientId);
+  state.minorId = routeId(saved.minorId);
+  state.minorStudyId = routeId(saved.minorStudyId);
+  state.autoExplain = false; // No repetir una petición de IA tras F5.
+}
 
 
 function shell(nav) {
@@ -317,10 +358,16 @@ function navFor(items) {
 }
 function go(page, extra = {}) {
   window.onbeforeunload = null;
-  state.page = page; state.studyId = extra.studyId || null; state.autoExplain = !!extra.autoExplain; state.patientId = extra.patientId ?? (page === 'paciente' || page === 'estudio-medico' ? state.patientId : null);
+  navigationEpoch++;
+  state.page = page; state.studyId = extra.studyId || null; state.autoExplain = !!extra.autoExplain;
+  state.patientId = extra.patientId ?? (page === 'paciente' || page === 'estudio-medico' ? state.patientId : null);
+  saveRoute();
   render(); window.scrollTo({ top: 0 });
 }
-async function signOut() { clearUploadDraft(); await sb.auth.signOut(); state.me = null; state.page = null; render(); }
+async function signOut() {
+  clearPrivateDrafts(); clearRoute(); restoredRouteUser = null;
+  await sb.auth.signOut(); state.me = null; state.page = null; render();
+}
 function mainEl() { const m = $('#main'); m.innerHTML = ''; return m; }
 function loading(msg = 'Cargando…') { const m = mainEl(); m.append(h('div', { class: 'card row' }, h('span', { class: 'spinner' }), msg)); }
 
@@ -340,7 +387,14 @@ async function boot() {
   sb.auth.onAuthStateChange((event, session) => {
     state.session = session;
     if (event === 'PASSWORD_RECOVERY') state.recovery = true;
-    if (event === 'SIGNED_OUT') state.me = null;
+    if (event === 'SIGNED_OUT') {
+      state.me = null; state.page = null; clearPrivateDrafts();
+      clearRoute(); restoredRouteUser = null;
+    }
+    if (session?.user?.id && state.me?.id && session.user.id !== state.me.id) {
+      state.me = null; state.page = null; clearPrivateDrafts();
+      clearRoute(); restoredRouteUser = null;
+    }
     // No consultar la base dentro de este callback: se agenda.
     setTimeout(render, 0);
   });
@@ -365,6 +419,7 @@ async function render() {
       if (error || !data) { shell(); mainEl().append(h('div', { class: 'card' }, h('div', { class: 'alert bad' }, 'No pudimos cargar tu cuenta. ' + errorText(error)), h('button', { class: 'btn', onclick: () => location.reload() }, 'Reintentar'))); return; }
       state.me = data;
     }
+    restoreRoute();
     const c = CONSENT[state.me.role];
     if (state.me.consent_version !== c.version) return viewConsent();
     const invite = pendingInvite();
@@ -541,6 +596,7 @@ let adminFilter = 'patient', adminSearch = '';
 
 async function renderAdmin() {
   if (!['panel', 'registro', 'cuenta'].includes(state.page)) state.page = 'panel';
+  saveRoute();
   shell(navFor([['panel', 'Panel'], ['registro', 'Registro'], ['cuenta', 'Mi cuenta']]));
   if (state.page === 'registro') return adminLog();
   if (state.page === 'cuenta') return accountView();
@@ -658,6 +714,7 @@ async function renderPatient() {
   state.linkedMinors = linkedMinors || [];
   if (!['estudios', 'estudio', 'subir', 'mi-estudio', 'medicos', 'cuenta', 'menores'].includes(state.page)
       || (state.page === 'menores' && !state.linkedMinors.length)) state.page = 'estudios';
+  saveRoute();
   const tabs = [['estudios', 'Mis estudios'], ['medicos', 'Mis médicos']];
   if (state.linkedMinors.length) tabs.push(['menores', 'Menores a cargo']);
   tabs.push(['cuenta', 'Mi cuenta']);
@@ -2006,6 +2063,7 @@ function minorStudyEditor(host,study){
 /* ---------------- médico ---------------- */
 async function renderDoctor() {
   if (!['pacientes', 'paciente', 'estudio-medico', 'cuenta'].includes(state.page)) state.page = 'pacientes';
+  saveRoute();
   shell(navFor([['pacientes', 'Pacientes'], ['cuenta', 'Mi cuenta']]));
   if (state.page === 'paciente') return doctorPatient();
   if (state.page === 'estudio-medico') return doctorStudy();
