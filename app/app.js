@@ -309,6 +309,8 @@ let historyEvaluationTimer = null;
 let updateHistoryEvaluationDisplay = null;
 let historyEvaluationPollBusy = false;
 let lastHistoryPollAt = 0;
+// Al concluir un trabajo, mostrar un aviso sin reconstruir la pantalla.
+const historyCompletionNotices = new Map();
 async function pollHistoryEvaluation() {
   if (historyEvaluationPollBusy || !state.me || state.me.role !== 'patient') return;
   const ownerId = state.me.id;
@@ -328,10 +330,17 @@ async function pollHistoryEvaluation() {
     } else {
       historyEvaluationProgress.delete(ownerId);
       stopHistoryEvaluationTimerIfIdle();
-      if (state.page === 'estudios') render();
-      else if (data.saved) toast('Tu evaluación integral ya está guardada en Mis estudios.');
+      historyCompletionNotices.set(ownerId, {
+        saved: !!data.saved, failed: job?.status === 'failed'
+      });
+      // No llamar render(): el paciente puede estar leyendo o completando
+      // información; actualizar toda la pantalla le hace perder su lugar.
+      if (typeof updateHistoryEvaluationDisplay === 'function')
+        updateHistoryEvaluationDisplay();
+      else if (data.saved)
+        toast('La evaluación terminó. Abrí Mis estudios para ver el resultado.');
       else if (job?.status === 'failed')
-        toast('La evaluación no pudo completarse. Revisá su estado en Mis estudios.');
+        toast('La evaluación terminó con un error. Los avances quedaron guardados.');
     }
   } catch { /* Sin conexión: el estado sigue guardado en Supabase. */ }
   finally {
@@ -391,7 +400,8 @@ function clearUploadDraft() { uploadDraft = null; }
 function clearPrivateDrafts() {
   cancelBatchRead();
   uploadDraft = null; minorUploadDrafts.clear(); studyEditDrafts.clear(); patientStudiesTab = null;
-  historyEvaluationProgress.clear(); stopHistoryEvaluationTimerIfIdle();
+  historyEvaluationProgress.clear(); historyCompletionNotices.clear();
+  stopHistoryEvaluationTimerIfIdle();
 }
 
 // Hecho por ChatGPT · 2026-11-02 · Restaurar la sección actual con F5.
@@ -1043,6 +1053,20 @@ async function patientStudies() {
     const activeJob = !!job || runningHistoryEvaluations.has(overviewOwner);
     evalProgress.hidden = !activeJob;
     overviewButton.disabled = activeJob || ownHistory.length === 0 || unreadHistory > 0;
+    const notice = historyCompletionNotices.get(overviewOwner);
+    if (notice && !activeJob) {
+      const label = notice.saved
+        ? 'La evaluación terminó y quedó guardada. Podés abrirla cuando quieras.'
+        : 'La evaluación terminó, pero necesita revisión. Los avances anteriores se conservaron.';
+      const button = h('button', { type: 'button', class: 'btn',
+        onclick: () => {
+          historyCompletionNotices.delete(overviewOwner);
+          // Actualizar solo a solicitud del paciente.
+          render();
+        } }, notice.saved ? 'Ver resultado' : 'Ver detalles');
+      overviewStatus.className = notice.saved ? 'alert ok' : 'alert warn';
+      overviewStatus.replaceChildren(label, h('div', { class: 'row' }, button));
+    }
     if (activeJob) {
       const elapsed = job ? formatHistoryElapsed(Date.now() - job.startedAt) : '0:00';
       progressDetail.textContent =
@@ -1114,7 +1138,8 @@ async function patientStudies() {
       } else if (data?.saved) {
         historyEvaluationProgress.delete(overviewOwner);
         stopHistoryEvaluationTimerIfIdle();
-        if (state.page === 'estudios') render();
+        historyCompletionNotices.set(overviewOwner, { saved: true, failed: false });
+        showHistoryProgress();
       } else {
         throw new Error('No se pudo verificar el trabajo. Consultá Mis estudios antes de reintentarlo.');
       }
