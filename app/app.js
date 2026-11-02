@@ -323,7 +323,7 @@ async function pollHistoryEvaluation() {
       historyEvaluationProgress.set(ownerId, {
         startedAt: job.started_at ? new Date(job.started_at).getTime()
           : new Date(job.created_at).getTime(),
-        total: job.study_count, status: job.status
+        total: job.study_count, status: job.status, progress: data.progress || null
       });
     } else {
       historyEvaluationProgress.delete(ownerId);
@@ -871,22 +871,35 @@ async function patientStudies() {
   const ownHistory = studies.filter(st => st.self_uploaded);
   const unreadHistory = ownHistory.filter(st => !String(st.report_text || '').trim()).length;
   const overviewOwner = state.me.id;
-  const [{ data: overall, error: overallError }, { data: storedJob, error: jobError }] = await Promise.all([
+  const [{ data: overall, error: overallError }, { data: storedJob, error: jobError },
+    { data: historyItems, error: itemsError }] = await Promise.all([
     sb.from('patient_history_summaries')
       .select('explanation,total_studies,unique_reports,unconfirmed_studies,generated_at,latest_confirmed_date')
       .eq('patient_id', overviewOwner).maybeSingle(),
     sb.from('patient_history_jobs')
       .select('job_id,status,attempts,study_count,created_at,started_at,finished_at,last_error')
-      .eq('patient_id', overviewOwner).maybeSingle()
+      .eq('patient_id', overviewOwner).maybeSingle(),
+    sb.from('patient_history_items')
+      .select('study_id,status,reason')
+      .eq('patient_id', overviewOwner).limit(251)
   ]);
   if (overallError) console.warn('No se pudo leer la evaluación integral guardada.');
   if (jobError) console.warn('No se pudo leer el trabajo de evaluación integral.');
+  if (itemsError) console.warn('No se pudo consultar el avance por informe.');
   if (requestedEpoch !== navigationEpoch || state.page !== 'estudios' || requestedUser !== state.me?.id) return;
   const jobActive = storedJob?.status === 'running' || storedJob?.status === 'queued';
+  const currentItems = (historyItems || []).filter(x => x && x.study_id);
+  const summaryCounts = {
+    done: currentItems.filter(x => x.status === 'done').length,
+    review: currentItems.filter(x => x.status === 'review').length,
+    pending: currentItems.filter(x => x.status === 'pending').length,
+    excluded: currentItems.filter(x => x.status === 'excluded').length
+  };
   if (jobActive) {
     historyEvaluationProgress.set(overviewOwner, {
       startedAt: new Date(storedJob.started_at || storedJob.created_at).getTime(),
-      total: storedJob.study_count, status: storedJob.status
+      total: storedJob.study_count, status: storedJob.status,
+      progress: summaryCounts
     });
     startHistoryEvaluationTimer();
   } else if (!runningHistoryEvaluations.has(overviewOwner)) {
@@ -935,7 +948,12 @@ async function patientStudies() {
       progressDetail.textContent =
         (job?.status === 'queued' ? 'Esperando inicio en el servidor · ' : '') +
         (job?.total || ownHistory.length) + ' informes · Tiempo transcurrido: ' +
-        elapsed + '. El resultado se guardará automáticamente.';
+        elapsed + '. ' +
+        (job?.progress
+          ? job.progress.done + ' analizados · ' +
+            job.progress.pending + ' pendientes · ' +
+            job.progress.review + ' para revisar manualmente. '
+          : '') + 'Los resultados parciales se guardan automáticamente.';
     }
   };
   updateHistoryEvaluationDisplay = showHistoryProgress;
@@ -976,7 +994,8 @@ async function patientStudies() {
       if (data?.job && ['queued', 'running'].includes(data.job.status)) {
         historyEvaluationProgress.set(overviewOwner, {
           startedAt: new Date(data.job.started_at || data.job.created_at).getTime(),
-          total: data.job.study_count, status: data.job.status
+          total: data.job.study_count, status: data.job.status,
+          progress: data.progress || null
         });
         overviewStatus.className = 'alert ok';
         overviewStatus.textContent = 'Trabajo registrado. Podés cerrar Chely y volver después.';
@@ -1011,8 +1030,65 @@ async function patientStudies() {
       showHistoryProgress();
     }
   });
+  // Hecho por ChatGPT · 2026-11-02 · Informes apartados para revisión manual.
+  // No ocultar al paciente ni mezclar con los análisis completados.
+  const manuallyFlagged = currentItems.filter(item => item.status === 'review');
+  if (currentItems.length) {
+    const counted = h('p', { class: 'muted small' },
+      summaryCounts.done + ' informes analizados · ' +
+      summaryCounts.pending + ' pendientes · ' +
+      summaryCounts.review + ' para revisar · ' +
+      summaryCounts.excluded + ' copias idénticas omitidas.');
+    overviewCard.append(counted);
+  }
+  let reviewCard = null;
+  if (manuallyFlagged.length) {
+    reviewCard = h('section', { class: 'card' },
+      h('h2', {}, 'Estudios para revisar manualmente (' + manuallyFlagged.length + ')'),
+      h('p', { class: 'muted' },
+        'Estos informes no se pudieron interpretar con suficiente confianza. Se apartaron del análisis automático para que revises su texto. Los demás estudios conservan sus resultados.'));
+    const reviewList = h('div', { class: 'stack studies-scroll-list' });
+    for (const item of manuallyFlagged) {
+      const doc = ownHistory.find(st => st.id === item.study_id);
+      if (!doc) continue;
+      const container = h('div', { class: 'history-review-item' },
+        h('h3', {}, doc.title || 'Estudio sin identificar'),
+        h('p', { class: 'muted small' },
+          doc.title === STUDY_PENDING_TITLE
+            ? 'Fecha clínica por confirmar' : fmtDate(doc.study_date)),
+        h('p', { class: 'hint' }, item.reason || 'Revisar contenido del informe.'));
+      const open = h('button', { type: 'button', class: 'btn' }, 'Revisar estudio');
+      open.addEventListener('click', () => go('mi-estudio', { studyId: doc.id }));
+      const tryAgain = h('button', { type: 'button', class: 'btn quiet' }, 'Reintentar este informe');
+      tryAgain.disabled = jobActive;
+      tryAgain.addEventListener('click', async () => {
+        if (historyEvaluationProgress.has(overviewOwner)) return;
+        const approved = await confirmBox({
+          title: 'Reintentar un informe',
+          text: 'Chely volverá a intentar leer este informe en la evaluación integral. Conservará los resultados de todos los demás. Esta solicitud puede consumir IA.',
+          ok: 'Reintentar'
+        });
+        if (!approved) return;
+        tryAgain.disabled = true;
+        const { error } = await sb.functions.invoke('resumen-integral', {
+          body: { action: 'revisar', study_id: doc.id }
+        });
+        if (error) {
+          toast(await fnError(error));
+          tryAgain.disabled = false;
+          return;
+        }
+        toast('El estudio quedó marcado para reanálisis. El resto se conserva.');
+        if (state.me?.id === overviewOwner && state.page === 'estudios') render();
+      });
+      container.append(h('div', { class: 'row' }, open, tryAgain));
+      reviewList.append(container);
+    }
+    reviewCard.append(reviewList);
+  }
   overviewCard.append(h('div', { class: 'row' }, overviewButton), overviewStatus, evalProgress);
   m.append(overviewCard);
+  if (reviewCard) m.append(reviewCard);
   showHistoryProgress();
 
   // Hecho por ChatGPT · 2026-11-02 · Ultima explicacion consultable sin gastar IA.

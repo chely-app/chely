@@ -431,3 +431,15 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); outline
 /* Un único ancho mínimo flexible; con mayor tamaño de letra se apilan campos. */
 .account-fields { grid-template-columns: repeat(auto-fit,minmax(min(100%,18rem),1fr)); align-items: start; }
 .health-fields { grid-template-columns: repeat(auto-fit,minmax(min(100%,13rem),1fr)); align-items: start; }
+
+/* Hecho por ChatGPT · 2026-11-02 · Estudios para revisión manual. */
+.history-review-item {
+  display:grid;
+  gap:.55rem;
+  padding:1rem;
+  border:1px solid var(--line);
+  border-radius:.8rem;
+  background:var(--surface-2);
+  min-width:0;
+}
+.history-review-item .row { gap:.5rem; }
