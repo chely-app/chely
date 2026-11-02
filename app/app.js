@@ -1431,6 +1431,11 @@ function filePicker(input, buttonLabel = 'Elegir archivo') {
   return h('span', { class: 'filepick' }, input, h('span', { class: 'btn', 'aria-hidden': 'true' }, buttonLabel), name);
 }
 
+// Función reservada para futuras cargas masivas; está desactivada en la UI.
+// Cambiar a true permite recuperar selección múltiple, carpetas y comparación
+// sin perder la implementación existente ni modificar estudios ya cargados.
+const CHELY_SHOW_BULK_PDF_UPLOAD = false;
+
 function patientUpload() {
   const m = mainEl();
   if (!uploadDraft) uploadDraft = { title: '', date: null, text: '', file: null, mode: 'foto', url: '' };
@@ -1537,6 +1542,8 @@ function patientUpload() {
       'Para PDF con texto, Chely intentará obtener nombre, fecha e informe al subirlo, sin IA. Si el documento es una imagen escaneada, podés usar «Leer el archivo» después.'),
     msg, h('div', { class: 'row' }, btn)));
 
+  // La importación masiva se conserva inactiva hasta volver a necesitarla.
+  if (CHELY_SHOW_BULK_PDF_UPLOAD) {
   // Hecho por ChatGPT · 2026-11-02 · Importacion de muchos PDF.
   // Cada archivo queda independiente y NO se ejecuta transcripcion ni explicacion.
   const bulkFiles = h('input', { type: 'file', accept: 'application/pdf,.pdf', multiple: true,
@@ -1742,6 +1749,7 @@ function patientUpload() {
     comparisonInfo, missingList);
   // Mostrar el lote antes del formulario individual para que sea fácil encontrarlo.
   m.insertBefore(batchCard, m.children[1] || null);
+  }
 }
 
 // Estudio propio sin explicar: revisar el texto y pedir la explicación.
