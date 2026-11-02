@@ -1055,6 +1055,29 @@ async function patientOwnStudy() {
   const m = mainEl();
   const report = h('textarea', { id: 'own-report', class: 'report' }, s.report_text);
   const status = h('div', { role: 'status' });
+  // Hecho por ChatGPT · 2026-11-02 · El archivo se lee y propone título y fecha;
+  // si no se detectan, se solicitan antes de generar la explicación.
+  const pending = s.title === STUDY_PENDING_TITLE;
+  const metaTitle = h('input', { type: 'text', id: 'own-title', maxlength: 180,
+    value: pending ? '' : s.title, placeholder: 'Ej.: Ecografía abdominal' });
+  let selectedDate = pending ? null : s.study_date;
+  const metaPicker = datePicker({ id: 'own-date', value: selectedDate,
+    onChange: iso => { selectedDate = iso; } });
+  const metadataNote = h('p', { class: 'hint', role: 'status' },
+    pending ? 'Chely está leyendo el informe para sugerir el nombre y la fecha. Revisalos antes de continuar.'
+      : 'Podés corregir el nombre y la fecha antes de explicar el estudio.');
+  const saveMetadata = async () => {
+    const name = metaTitle.value.trim();
+    if (name.length < 2 || !selectedDate || selectedDate > todayISO()) {
+      status.className = 'alert bad';
+      status.textContent = 'Revisá el nombre y la fecha del informe. Si Chely no pudo identificarlos, completalos.';
+      return false;
+    }
+    const { error } = await sb.from('studies').update({ title: name, study_date: selectedDate }).eq('id', s.id);
+    if (error) { status.className = 'alert bad'; status.textContent = errorText(error); return false; }
+    s.title = name; s.study_date = selectedDate;
+    return true;
+  };
   const busy = (btn, label) => { btn.disabled = true; const old = btn.textContent; btn.replaceChildren(h('span', { class: 'spinner' }), ' ' + label); return () => { btn.disabled = false; btn.textContent = old; }; };
   const saveText = async () => {
     const { error } = await sb.from('studies').update({ report_text: report.value.trim() }).eq('id', s.id);
@@ -1070,6 +1093,17 @@ async function patientOwnStudy() {
     done();
     if (error) { status.className = 'alert bad'; status.textContent = await fnError(error); return false; }
     report.value = data.text;
+    if (s.title === STUDY_PENDING_TITLE) {
+      const suggested = metadataFromReport(data.text);
+      if (suggested.title) metaTitle.value = suggested.title;
+      if (suggested.date) {
+        selectedDate = suggested.date;
+        metaPicker.querySelector('input').value = fmtDate(suggested.date);
+      }
+      metadataNote.textContent = suggested.title && suggested.date
+        ? 'Chely sugirió estos datos del informe. Confirmá que sean correctos antes de explicar.'
+        : 'No encontramos con seguridad todos los datos. Completá el nombre y la fecha antes de explicar.';
+    }
     return saveText();
   };
   readBtn.addEventListener('click', async () => {
@@ -1080,7 +1114,7 @@ async function patientOwnStudy() {
     if (!report.value.trim()) { status.className = 'alert bad'; status.textContent = 'Falta el texto del informe. Tocá «Leer el archivo» o pegalo.'; return; }
     // Con archivo y un texto tan corto, seguramente falta leer el archivo.
     if (s.file_path && report.value.trim().length < 40) { status.className = 'alert bad'; status.textContent = 'El texto es muy corto para ser el informe completo. Tocá «Leer el archivo» y después «Explicar mi estudio».'; return; }
-    if (!await saveText()) return;
+    if (!await saveText() || !await saveMetadata()) return;
     status.className = 'alert info'; status.textContent = 'Chely está escribiendo la explicación de tu estudio. Puede tardar hasta dos minutos; no cierres esta pantalla.';
     const done = busy(explainBtn, 'Escribiendo la explicación…');
     const { data, error } = await sb.functions.invoke('ia', { body: { action: 'explicar', study_id: s.id } });
@@ -1094,7 +1128,12 @@ async function patientOwnStudy() {
   };
   explainBtn.addEventListener('click', explainStudy);
   m.append(h('div', { class: 'row' }, h('button', { class: 'btn quiet sm', onclick: () => go('estudios') }, '‹ Mis estudios')));
-  m.append(h('div', { class: 'card' }, h('div', { class: 'row' }, h('h1', { class: 'grow' }, s.title), h('span', { class: 'pill' }, fmtDate(s.study_date))),
+  m.append(h('div', { class: 'card' },
+    h('h1', {}, pending ? 'Revisar datos del informe' : s.title),
+    h('div', { class: 'grid2' },
+      h('label', { class: 'field', for: 'own-title' }, 'Nombre del estudio', metaTitle),
+      h('div', { class: 'field' }, h('label', { for: 'own-date' }, 'Fecha del estudio'), metaPicker)),
+    metadataNote,
     s.file_path ? h('div', { class: 'row' }, h('span', { class: 'grow muted' }, 'Archivo: ' + (s.file_name || 'informe')), h('button', { class: 'btn quiet sm', onclick: () => openOriginal(s) }, 'Ver archivo'), readBtn) : null,
     h('label', { class: 'field', for: 'own-report' }, 'Texto del informe ', h('span', { class: 'hint' }, 'Es lo que lee Chely. Revisá que esté completo y sin errores.'), report),
     status,
