@@ -1760,13 +1760,14 @@ async function minorManagement() {
   m.append(h('div', { class: 'card' }, h('h2', {}, 'Fichas vinculadas'), list));
   for (const minor of minors) {
     list.append(h('button', { class: 'item', type: 'button', onclick: () => {
-      state.minorId = minor.id; minorManagement();
+      state.minorId = minor.id; state.minorStudyId = null; saveRoute(); minorManagement();
     } }, h('strong', {}, minor.full_name),
       h('span', { class: 'muted small' }, ' · ' + fmtDate(minor.birth_date) + ' · ' +
         (minor.access_level === 'responsable' ? 'Responsable' : 'Adulto autorizado'))));
   }
   const minor = minors.find(item => item.id === state.minorId) || minors[0];
   state.minorId = minor.id;
+  saveRoute();
   const card = h('div', { class: 'card' },
     h('h2', {}, minor.full_name),
     h('p', {}, 'Nacimiento: ' + fmtDate(minor.birth_date) + ' · Relación: ' + minor.relationship),
@@ -1925,11 +1926,14 @@ async function minorStudiesPanel(host,minor){
   const upload=h('details',{class:'minor-upload'},
     h('summary',{},'Agregar un estudio'));
   // Hecho por ChatGPT · 2026-11-02 · Misma carga accesible de adultos: foto, PDF, texto o enlace.
-  const draft={mode:'foto',text:'',file:null,url:''};
+  let draft=minorUploadDrafts.get(minor.id);
+  if(!draft){ draft={mode:'foto',text:'',file:null,imported:null,url:'',title:'',date:null}; minorUploadDrafts.set(minor.id,draft); }
   const source=studySourceChooser('minor-study',draft);
-  const title=h('input',{type:'text',id:'minor-study-title',maxlength:180,placeholder:'Ej.: Análisis de sangre'});
-  let date=null;
-  const picker=datePicker({id:'minor-study-date',value:date,onChange:iso=>{date=iso;}});
+  const title=h('input',{type:'text',id:'minor-study-title',maxlength:180,
+    placeholder:'Ej.: Análisis de sangre',value:draft.title||''});
+  title.addEventListener('input',()=>{draft.title=title.value;});
+  let date=draft.date||null;
+  const picker=datePicker({id:'minor-study-date',value:date,onChange:iso=>{date=iso;draft.date=iso;}});
   const meta=h('div',{class:'study-manual-meta grid2'},
     h('label',{class:'field',for:'minor-study-title'},'¿Qué estudio es?',title),
     h('div',{class:'field'},h('label',{for:'minor-study-date'},'Fecha del estudio'),picker));
@@ -1937,13 +1941,16 @@ async function minorStudiesPanel(host,minor){
   source.root.addEventListener('study-method-change',sync);
   source.root.addEventListener('study-report-input',e=>{
     const info=metadataFromReport(e.detail.text);
-    if(!title.value.trim()&&info.title)title.value=info.title;
-    if(!date&&info.date){date=info.date;picker.querySelector('input').value=fmtDate(info.date);}
+    if(!title.value.trim()&&info.title){title.value=info.title;draft.title=info.title;}
+    if(!date&&info.date){date=info.date;draft.date=date;picker.querySelector('input').value=fmtDate(info.date);}
   });
   sync();
   const status=h('div',{role:'status'});
+  if(draft.pending){ status.className='alert info'; status.textContent='El estudio sigue cargándose. Podés cambiar de sección sin cancelar la operación.'; }
   const save=h('button',{class:'btn primary big',type:'button'},'Continuar con el estudio');
+  save.disabled=!!draft.pending;
   save.addEventListener('click',async()=>{
+    if(draft.pending)return toast('Este estudio ya se está cargando.');
     const mode=source.getMode(), chosen=source.getFile(), pasted=source.getText();
     if(mode==='texto'){
       if(!pasted)return toast('Pegá el texto del informe.');
@@ -1952,6 +1959,8 @@ async function minorStudiesPanel(host,minor){
       if(!chosen)return toast(mode==='enlace'?'Primero importá el documento del enlace.':'Elegí una foto o PDF.');
       if(!studyUploadFileValid(chosen,mode))return toast('Archivo no admitido o mayor a 20 MB.');
     }
+    draft.pending=true;
+    const navAtStart=navigationEpoch, ownerAtStart=state.me.id;
     save.disabled=true;status.className='alert info';status.textContent='Guardando el estudio…';
     try{
       const isFile=mode!=='texto';
@@ -1973,11 +1982,23 @@ async function minorStudiesPanel(host,minor){
         if(metaError)throw new Error('Archivo cargado sin confirmar el registro: '+errorText(metaError));
         state.minorAutoRead=created.id;
       }
-      state.minorStudyId=created.id;
-      toast(isFile?'Estudio guardado. Chely intentará leer el documento.':'Texto guardado. Podés pedir la explicación.');
-      minorManagement();
-    }catch(e){status.className='alert bad';status.textContent=errorText(e);}
-    finally{save.disabled=false;}
+      minorUploadDrafts.delete(minor.id);
+      if(state.me?.id===ownerAtStart && state.page==='menores'
+          && state.minorId===minor.id && navigationEpoch===navAtStart){
+        state.minorStudyId=created.id; saveRoute();
+        toast(isFile?'Estudio guardado. Chely intentará leer el documento.':'Texto guardado. Podés pedir la explicación.');
+        minorManagement();
+      }else{
+        if(state.me?.id===ownerAtStart)toast('El estudio del menor terminó de guardarse.');
+        if(state.page==='menores')minorManagement();
+      }
+    }catch(e){
+      status.className='alert bad';status.textContent=errorText(e);
+      if(state.page!=='menores'||navigationEpoch!==navAtStart)toast('No se completó la carga del menor: '+errorText(e));
+    }finally{
+      draft.pending=false; save.disabled=false;
+      if(state.page==='menores'&&navigationEpoch!==navAtStart)minorManagement();
+    }
   });
   upload.append(source.root,meta,
     h('p',{class:'hint'},'Con foto, PDF o enlace importado, Chely intentará completar título y fecha después de leer el documento.'),
@@ -1985,7 +2006,7 @@ async function minorStudiesPanel(host,minor){
   card.append(upload);
   if(!(studies||[]).length)card.append(h('p',{class:'muted'},'Este menor todavía no tiene estudios registrados.'));
   for(const study of studies||[])card.append(h('button',{class:'item',type:'button',onclick:()=>{
-    state.minorStudyId=study.id;minorManagement();
+    state.minorStudyId=study.id;saveRoute();minorManagement();
   }},h('span',{class:'grow'},study.title),h('span',{class:'pill'},study.title===STUDY_PENDING_TITLE?'Fecha por confirmar':fmtDate(study.study_date)),
     h('span',{class:'pill '+(study.explanation?'ok':'warn')},study.explanation?'Explicado':'Pendiente')));
   const selected=(studies||[]).find(x=>x.id===state.minorStudyId);
