@@ -307,9 +307,47 @@ const runningHistoryEvaluations = new Map(); // Evitar pedidos dobles de evaluac
 const historyEvaluationProgress = new Map();
 let historyEvaluationTimer = null;
 let updateHistoryEvaluationDisplay = null;
+let historyEvaluationPollBusy = false;
+let lastHistoryPollAt = 0;
+async function pollHistoryEvaluation() {
+  if (historyEvaluationPollBusy || !state.me || state.me.role !== 'patient') return;
+  const ownerId = state.me.id;
+  if (!historyEvaluationProgress.has(ownerId)) return;
+  historyEvaluationPollBusy = true;
+  try {
+    const { data, error } = await sb.functions.invoke('resumen-integral',
+      { body: { action: 'estado' } });
+    if (error || !data || state.me?.id !== ownerId) return;
+    const job = data.job;
+    if (job?.status === 'running' || job?.status === 'queued') {
+      historyEvaluationProgress.set(ownerId, {
+        startedAt: job.started_at ? new Date(job.started_at).getTime()
+          : new Date(job.created_at).getTime(),
+        total: job.study_count, status: job.status
+      });
+    } else {
+      historyEvaluationProgress.delete(ownerId);
+      stopHistoryEvaluationTimerIfIdle();
+      if (state.page === 'estudios') render();
+      else if (data.saved) toast('Tu evaluación integral ya está guardada en Mis estudios.');
+      else if (job?.status === 'failed')
+        toast('La evaluación no pudo completarse. Revisá su estado en Mis estudios.');
+    }
+  } catch { /* Sin conexión: el estado sigue guardado en Supabase. */ }
+  finally {
+    historyEvaluationPollBusy = false;
+    if (typeof updateHistoryEvaluationDisplay === 'function')
+      updateHistoryEvaluationDisplay();
+  }
+}
 function tickHistoryEvaluation() {
   if (typeof updateHistoryEvaluationDisplay === 'function')
     updateHistoryEvaluationDisplay();
+  const now = Date.now();
+  if (historyEvaluationProgress.size && now - lastHistoryPollAt >= 6000) {
+    lastHistoryPollAt = now;
+    void pollHistoryEvaluation();
+  }
 }
 function startHistoryEvaluationTimer() {
   if (historyEvaluationTimer !== null) return;
@@ -353,6 +391,7 @@ function clearUploadDraft() { uploadDraft = null; }
 function clearPrivateDrafts() {
   cancelBatchRead();
   uploadDraft = null; minorUploadDrafts.clear(); studyEditDrafts.clear(); patientStudiesTab = null;
+  historyEvaluationProgress.clear(); stopHistoryEvaluationTimerIfIdle();
 }
 
 // Hecho por ChatGPT · 2026-11-02 · Restaurar la sección actual con F5.
@@ -410,6 +449,9 @@ function navFor(items) {
   return nav;
 }
 function go(page, extra = {}) {
+  // No reconstruir la misma pantalla por tocar su pestaña activa.
+  if (state.page === page && !extra.studyId && !extra.patientId &&
+      !extra.minorId && !extra.minorStudyId && !extra.autoExplain) return;
   window.onbeforeunload = null;
   navigationEpoch++;
   state.page = page; state.studyId = extra.studyId || null; state.autoExplain = !!extra.autoExplain;
@@ -438,17 +480,22 @@ async function boot() {
     history.replaceState(null, '', location.pathname + (params.toString() ? '?' + params : '') + location.hash);
   }
   sb.auth.onAuthStateChange((event, session) => {
+    const previousUser = state.session?.user?.id || null;
+    const currentUser = session?.user?.id || null;
     state.session = session;
     if (event === 'PASSWORD_RECOVERY') state.recovery = true;
-    if (event === 'SIGNED_OUT') {
+    if (event === 'SIGNED_OUT' || (previousUser && currentUser && currentUser !== previousUser)) {
       state.me = null; state.page = null; clearPrivateDrafts();
       clearRoute(); restoredRouteUser = null;
     }
-    if (session?.user?.id && state.me?.id && session.user.id !== state.me.id) {
-      state.me = null; state.page = null; clearPrivateDrafts();
-      clearRoute(); restoredRouteUser = null;
-    }
-    // No consultar la base dentro de este callback: se agenda.
+    // Hecho por ChatGPT · 2026-11-02:
+    // TOKEN_REFRESHED, USER_UPDATED y un SIGNED_IN de la MISMA sesión
+    // no implican navegación. Volver desde otra pestaña nunca debe
+    // destruir el DOM, el scroll ni un formulario a medio completar.
+    if ((event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED')
+      && previousUser === currentUser) return;
+    if (event === 'SIGNED_IN' && previousUser === currentUser && state.me && !state.recovery) return;
+    if (event === 'INITIAL_SESSION' && previousUser === currentUser && state.me && !state.recovery) return;
     setTimeout(render, 0);
   });
   const { data } = await sb.auth.getSession();
@@ -761,8 +808,12 @@ async function adminLog() {
 
 /* ---------------- paciente ---------------- */
 async function renderPatient() {
+  const requestedEpoch = navigationEpoch;
+  const requestedUser = state.me?.id;
   // Hecho por ChatGPT · 2026-11-02 · Sólo mostrar Menores a cargo cuando existe un vínculo vigente.
   const { data: linkedMinors, error: minorError } = await sb.rpc('minor_list');
+  // Ignorar una pantalla anterior si se cambió de sección durante el await.
+  if (requestedEpoch !== navigationEpoch || requestedUser !== state.me?.id) return;
   if (minorError) return showError(minorError, render);
   state.linkedMinors = linkedMinors || [];
   if (!['estudios', 'estudio', 'subir', 'mi-estudio', 'medicos', 'cuenta', 'menores'].includes(state.page)
@@ -794,38 +845,62 @@ async function namesFor(ids) {
   return Object.fromEntries((data || []).map(p => [p.id, p.full_name]));
 }
 async function patientStudies() {
+  const requestedEpoch = navigationEpoch;
+  const requestedUser = state.me?.id;
   loading();
   let studies, links;
   try {
     studies = await loadPatientStudies();
     ({ data: links } = await sb.from('care_links').select('doctor_id').eq('patient_id', state.me.id).eq('active', true));
   } catch (e) { return showError(e, patientStudies); }
+  if (requestedEpoch !== navigationEpoch || state.page !== 'estudios' || requestedUser !== state.me?.id) return;
   const names = await namesFor(studies.map(s => s.doctor_id));
   const { data: latest, error: latestError } = await sb.from('patient_latest_explanations')
     .select('source_study_id,explanation,glossary,model,generated_at,previous_studies_used,debian_sync_status')
     .eq('patient_id', state.me.id).maybeSingle();
   // Si Supabase no responde con la copia, mantener accesible la lista de estudios.
   if (latestError) console.warn('No se pudo mostrar la ultima explicacion.');
+  if (requestedEpoch !== navigationEpoch || state.page !== 'estudios' || requestedUser !== state.me?.id) return;
   const m = mainEl();
   m.append(h('div', { class: 'row' }, h('h1', { class: 'grow' }, `Hola, ${state.me.full_name.split(' ')[0] || ''}`)));
   m.append(h('div', { class: 'card' }, h('h2', {}, 'Entendé tu estudio'),
     h('p', {}, 'Subí un análisis o un informe (PDF, foto o texto) y Chely te lo explica en palabras simples.'),
     h('div', { class: 'row' }, h('button', { class: 'btn primary big', onclick: () => go('subir') }, 'Subir un estudio'))));
-  // Hecho por ChatGPT · 2026-11-02 · Evaluación integral a pedido.
+  // Hecho por ChatGPT · 2026-11-02 · Trabajos persistentes en el servidor.
+  // No depende de que el navegador permanezca abierto ni de la sección actual.
   const ownHistory = studies.filter(st => st.self_uploaded);
   const unreadHistory = ownHistory.filter(st => !String(st.report_text || '').trim()).length;
-  const { data: overall, error: overallError } = await sb.from('patient_history_summaries')
-    .select('explanation,total_studies,unique_reports,unconfirmed_studies,generated_at,latest_confirmed_date')
-    .eq('patient_id', state.me.id).maybeSingle();
+  const overviewOwner = state.me.id;
+  const [{ data: overall, error: overallError }, { data: storedJob, error: jobError }] = await Promise.all([
+    sb.from('patient_history_summaries')
+      .select('explanation,total_studies,unique_reports,unconfirmed_studies,generated_at,latest_confirmed_date')
+      .eq('patient_id', overviewOwner).maybeSingle(),
+    sb.from('patient_history_jobs')
+      .select('job_id,status,attempts,study_count,created_at,started_at,finished_at,last_error')
+      .eq('patient_id', overviewOwner).maybeSingle()
+  ]);
   if (overallError) console.warn('No se pudo leer la evaluación integral guardada.');
+  if (jobError) console.warn('No se pudo leer el trabajo de evaluación integral.');
+  if (requestedEpoch !== navigationEpoch || state.page !== 'estudios' || requestedUser !== state.me?.id) return;
+  const jobActive = storedJob?.status === 'running' || storedJob?.status === 'queued';
+  if (jobActive) {
+    historyEvaluationProgress.set(overviewOwner, {
+      startedAt: new Date(storedJob.started_at || storedJob.created_at).getTime(),
+      total: storedJob.study_count, status: storedJob.status
+    });
+    startHistoryEvaluationTimer();
+  } else if (!runningHistoryEvaluations.has(overviewOwner)) {
+    historyEvaluationProgress.delete(overviewOwner);
+    stopHistoryEvaluationTimerIfIdle();
+  }
   const changedHistory = !!overall && (ownHistory.length !== overall.total_studies ||
     ownHistory.some(st => st.updated_at && new Date(st.updated_at) > new Date(overall.generated_at)));
   const overviewCard = h('div', { class: 'card' },
     h('h2', {}, 'Evaluación integral del historial'),
-    h('p', {}, 'Chely puede comparar los estudios escritos y explicar su evolución. No puede conocer el estado actual de salud solamente por informes históricos.'),
+    h('p', {}, 'Chely puede comparar los estudios escritos y explicar su evolución. Los estudios anteriores no permiten confirmar por sí solos el estado de salud de hoy.'),
     h('p', { class: 'hint' },
       ownHistory.length + ' estudios registrados · ' +
-      (ownHistory.length - unreadHistory) + ' con texto guardado. La IA se usa solo si lo solicitás.'));
+      (ownHistory.length - unreadHistory) + ' con texto guardado. La IA se utiliza solo a pedido.'));
   if (overall?.explanation) {
     overviewCard.append(h('p', { class: 'muted small' },
       'Última evaluación: ' + fmtDateTime(overall.generated_at) +
@@ -839,71 +914,100 @@ async function patientStudies() {
   const overviewStatus = h('p', { class: 'hint', role: 'status', 'aria-live': 'polite' });
   const overviewButton = h('button', { type: 'button', class: 'btn primary' },
     overall?.explanation ? 'Actualizar evaluación integral' : 'Evaluar todo mi historial');
-  const overviewOwner = state.me.id;
-  // No simular un porcentaje: la API no informa pasos internos de Claude.
-  // Mostrar actividad y un reloj que funciona incluso al cambiar de sección.
   const evalProgress = h('div', { class: 'history-eval-progress', hidden: true },
     h('div', { class: 'row' },
       h('span', { class: 'spinner', 'aria-hidden': 'true' }),
-      h('strong', {}, 'Evaluación integral en curso')),
-    h('p', { class: 'history-eval-progress-detail' },
-      'Los informes están siendo procesados.'),
+      h('strong', {}, 'Evaluación integral guardada y en proceso')),
+    h('p', { class: 'history-eval-progress-detail' }),
     h('div', { class: 'history-eval-progress-track', 'aria-hidden': 'true' },
       h('div', { class: 'history-eval-progress-indeterminate' })),
     h('p', { class: 'muted small' },
-      'La IA no informa un porcentaje real. La evaluación se guardará al finalizar. No recargues ni cierres esta pestaña.'));
+      'El procesamiento continúa en Supabase aunque cierres Chely. Al volver podrás consultar el estado; si el servidor interrumpe el trabajo, se reanudará en una próxima visita. La IA no informa un porcentaje real.'));
   const progressDetail = evalProgress.querySelector('.history-eval-progress-detail');
   const showHistoryProgress = () => {
     if (!overviewCard.isConnected || state.me?.id !== overviewOwner) return;
     const job = historyEvaluationProgress.get(overviewOwner);
-    const activeJob = !!job && runningHistoryEvaluations.has(overviewOwner);
+    const activeJob = !!job || runningHistoryEvaluations.has(overviewOwner);
     evalProgress.hidden = !activeJob;
     overviewButton.disabled = activeJob || ownHistory.length === 0 || unreadHistory > 0;
-    if (!activeJob) return;
-    progressDetail.textContent = job.total + ' informes con texto disponibles · ' +
-      'Tiempo transcurrido: ' + formatHistoryElapsed(Date.now() - job.startedAt) +
-      '. La IA está preparando la evaluación.';
+    if (activeJob) {
+      const elapsed = job ? formatHistoryElapsed(Date.now() - job.startedAt) : '0:00';
+      progressDetail.textContent =
+        (job?.status === 'queued' ? 'Esperando inicio en el servidor · ' : '') +
+        (job?.total || ownHistory.length) + ' informes · Tiempo transcurrido: ' +
+        elapsed + '. El resultado se guardará automáticamente.';
+    }
   };
   updateHistoryEvaluationDisplay = showHistoryProgress;
   if (unreadHistory > 0) overviewStatus.textContent = 'Quedan ' + unreadHistory +
     ' informes por leer. Preparalos antes de pedir la evaluación integral.';
+  else if (storedJob?.status === 'failed') {
+    overviewStatus.className = 'alert bad';
+    overviewStatus.textContent = 'El último intento no pudo completarse: ' +
+      (storedJob.last_error || 'Error del servidor.') +
+      ' Podés solicitar un nuevo intento sin volver a subir los estudios.';
+  } else if (storedJob?.status === 'done' && !overall) {
+    overviewStatus.className = 'alert warn';
+    overviewStatus.textContent = 'La evaluación guardada ya no está disponible porque cambió el historial. Podés generar una actualizada.';
+  }
   overviewButton.addEventListener('click', async () => {
-    if (runningHistoryEvaluations.has(overviewOwner)) return toast('Ya hay una evaluación integral en curso.');
+    if (historyEvaluationProgress.has(overviewOwner) ||
+        runningHistoryEvaluations.has(overviewOwner))
+      return toast('La evaluación ya está en proceso. Se guardará automáticamente.');
     const allowed = await confirmBox({
       title: 'Evaluar todo mi historial',
-      text: 'Chely enviará los informes escritos y los datos de salud declarados para preparar una evaluación cronológica. Esta consulta a la IA puede tener costo. No permite diagnosticar ni conocer con certeza tu estado de salud hoy. Si los datos no cambiaron, reutilizará la última evaluación.',
-      ok: 'Generar evaluación'
+      text: 'Chely enviará los informes escritos y los datos declarados a la IA para una evaluación cronológica. La solicitud quedará guardada en el servidor y no dependerá de mantener abierto el navegador. Puede tener costo.',
+      ok: 'Solicitar evaluación'
     });
-    if (!allowed || runningHistoryEvaluations.has(overviewOwner)) return;
+    if (!allowed || historyEvaluationProgress.has(overviewOwner) ||
+        runningHistoryEvaluations.has(overviewOwner)) return;
     historyEvaluationProgress.set(overviewOwner, {
-      startedAt: Date.now(), total: ownHistory.length - unreadHistory
+      startedAt: Date.now(), total: ownHistory.length - unreadHistory, status: 'queued'
     });
     startHistoryEvaluationTimer();
     overviewStatus.className = 'alert info';
-    overviewStatus.textContent = 'Solicitud enviada. La evaluación está en curso.';
-    overviewButton.disabled = true;
+    overviewStatus.textContent = 'Registrando el trabajo en el servidor…';
     showHistoryProgress();
     try {
-      const evaluationRequest = pendingOnce(runningHistoryEvaluations, overviewOwner,
+      const { data, error } = await pendingOnce(runningHistoryEvaluations, overviewOwner,
         () => sb.functions.invoke('resumen-integral', { body: { action: 'evaluar' } }));
-      // pendingOnce registró la solicitud: mostrar la actividad inmediatamente.
-      showHistoryProgress();
-      const { data, error } = await evaluationRequest;
       if (error) throw new Error(await fnError(error));
-      if (!data?.explanation) throw new Error('No se recibió la evaluación.');
-      overviewStatus.className = 'alert ok';
-      overviewStatus.textContent = data.reused
-        ? 'Se recuperó la evaluación guardada, sin consumir IA.'
-        : 'La evaluación integral quedó guardada en tu cuenta.';
-      if (state.me?.id === overviewOwner && state.page === 'estudios') render();
-      else if (state.me?.id === overviewOwner)
-        toast('La evaluación integral está guardada en Mis estudios.');
+      if (state.me?.id !== overviewOwner) return;
+      if (data?.job && ['queued', 'running'].includes(data.job.status)) {
+        historyEvaluationProgress.set(overviewOwner, {
+          startedAt: new Date(data.job.started_at || data.job.created_at).getTime(),
+          total: data.job.study_count, status: data.job.status
+        });
+        overviewStatus.className = 'alert ok';
+        overviewStatus.textContent = 'Trabajo registrado. Podés cerrar Chely y volver después.';
+        startHistoryEvaluationTimer();
+      } else if (data?.saved) {
+        historyEvaluationProgress.delete(overviewOwner);
+        stopHistoryEvaluationTimerIfIdle();
+        if (state.page === 'estudios') render();
+      } else {
+        throw new Error('No se pudo verificar el trabajo. Consultá Mis estudios antes de reintentarlo.');
+      }
     } catch (error) {
-      overviewStatus.className = 'alert bad';
-      overviewStatus.textContent = errorText(error);
+      // La respuesta puede perderse tras haber quedado el trabajo guardado.
+      // Comprobar el servidor antes de afirmar que falló o permitir otro cobro.
+      const { data: found } = await sb.from('patient_history_jobs')
+        .select('status,study_count,created_at,started_at')
+        .eq('patient_id', overviewOwner).maybeSingle();
+      if (found && ['queued','running'].includes(found.status)) {
+        historyEvaluationProgress.set(overviewOwner, {
+          startedAt: new Date(found.started_at || found.created_at).getTime(),
+          total: found.study_count, status: found.status
+        });
+        overviewStatus.className = 'alert info';
+        overviewStatus.textContent = 'El trabajo está registrado en Supabase y continúa.';
+      } else {
+        historyEvaluationProgress.delete(overviewOwner);
+        stopHistoryEvaluationTimerIfIdle();
+        overviewStatus.className = 'alert bad';
+        overviewStatus.textContent = errorText(error);
+      }
     } finally {
-      historyEvaluationProgress.delete(overviewOwner);
-      stopHistoryEvaluationTimerIfIdle();
       showHistoryProgress();
     }
   });
