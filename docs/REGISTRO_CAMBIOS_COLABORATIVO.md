@@ -141,3 +141,12 @@ Este archivo documenta los cambios realizados por distintos colaboradores (human
 - Advertencia junto al campo: grupo sanguíneo autodeclarado, no verificado por Chely; no sustituye prueba clínica ni debe utilizarse para decisiones transfusionales.
 - Verificación Supabase: 2 restricciones de valor, RLS habilitada en ambos perfiles y sin permisos de lectura anónima.
 - Pendiente comprobación visual en navegador con tamaños de letra 17/19/22/25 px, celular y PC.
+
+## 2026-11-02 — Hecho por ChatGPT (nombre/s y apellido/s; etiquetas próximas a campos)
+**Archivos:** `app/app.js`, `app/styles.css`, `supabase/migrations/20261102070000_profiles_given_family_names.sql`, `supabase/migrations/20261102071000_profiles_name_field_grants.sql`.
+- Reemplazado «Nombre y apellido» por dos campos independientes «Nombre/s» y «Apellido/s» en «Mi cuenta» tanto de pacientes como de médicos.
+- Columnas opcionales `profiles.given_names` y `profiles.family_names`, con validación de longitud. Se conserva `profiles.full_name` actualizado al guardar para mantener compatibles todas las pantallas de Chely y sus integraciones.
+- Los nombres existentes no se dividen masivamente en la base: se propone una separación orientativa **solo en la pantalla**. El usuario debe revisarla antes de pulsar Guardar; esto evita sobrescribir apellidos compuestos sin consentimiento. Pruebas: «Araceli Nidia Di Pietro» pasa a «Araceli Nidia» + «Di Pietro».
+- Los cuatro campos de «Mi cuenta» (nombre/s, apellido/s, correo y nacimiento) se distribuyen en columnas automáticas. Se eliminaron las alturas fijas excesivas entre los rótulos y sus inputs. En datos de salud también se acercaron las etiquetas a cada campo.
+- Los permisos `UPDATE` nuevos son **por columna** exclusivamente sobre given_names y family_names; se conserva la RLS que permite editar solo el perfil propio. Se verificó que no se permiten cambios de rol ni UPDATE anónimo.
+- Las dos migraciones están aplicadas a Supabase. JS validado sintácticamente; pendiente de comprobación visual en navegador y de guardado con sesión real.
