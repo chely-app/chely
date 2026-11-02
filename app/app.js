@@ -206,6 +206,58 @@ function renderExplanation(text, glossary = []) {
   });
   return out;
 }
+// Chely · 2026-11-02 · Lectura fácil de una evaluación YA GUARDADA.
+// No consulta la IA, no diagnostica ni modifica las conclusiones originales.
+// Extrae únicamente los primeros hallazgos documentados: se debe mantener
+// siempre visible la posibilidad de leer el texto íntegro.
+function historyPlainText(sentence) {
+  return String(sentence || '')
+    .replace(/\bTC abdominopelviana\b/gi, 'tomografía del abdomen y la pelvis')
+    .replace(/\bTC\b/g, 'tomografía')
+    .replace(/\bneumoperitoneo residual\b/gi, 'aire que todavía aparece dentro del abdomen (neumoperitoneo residual)')
+    .replace(/\blíquido libre intraabdominal\b/gi, 'líquido dentro del abdomen')
+    .replace(/\bderrame pleural bilateral\b/gi, 'líquido alrededor de ambos pulmones (derrame pleural bilateral)')
+    .replace(/\brealce heterogéneo\b/gi, 'una zona que se ve diferente con el contraste (realce heterogéneo)')
+    .replace(/\blóbulo hepático derecho\b/gi, 'parte derecha del hígado')
+    .replace(/\bGPT elevada\b/gi, 'una enzima del hígado elevada (GPT)')
+    .replace(/\bhemicolectomía derecha\b/gi, 'cirugía en una parte del intestino grueso (hemicolectomía derecha)')
+    .replace(/\bmetastasectomías\b/gi, 'cirugías para quitar lesiones secundarias (metastasectomías)')
+    .replace(/\bhallazgos\b/gi, 'resultados observados');
+}
+function renderHistoryEasyRead(fullText) {
+  const text = String(fullText || '');
+  const part = text.match(/(?:^|\n)#{1,3}\s+Hallazgos principales documentados\s*\n([\s\S]*?)(?=\n#{1,3}\s|$)/i);
+  if (!part) return null;
+  const blocks = part[1].trim().split(/\n\s*\n/)
+    .map(x => x.replace(/[*_]/g, '').trim()).filter(Boolean);
+  if (!blocks.length) return null;
+  const sentences = blocks.slice(0, 2).flatMap(paragraph =>
+    (paragraph.replace(/\s*\n\s*/g, ' ').match(/[^.!?]+[.!?]*/g) || [])
+      .map(x => x.trim()).filter(x => x.length > 9));
+  if (!sentences.length) return null;
+  const list = h('ul', { class: 'chely-history-easy-list' });
+  for (const sentence of sentences.slice(0, 8))
+    list.append(h('li', {}, historyPlainText(sentence)));
+  const heading = h('h3', {}, 'Lo más importante, explicado de forma sencilla');
+  const wrap = h('section', { class: 'chely-history-easy' }, heading,
+    h('p', {}, 'Estos son los primeros resultados del informe ya guardado, con algunas palabras más comunes:'),
+    list);
+  const conclusion = text.match(/(?:^|\n)#{1,3}\s+Qué se puede y no se puede afirmar hoy\s*\n([\s\S]*?)(?=\n#{1,3}\s|$)/i);
+  if (conclusion) {
+    const mainPoint = conclusion[1].trim().split(/\n\s*\n/)[0]
+      ?.replace(/[*_]/g, '').replace(/\s*\n\s*/g, ' ').trim();
+    if (mainPoint) {
+      const brief = (mainPoint.match(/[^.!?]+[.!?]*/g) || [])
+        .map(x => x.trim()).filter(Boolean).slice(0, 2).join(' ');
+      wrap.append(h('h3', {}, 'Qué significa para tu salud hoy'),
+        h('p', {}, historyPlainText(brief)));
+    }
+  }
+  wrap.append(h('p', { class: 'muted small' },
+    'Es una ayuda para leer, no una nueva evaluación médica. El informe original completo está debajo y podés consultarlo con tu médico.'));
+  return wrap;
+}
+
 function showTerm(term, def) {
   const host = $('#toast'); host.innerHTML = '';
   const close = h('button', { class: 'btn quiet sm', onclick: () => { host.innerHTML = ''; } }, 'Cerrar');
@@ -309,6 +361,8 @@ let historyEvaluationTimer = null;
 let updateHistoryEvaluationDisplay = null;
 let historyEvaluationPollBusy = false;
 let lastHistoryPollAt = 0;
+// Al concluir un trabajo, mostrar un aviso sin reconstruir la pantalla.
+const historyCompletionNotices = new Map();
 async function pollHistoryEvaluation() {
   if (historyEvaluationPollBusy || !state.me || state.me.role !== 'patient') return;
   const ownerId = state.me.id;
@@ -328,10 +382,17 @@ async function pollHistoryEvaluation() {
     } else {
       historyEvaluationProgress.delete(ownerId);
       stopHistoryEvaluationTimerIfIdle();
-      if (state.page === 'estudios') render();
-      else if (data.saved) toast('Tu evaluación integral ya está guardada en Mis estudios.');
+      historyCompletionNotices.set(ownerId, {
+        saved: !!data.saved, failed: job?.status === 'failed'
+      });
+      // No llamar render(): el paciente puede estar leyendo o completando
+      // información; actualizar toda la pantalla le hace perder su lugar.
+      if (typeof updateHistoryEvaluationDisplay === 'function')
+        updateHistoryEvaluationDisplay();
+      else if (data.saved)
+        toast('La evaluación terminó. Abrí Mis estudios para ver el resultado.');
       else if (job?.status === 'failed')
-        toast('La evaluación no pudo completarse. Revisá su estado en Mis estudios.');
+        toast('La evaluación terminó con un error. Los avances quedaron guardados.');
     }
   } catch { /* Sin conexión: el estado sigue guardado en Supabase. */ }
   finally {
@@ -391,7 +452,8 @@ function clearUploadDraft() { uploadDraft = null; }
 function clearPrivateDrafts() {
   cancelBatchRead();
   uploadDraft = null; minorUploadDrafts.clear(); studyEditDrafts.clear(); patientStudiesTab = null;
-  historyEvaluationProgress.clear(); stopHistoryEvaluationTimerIfIdle();
+  historyEvaluationProgress.clear(); historyCompletionNotices.clear();
+  stopHistoryEvaluationTimerIfIdle();
 }
 
 // Hecho por ChatGPT · 2026-11-02 · Restaurar la sección actual con F5.
@@ -907,6 +969,8 @@ async function patientStudies() {
     historyEvaluationProgress.delete(overviewOwner);
     stopHistoryEvaluationTimerIfIdle();
   }
+  if (overall?.explanation || storedJob?.status === 'failed')
+    historyCompletionNotices.delete(overviewOwner);
   const changedHistory = !!overall && (ownHistory.length !== overall.total_studies ||
     ownHistory.some(st => st.updated_at && new Date(st.updated_at) > new Date(overall.generated_at)));
   const overviewCard = h('div', { class: 'card' },
@@ -1016,8 +1080,12 @@ async function patientStudies() {
       summaryCounts.excluded + ' copias idénticas se omitieron.'));
     if (changedHistory) overviewCard.append(h('p', { class: 'hint' },
       'El historial cambió desde esta evaluación. La versión guardada sigue disponible para consultar.'));
-    overviewCard.append(h('details', { class: 'stack', open: true },
-      h('summary', {}, 'Evaluación histórica guardada — ver u ocultar'),
+    // Primero una lectura breve sin IA; mantener el texto original íntegro
+    // en un desplegable para quien desee consultar todos los detalles.
+    const shortReading = renderHistoryEasyRead(overall.explanation);
+    if (shortReading) overviewCard.append(shortReading);
+    overviewCard.append(h('details', { class: 'stack chely-technical-evaluation' },
+      h('summary', {}, 'Leer el informe completo con todos los detalles'),
       renderExplanation(overall.explanation)));
   }
   const overviewStatus = h('p', { class: 'hint', role: 'status', 'aria-live': 'polite' });
@@ -1043,6 +1111,20 @@ async function patientStudies() {
     const activeJob = !!job || runningHistoryEvaluations.has(overviewOwner);
     evalProgress.hidden = !activeJob;
     overviewButton.disabled = activeJob || ownHistory.length === 0 || unreadHistory > 0;
+    const notice = historyCompletionNotices.get(overviewOwner);
+    if (notice && !activeJob) {
+      const label = notice.saved
+        ? 'La evaluación terminó y quedó guardada. Podés abrirla cuando quieras.'
+        : 'La evaluación terminó, pero necesita revisión. Los avances anteriores se conservaron.';
+      const button = h('button', { type: 'button', class: 'btn',
+        onclick: () => {
+          historyCompletionNotices.delete(overviewOwner);
+          // Actualizar solo a solicitud del paciente.
+          render();
+        } }, notice.saved ? 'Ver resultado' : 'Ver detalles');
+      overviewStatus.className = notice.saved ? 'alert ok' : 'alert warn';
+      overviewStatus.replaceChildren(label, h('div', { class: 'row' }, button));
+    }
     if (activeJob) {
       const elapsed = job ? formatHistoryElapsed(Date.now() - job.startedAt) : '0:00';
       progressDetail.textContent =
@@ -1114,7 +1196,8 @@ async function patientStudies() {
       } else if (data?.saved) {
         historyEvaluationProgress.delete(overviewOwner);
         stopHistoryEvaluationTimerIfIdle();
-        if (state.page === 'estudios') render();
+        historyCompletionNotices.set(overviewOwner, { saved: true, failed: false });
+        showHistoryProgress();
       } else {
         throw new Error('No se pudo verificar el trabajo. Consultá Mis estudios antes de reintentarlo.');
       }
