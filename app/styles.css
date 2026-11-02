@@ -151,3 +151,17 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); outline
 .filepick { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; margin-top: .4rem; font-weight: 400; }
 .file-input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
 .file-input:focus-visible + .btn { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+/* Panel del equipo */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: .7rem; }
+.stat { display: grid; gap: .1rem; align-content: start; padding: .8rem 1rem; border-radius: .9rem; background: var(--surface-2); }
+.stat b { font-size: 1.6rem; line-height: 1.2; }
+.table-wrap { overflow-x: auto; width: 100%; min-width: 0; }
+.admin-card { min-width: 0; }
+.admin-card .tabs { flex-wrap: wrap; }
+.admin-card .tabs button { flex: 1 1 40%; }
+.admin-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.admin-table th, .admin-table td { text-align: left; padding: .55rem .6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+.admin-table td .pill { margin-top: .25rem; }
+.admin-table .nowrap, .admin-table th { white-space: nowrap; }
+.admin-table th { color: var(--muted); font-weight: 700; }

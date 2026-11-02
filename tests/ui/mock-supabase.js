@@ -4,11 +4,14 @@
     users: [
       { id: 'doc', email: 'medica@ej.com', password: 'clave1234' },
       { id: 'pac', email: 'paciente@ej.com', password: 'clave1234' },
+      { id: 'adm', email: 'equipo@ej.com', password: 'clave1234' },
     ],
     profiles: [
       { id: 'doc', email: 'medica@ej.com', full_name: 'Dra. Laura Prueba', role: 'doctor', birth_date: null, consent_version: null },
       { id: 'pac', email: 'paciente@ej.com', full_name: 'Marta Prueba', role: 'patient', birth_date: '1954-03-02', consent_version: null },
+      { id: 'adm', email: 'equipo@ej.com', full_name: 'Equipo Chely', role: 'admin', birth_date: null, consent_version: null },
     ],
+    admin_log: [],
     invitations: [], care_links: [], access_log: [],
     studies: [{ id: 'old1', patient_id: 'pac', doctor_id: 'doc', title: 'Análisis anterior', study_date: '2026-03-10', status: 'publicado', report_text: 'Glucemia 104 mg/dL',
       explanation: '## Qué dice tu estudio\n- Glucemia 104 mg/dL.', glossary: [], lab_values: [{ nombre: 'Glucemia en ayunas', valor: 104, valor_texto: '104', unidad: 'mg/dL', referencia_texto: '70 - 100', ref_min: 70, ref_max: 100 }],
@@ -75,7 +78,15 @@
     return api;
   }
   const rpcs = {
-    accept_consent({ p_version }) { me().consent_version = p_version; },
+    accept_consent({ p_version }) { me().consent_version = p_version; me().consent_at = new Date().toISOString(); },
+    admin_overview() { const by = r => db.profiles.filter(p => p.role === r).length; return [{ pacientes: by('patient'), medicos: by('doctor'), equipo: by('admin'), cuentas_7d: db.profiles.length, sin_consentimiento: db.profiles.filter(p => !p.consent_at).length,
+      estudios: db.studies.length, estudios_propios: db.studies.filter(s => s.self_uploaded).length, estudios_explicados: db.studies.filter(s => s.status === 'publicado').length, estudios_7d: db.studies.length, vinculos: db.care_links.filter(c => c.active).length,
+      ia_usos_30d: 4, ia_tokens_entrada_30d: 20000, ia_tokens_salida_30d: 31000 }]; },
+    admin_users() { return db.profiles.map(p => ({ id: p.id, email: p.email, full_name: p.full_name, role: p.role, created_at: '2026-10-29T17:00:00Z', last_sign_in_at: '2026-11-01T12:00:00Z', consent_at: p.consent_at || null,
+      estudios: db.studies.filter(s => s.patient_id === p.id || s.doctor_id === p.id).length, estudios_explicados: db.studies.filter(s => (s.patient_id === p.id || s.doctor_id === p.id) && s.status === 'publicado').length,
+      vinculos: db.care_links.filter(c => c.active && (c.patient_id === p.id || c.doctor_id === p.id)).length, ia_usos_30d: 0 })); },
+    admin_set_role({ p_user, p_role }) { const p = db.profiles.find(x => x.id === p_user); db.admin_log.push({ at: new Date().toISOString(), admin_email: me().email, action: 'cambiar_rol', target_email: p.email, detail: p.role + ' -> ' + p_role }); p.role = p_role; p.consent_version = null; p.consent_at = null; },
+    admin_recent_log() { return [...db.admin_log].reverse(); },
     invitation_info({ p_code }) { const i = db.invitations.find(x => x.code === p_code); if (!i) return []; return [{ doctor_name: db.profiles.find(p => p.id === i.doctor_id).full_name, valid: !i.used_by }]; },
     create_invitation({ p_hint }) { const code = 'ABCD' + Math.floor(Math.random() * 1e6).toString().padStart(6, '2'); db.invitations.push({ code, doctor_id: uid(), patient_hint: p_hint, created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 14 * 864e5).toISOString(), used_by: null }); return code; },
     redeem_invitation({ p_code }) { const i = db.invitations.find(x => x.code === p_code); if (!i) throw new Error('El código de invitación no existe. Revisalo con tu médico.'); i.used_by = uid(); db.care_links.push({ doctor_id: i.doctor_id, patient_id: uid(), active: true, created_at: new Date().toISOString() }); log(uid(), null, 'medico_vinculado'); },
