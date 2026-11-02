@@ -920,9 +920,19 @@ async function patientStudies() {
   m.append(readCard);
   showReadJob();
 
-  const card = h('div', { class: 'card' }, h('h2', {}, 'Mis estudios'));
+  // Hecho por ChatGPT · 2026-11-02 · Mantener 3-4 estudios visibles;
+  // la lista tiene su propio desplazamiento sin alargar toda la página.
+  const card = h('div', { class: 'card' },
+    h('h2', {}, 'Mis estudios (' + studies.length + ')'));
   if (!studies.length) card.append(h('p', { class: 'muted' }, 'Todavía no tenés estudios. Tocá «Subir un estudio» para empezar.'));
-  const list = h('div', { class: 'list' });
+  else if (studies.length > 4) card.append(h('p', { class: 'muted small' },
+    'Deslizá dentro de la lista para ver los demás estudios.'));
+  const list = h('div', {
+    class: 'list studies-scroll-list',
+    role: 'region',
+    'aria-label': 'Mis estudios, lista desplazable',
+    tabindex: '0'
+  });
   for (const s of studies) {
     const pending = s.self_uploaded && s.status !== 'publicado';
     list.append(h('button', { class: 'item', onclick: () => go(pending ? 'mi-estudio' : 'estudio', { studyId: s.id }) },
