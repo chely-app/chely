@@ -56,3 +56,12 @@ Este archivo documenta los cambios realizados por distintos colaboradores (human
 
 **No se modificó:** la lógica de pacientes ni la de médicos, las reglas RLS existentes ni las funciones `ia` y `borrar-cuenta`.
 
+
+## 2026-11-01 — Hecho por ChatGPT (navegación del logo)
+**Pedido:** tocar el logo de Chely en cualquier pantalla debe llevar a `https://chely.app/`.
+
+**Archivos:** `index.html`, `app/app.js`.
+- El logo y nombre de la barra superior de la portada enlazan al dominio principal en lugar de desplazarse al inicio.
+- En la demostración del celular, el logo de Chely también enlaza a la página principal.
+- Dentro de la aplicación `/app/`, el logo y nombre vuelven a `https://chely.app/` en vez de cambiar la pantalla interna del usuario.
+- Se conservan la navegación de secciones y los demás enlaces existentes.
