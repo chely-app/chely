@@ -15,7 +15,7 @@ create table public.minor_guardians (
   minor_id uuid not null references public.minor_profiles(id) on delete cascade,
   adult_id uuid not null references public.profiles(id) on delete cascade,
   relationship text not null check (relationship in ('madre','padre','abuela','abuelo','tutor','otro')),
-  access_level text not null check (access_level in ('responsable','consulta')),
+  access_level text not null check (access_level in ('responsable','colaborador')),
   added_at timestamptz not null default now(),
   invited_by uuid references public.profiles(id),
   primary key(minor_id, adult_id)
@@ -27,7 +27,7 @@ create table public.minor_invitations (
   minor_id uuid not null references public.minor_profiles(id) on delete cascade,
   token_hash text not null unique,
   recipient_email text not null check (char_length(recipient_email) between 3 and 254),
-  access_level text not null check (access_level in ('responsable','consulta')),
+  access_level text not null check (access_level in ('responsable','colaborador')),
   created_by uuid not null references public.profiles(id),
   expires_at timestamptz not null default (now() + interval '7 days'),
   used_by uuid references public.profiles(id),
@@ -117,7 +117,7 @@ begin
 end;
 $fn$;
 
-create or replace function public.minor_invite(p_minor uuid,p_email text,p_access_level text default 'consulta')
+create or replace function public.minor_invite(p_minor uuid,p_email text,p_access_level text default 'colaborador')
 returns text language plpgsql security definer set search_path=''
 as $fn$
 declare v_code text;v_email text;
@@ -128,7 +128,7 @@ begin
     where g.minor_id=p_minor and g.adult_id=auth.uid()
       and g.access_level='responsable' and m.birth_date+interval '18 years'>current_date
   ) then raise exception 'No tenés permiso para invitar adultos.'; end if;
-  if p_access_level not in ('responsable','consulta') then raise exception 'Permiso inválido.'; end if;
+  if p_access_level not in ('responsable','colaborador') then raise exception 'Permiso inválido.'; end if;
   v_email:=lower(trim(coalesce(p_email,'')));
   if char_length(v_email) not between 3 and 254 or v_email !~ '^[^ @]+@[^ @]+\.[^ @]+$' then
     raise exception 'Ingresá un correo electrónico válido.';
