@@ -450,3 +450,87 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); outline
 .history-recent-list{margin:.5rem 0}
 .history-recent-list>summary{cursor:pointer;font-weight:700}
 .history-recent-list .stack{margin-top:.75rem}
+
+/* Chely · Mis estudios simple para adultos mayores (2026-11-02).
+   Controles amplios, contenido esencial primero y sin desplazamiento anidado. */
+.chely-studies-header {
+  display:flex; align-items:center; justify-content:space-between;
+  flex-wrap:wrap; gap:.8rem; padding:.15rem 0;
+}
+.chely-studies-header .btn { min-height:3.5rem; }
+.chely-simple-studies { gap:1rem; }
+.chely-simple-studies .study-filter-tabs {
+  display:grid; grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:.65rem;
+}
+.chely-simple-studies .study-filter-tab {
+  width:100%; min-height:3.6rem;
+  padding:.7rem .75rem; font-size:1rem; line-height:1.35;
+  border-width:2px; border-radius:.85rem;
+}
+.chely-simple-studies .study-filter-tab[aria-pressed="true"] {
+  background:var(--accent); color:var(--accent-ink);
+  border-color:var(--accent);
+}
+.chely-search-wrap { width:100%; }
+.chely-study-search {
+  width:100%; min-height:3.4rem; padding:.7rem 1rem;
+  background:var(--bg); color:var(--fg);
+  border:2px solid var(--line); border-radius:.85rem;
+  font:inherit;
+}
+.chely-study-search:focus { border-color:var(--accent); }
+.chely-simple-list {
+  display:grid; gap:.7rem;
+  max-height:none !important;
+  overflow:visible !important;
+}
+.chely-simple-list .chely-study-item {
+  display:grid; gap:.3rem; min-height:5.5rem;
+  padding:1rem 1.05rem;
+  border:2px solid var(--line); border-radius:.9rem;
+  text-align:left; background:var(--bg);
+}
+.chely-study-item-title {
+  font-weight:800; font-size:1.04rem;
+  overflow-wrap:anywhere;
+}
+.chely-study-item-meta { color:var(--muted); font-size:.95rem; }
+.chely-study-item-action { color:var(--accent-strong); font-weight:800; }
+.chely-more-studies { width:100%; min-height:3.3rem; }
+.chely-latest-link {
+  display:grid; grid-template-columns:minmax(0,1fr) auto; gap:.15rem .7rem;
+  align-items:center; padding:.85rem 1rem;
+  background:var(--surface-2); border-radius:.85rem;
+}
+.chely-latest-label { color:var(--muted); font-size:.87rem; grid-column:1; }
+.chely-latest-name { font-weight:800; overflow-wrap:anywhere; grid-column:1; }
+.chely-latest-link .btn { grid-column:2; grid-row:1 / 3; min-height:3.2rem; }
+.chely-utility-section {
+  border:1px solid var(--line); border-radius:1rem;
+  background:var(--surface); padding:0 1rem 1rem; min-width:0;
+}
+.chely-utility-section:not([open]) { padding-bottom:0; }
+.chely-utility-section>summary {
+  min-height:4.5rem; display:flex; flex-direction:column;
+  justify-content:center; gap:.15rem; padding:1rem 2rem 1rem 0;
+  cursor:pointer; position:relative; list-style:none;
+}
+.chely-utility-section>summary::-webkit-details-marker { display:none; }
+.chely-utility-section>summary::after {
+  content:"⌄"; position:absolute; right:0; top:50%;
+  transform:translateY(-50%); color:var(--accent-strong); font-size:1.5rem;
+}
+.chely-utility-section[open]>summary::after { content:"⌃"; }
+.chely-utility-title { font-weight:900; font-size:1.15rem; }
+.chely-utility-description { color:var(--muted); font-size:.9rem; }
+.chely-utility-section>.card {
+  margin-top:.75rem; padding:1rem; gap:.7rem;
+}
+@media(max-width:480px) {
+  .chely-studies-header .btn { width:100%; }
+  .chely-simple-studies .study-filter-tab { font-size:.95rem; padding:.7rem .4rem; }
+  .chely-utility-section { padding-inline:.75rem; }
+  .chely-latest-link { grid-template-columns:minmax(0,1fr); }
+  .chely-latest-link .btn { grid-column:1; grid-row:auto; justify-self:stretch; }
+}
