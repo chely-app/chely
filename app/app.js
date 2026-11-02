@@ -882,6 +882,85 @@ async function patientOwnStudy() {
     await explainStudy();
   } else if (s.file_path && !s.report_text) readBtn.click();
 }
+
+/* Hecho por ChatGPT · 2026-11-02 · Compartir un estudio por documento independiente:
+   no se incluyen credenciales, referencias privadas de Storage ni enlaces al perfil. */
+function studyCopyText(study) {
+  const date = study.study_date ? fmtDate(study.study_date) : 'Sin fecha';
+  return [
+    'CHELY — COPIA DE UN ESTUDIO',
+    'Estudio: ' + (study.title || 'Sin título'),
+    'Fecha del estudio: ' + date,
+    '',
+    'INFORME ESCRITO',
+    String(study.report_text || 'El informe original está en un archivo adjunto no incluido en esta copia.'),
+    '',
+    'EXPLICACIÓN EN PALABRAS CLARAS',
+    String(study.explanation || 'Sin explicación disponible.'),
+    study.doctor_note ? '\nNOTA DEL PROFESIONAL\n' + String(study.doctor_note) : '',
+    '',
+    'Esta copia no concede acceso a Chely ni incluye archivos originales o el perfil del paciente.',
+    'Las explicaciones por inteligencia artificial pueden contener errores y no sustituyen la consulta médica.'
+  ].join('\n');
+}
+async function shareStudyCopy(study) {
+  if (!navigator.share) return toast('Tu navegador no permite enviar archivos. Usá «Guardar como PDF» para compartirlo.');
+  if (!await confirmBox({ title: 'Compartir una copia del estudio',
+    text: 'Se enviarán únicamente el informe escrito y su explicación a la aplicación que elijas. No se incluirá ningún acceso a tu cuenta. Una copia enviada no se puede revocar.',
+    ok: 'Elegir destinatario' })) return;
+  const content = studyCopyText(study);
+  const file = new File([content], 'chely-estudio.txt', { type: 'text/plain;charset=utf-8' });
+  try {
+    if (navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ files: [file], title: study.title || 'Estudio de Chely' });
+    } else {
+      await navigator.share({ title: study.title || 'Estudio de Chely', text: content });
+    }
+  } catch (error) {
+    if (error.name !== 'AbortError') toast('No se pudo compartir. Probá guardar una copia en PDF.');
+  }
+}
+function printStudyCopy(study) {
+  const win = window.open('', '_blank');
+  if (!win) return toast('El navegador bloqueó la ventana. Permití ventanas emergentes para guardar el PDF.');
+  win.opener = null;
+  const d = win.document;
+  d.open();
+  d.write('<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Estudio médico · Chely</title>' +
+    '<meta name="referrer" content="no-referrer"><style>' +
+    'body{font-family:Arial,sans-serif;line-height:1.55;color:#182c2b;max-width:760px;margin:36px auto;padding:0 24px}' +
+    'h1{font-size:24px;color:#087a75}h2{font-size:16px;border-bottom:1px solid #ccc;padding-bottom:5px;margin-top:28px}' +
+    'article{white-space:pre-wrap;overflow-wrap:anywhere}small{color:#555}footer{margin-top:36px;border-top:1px solid #ccc;padding-top:12px}' +
+    '@media print{body{margin:12mm auto;padding:0}h2{break-after:avoid}}' +
+    '</style></head><body></body></html>');
+  d.close();
+  const add = (tag, value, parent=d.body) => {
+    const el = d.createElement(tag);
+    el.textContent = String(value || '');
+    parent.append(el);
+    return el;
+  };
+  add('h1', 'Chely · Copia de un estudio');
+  add('h2', study.title || 'Estudio');
+  add('small', 'Fecha del estudio: ' + (study.study_date ? fmtDate(study.study_date) : 'Sin fecha'));
+  add('h2', 'Informe escrito');
+  add('article', study.report_text || 'El archivo original no está incluido en esta copia. Podés enviarlo por separado.');
+  add('h2', 'Explicación en palabras claras');
+  add('article', study.explanation || 'Sin explicación disponible.');
+  if (study.doctor_note) {
+    add('h2', 'Nota del profesional');
+    add('article', study.doctor_note);
+  }
+  const foot = d.createElement('footer');
+  add('small', 'Copia independiente del perfil Chely. No incluye acceso a la cuenta ni archivos originales. ' +
+    'Una vez enviada, no puede revocarse. La explicación no reemplaza la consulta médica.', foot);
+  d.body.append(foot);
+  win.focus();
+  try { win.print(); } catch {
+    toast('Se abrió la copia. Usá Imprimir → Guardar como PDF.');
+  }
+}
+
 // Lo que ve el paciente. El médico usa la misma vista como vista previa.
 function studyView(s, doctorName, allStudies, preview) {
   const parts = [];
@@ -908,6 +987,15 @@ function studyView(s, doctorName, allStudies, preview) {
     head.append(fb);
   }
   parts.push(head);
+  // Hecho por ChatGPT · 2026-11-02 · El paciente entrega sólo este estudio, nunca acceso a su perfil.
+  if (!preview) parts.push(h('div', { class: 'card' },
+    h('h2', {}, 'Compartir este estudio'),
+    h('p', { class: 'muted small' }, 'Podés mandar una copia de este estudio sin darle acceso a tu cuenta ni al resto de tus informes.'),
+    h('div', { class: 'row' },
+      h('button', { class: 'btn', type: 'button', onclick: () => printStudyCopy(s) }, 'Guardar como PDF'),
+      typeof navigator.share === 'function' ? h('button', { class: 'btn quiet', type: 'button',
+        onclick: () => shareStudyCopy(s) }, 'Enviar copia') : null),
+    h('p', { class: 'hint' }, 'La copia incluye el informe escrito y la explicación, pero no adjunta automáticamente el archivo original. Para enviar el original usá el botón de abajo.')));
   const vals = renderValues(s.lab_values); if (vals) parts.push(vals);
   const evo = renderEvolution(allStudies.filter(x => x.lab_values && x.lab_values.length)); if (evo) parts.push(evo);
   if (s.file_path && !preview) parts.push(h('div', { class: 'card' }, h('h2', {}, 'Informe original'),
@@ -984,8 +1072,14 @@ async function accountView() {
       me.full_name = name.value.trim(); me.birth_date = birth || null; toast('Datos guardados.');
     } finally { saveBtn.disabled = false; }
   });
-  m.append(h('div', { class: 'card' }, h('h1', {}, 'Mi cuenta'), h('p', { class: 'muted' }, me.email),
-    h('div', { class: 'grid2' }, h('label', { class: 'field', for: 'acc-name' }, 'Nombre y apellido', name),
+  // Hecho por ChatGPT · 2026-11-02 · Mostrar el correo de la sesión Supabase como dato de cuenta de solo lectura.
+  const registeredEmail = h('input', { type: 'email', id: 'acc-email', value: state.session?.user?.email || me.email,
+    readonly: true, autocomplete: 'email', 'aria-describedby': 'acc-email-hint' });
+  m.append(h('div', { class: 'card' }, h('h1', {}, 'Mi cuenta'),
+    h('div', { class: 'grid2' },
+      h('label', { class: 'field', for: 'acc-name' }, 'Nombre y apellido', name),
+      h('label', { class: 'field', for: 'acc-email' }, 'Correo electrónico de registro', registeredEmail,
+        h('span', { class: 'hint', id: 'acc-email-hint' }, 'Correo vinculado a esta cuenta. No se modifica desde aquí.')),
       me.role === 'patient' ? h('div', { class: 'field' }, h('label', { for: 'acc-birth', style: 'font-weight:700' }, 'Fecha de nacimiento ', h('span', { class: 'hint' }, '(opcional)')),
         datePicker({ id: 'acc-birth', value: me.birth_date, onChange: iso => { birth = iso; } })) : null),
     h('div', { class: 'row' }, saveBtn)));
