@@ -884,8 +884,11 @@ async function patientStudies() {
     overviewButton.disabled = true;
     showHistoryProgress();
     try {
-      const { data, error } = await pendingOnce(runningHistoryEvaluations, overviewOwner,
+      const evaluationRequest = pendingOnce(runningHistoryEvaluations, overviewOwner,
         () => sb.functions.invoke('resumen-integral', { body: { action: 'evaluar' } }));
+      // pendingOnce registró la solicitud: mostrar la actividad inmediatamente.
+      showHistoryProgress();
+      const { data, error } = await evaluationRequest;
       if (error) throw new Error(await fnError(error));
       if (!data?.explanation) throw new Error('No se recibió la evaluación.');
       overviewStatus.className = 'alert ok';
