@@ -760,11 +760,29 @@ async function patientStudies() {
     ({ data: links } = await sb.from('care_links').select('doctor_id').eq('patient_id', state.me.id).eq('active', true));
   } catch (e) { return showError(e, patientStudies); }
   const names = await namesFor(studies.map(s => s.doctor_id));
+  const { data: latest, error: latestError } = await sb.from('patient_latest_explanations')
+    .select('source_study_id,explanation,glossary,model,generated_at,previous_studies_used,debian_sync_status')
+    .eq('patient_id', state.me.id).maybeSingle();
+  // Si Supabase no responde con la copia, mantener accesible la lista de estudios.
+  if (latestError) console.warn('No se pudo mostrar la ultima explicacion.');
   const m = mainEl();
   m.append(h('div', { class: 'row' }, h('h1', { class: 'grow' }, `Hola, ${state.me.full_name.split(' ')[0] || ''}`)));
   m.append(h('div', { class: 'card' }, h('h2', {}, 'Entendé tu estudio'),
     h('p', {}, 'Subí un análisis o un informe (PDF, foto o texto) y Chely te lo explica en palabras simples.'),
     h('div', { class: 'row' }, h('button', { class: 'btn primary big', onclick: () => go('subir') }, 'Subir un estudio'))));
+  // Hecho por ChatGPT · 2026-11-02 · Ultima explicacion consultable sin gastar IA.
+  if (latest?.explanation) {
+    const origin = studies.find(st => st.id === latest.source_study_id);
+    const content = h('details', { class: 'stack' },
+      h('summary', {}, 'Leer la última explicación guardada'),
+      renderExplanation(latest.explanation, latest.glossary || []));
+    m.append(h('div', { class: 'card' },
+      h('h2', {}, 'Última explicación disponible'),
+      h('p', { class: 'muted small' }, (origin ? 'Estudio: ' + origin.title + ' · ' : '') +
+        'Generada el ' + fmtDateTime(latest.generated_at) + '. ' +
+        'Usó ' + latest.previous_studies_used + ' antecedentes con texto.'),
+      content));
+  }
   const card = h('div', { class: 'card' }, h('h2', {}, 'Mis estudios'));
   if (!studies.length) card.append(h('p', { class: 'muted' }, 'Todavía no tenés estudios. Tocá «Subir un estudio» para empezar.'));
   const list = h('div', { class: 'list' });
@@ -1164,8 +1182,60 @@ function patientUpload() {
     h('p', { class: 'muted' }, 'Elegí la forma más fácil para vos. Chely lee informes escritos, no interpreta imágenes diagnósticas como radiografías o placas.'),
     source.root, meta,
     h('p', { class: 'hint study-file-guidance' },
-      'Con una foto, un PDF o un archivo importado, Chely intentará identificar el nombre y la fecha. Vas a poder confirmarlos antes de recibir la explicación.'),
+      'El archivo se guarda sin usar IA. Cuando toques «Leer el archivo» Chely sugerirá el nombre y la fecha para que los revises antes de explicar.'),
     msg, h('div', { class: 'row' }, btn)));
+
+  // Hecho por ChatGPT · 2026-11-02 · Importacion de muchos PDF.
+  // Cada archivo queda independiente y NO se ejecuta transcripcion ni explicacion.
+  const bulkFiles = h('input', { type: 'file', accept: 'application/pdf,.pdf', multiple: true,
+    id: 'bulk-pdf-files' });
+  const bulkState = h('p', { role: 'status', 'aria-live': 'polite', class: 'hint' },
+    'Podés seleccionar hasta 150 PDF. Cada archivo puede pesar hasta 20 MB.');
+  const bulkButton = h('button', { type: 'button', class: 'btn primary' }, 'Guardar PDF sin usar IA');
+  let activeBatch = false;
+  bulkButton.addEventListener('click', async () => {
+    if (activeBatch) return;
+    const files = Array.from(bulkFiles.files || []);
+    if (!files.length || files.length > 150) return toast('Seleccioná entre 1 y 150 archivos PDF.');
+    if (files.some(file => !studyUploadFileValid(file, 'pdf')))
+      return toast('Cada documento debe ser un PDF válido de hasta 20 MB.');
+    activeBatch = true; bulkButton.disabled = true; bulkFiles.disabled = true;
+    let completed = 0;
+    let failed = 0;
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        bulkState.textContent = 'Guardando PDF ' + (i + 1) + ' de ' + files.length +
+          ': ' + file.name + '. No cierres ni actualices esta pestaña.';
+        try {
+          const { data: st, error } = await sb.from('studies').insert({
+            patient_id: state.me.id, doctor_id: null, self_uploaded: true,
+            title: STUDY_PENDING_TITLE, study_date: todayISO(), report_text: ''
+          }).select('id').single();
+          if (error || !st) throw error || new Error('No se pudo crear el estudio.');
+          // Si falla el guardado, se conserva el registro para recuperarlo;
+          // no reintentar automaticamente ni duplicar un PDF.
+          await archivoDebian('upload', st.id, null, file);
+          completed++;
+        } catch (error) {
+          failed++;
+          console.warn('Fallo una carga PDF del lote:', file.name, errorText(error));
+        }
+      }
+      bulkState.textContent = 'Terminó la carga: ' + completed + ' PDF guardados y ' +
+        failed + ' con errores. No se utilizó IA. ' +
+        (failed ? 'Revisá Mis estudios antes de volver a intentar los fallidos.' :
+          'Podés consultar cada estudio en Mis estudios.');
+      if (completed) toast(completed + ' PDF guardados sin usar IA.');
+    } finally {
+      activeBatch = false; bulkButton.disabled = false; bulkFiles.disabled = false;
+    }
+  });
+  m.append(h('div', { class: 'card' },
+    h('h2', {}, 'Cargar muchos PDF sin usar IA'),
+    h('p', { class: 'muted small' }, 'Para historiales extensos: guardá los archivos primero, y después elegí cuáles leer o explicar. Cada PDF queda con el título y fecha pendientes de confirmar.'),
+    h('label', { class: 'field', for: 'bulk-pdf-files' }, 'Seleccionar archivos PDF', bulkFiles),
+    bulkState, h('div', { class: 'row' }, bulkButton)));
 }
 
 // Estudio propio sin explicar: revisar el texto y pedir la explicación.
