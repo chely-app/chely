@@ -1440,7 +1440,7 @@ async function minorHealthPanel(host, minor) {
       h('label',{class:'field',for:'minor-doc-num'},'Número de documento',num),
       h('label',{class:'field',for:'minor-height'},'Altura (cm)',height),
       h('label',{class:'field',for:'minor-weight'},'Peso (kg)',weight)),
-    h('label',{class:'field',for:'minor-allergy'},'Alergias',
+    h('div',{class:'field'},h('label',{for:'minor-allergy',style:'font-weight:700'},'Alergias'),
       h('div',{class:'row'},allergyInput,
         h('button',{class:'btn quiet sm',type:'button',onclick:addAllergy},'Agregar alergia')),tags),
     h('label',{class:'field',for:'minor-coverage'},'Obra social o prepaga',coverage),
