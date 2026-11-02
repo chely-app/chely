@@ -10,7 +10,7 @@ const MAX_TEXT_CHARS = 460000;
 const MAX_WORDS_PER_REPORT = 12000;
 const MAX_PER_DAY = 3;
 const client = new Anthropic({
-  apiKey: Deno.env.get("ANTHROPIC_API_KEY"), timeout: 170_000, maxRetries: 0
+  apiKey: Deno.env.get("ANTHROPIC_API_KEY"), timeout: 125_000, maxRetries: 0
 });
 
 function asText(value: unknown): string {
@@ -237,7 +237,14 @@ async function launchIfQueued(admin: ReturnType<typeof serviceClient>, userId: s
   job: Job): Promise<Job> {
   if (job.status !== "queued") return job;
   const nextAttempt = job.attempts + 1;
-  if (nextAttempt > 5) return job;
+  if (nextAttempt > 5) {
+    const { data: marked } = await admin.from("patient_history_jobs").update({
+      status:"failed",last_error:"La evaluación superó el límite de reintentos. Contactá soporte.",
+      finished_at:new Date().toISOString(),updated_at:new Date().toISOString()
+    }).eq("patient_id",userId).eq("job_id",job.job_id).eq("status","queued")
+      .select().maybeSingle();
+    return (marked as Job | null) || job;
+  }
   const now = new Date().toISOString();
   const { data: claimed, error } = await admin.from("patient_history_jobs").update({
     status:"running", attempts:nextAttempt, started_at:now,
@@ -304,11 +311,13 @@ Deno.serve(withCors(async (req) => {
       return fail("No hay estudios disponibles para evaluar.",400);
     if (studiesCount>MAX_STUDIES)
       return fail("Demasiados estudios para una única evaluación.",413);
-    const { count: missing,error:missingError }=await supabase.from("studies")
-      .select("id",{count:"exact",head:true}).eq("patient_id",userId)
-      .eq("self_uploaded",true).or("report_text.is.null,report_text.eq.");
-    if (missingError) return fail("No se pudo comprobar el historial.",503);
-    if (missing) return fail("Quedan estudios sin leer. Completalos antes.",409);
+    const { data: reports,error:missingError }=await supabase.from("studies")
+      .select("report_text").eq("patient_id",userId)
+      .eq("self_uploaded",true).limit(MAX_STUDIES+1);
+    if (missingError || !reports || reports.length !== studiesCount)
+      return fail("No se pudo comprobar el historial completo.",503);
+    if (reports.some(s => !asText(s.report_text)))
+      return fail("Quedan estudios sin leer. Completalos antes.",409);
     const newJob={
       patient_id:userId,job_id:crypto.randomUUID(),status:"queued",attempts:0,
       study_count:studiesCount,updated_at:new Date().toISOString(),
