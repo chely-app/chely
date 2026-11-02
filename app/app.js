@@ -594,7 +594,8 @@ async function adminLog() {
   if (error) return showError(error, adminLog);
   const LABEL = { cambiar_rol: 'cambió el tipo de cuenta de' };
   const RL = s => s.replace(/patient/g, 'paciente').replace(/doctor/g, 'médico');
-  mainEl().append(h('div', { class: 'card' }, h('h1', {}, 'Registro del equipo'), h('p', { class: 'muted' }, 'Últimos 50 cambios hechos desde el panel.'),
+  const m = mainEl();
+  m.append(h('div', { class: 'card' }, h('h1', {}, 'Registro del equipo'), h('p', { class: 'muted' }, 'Últimos 50 cambios hechos desde el panel.'),
     !data.length ? h('p', { class: 'muted' }, 'Todavía no hay cambios.')
       : h('div', { class: 'list' }, ...data.map(l => h('div', { class: 'small' }, h('strong', {}, fmtDateTime(l.at)), ' · ', l.admin_email || 'Alguien del equipo', ' ',
         LABEL[l.action] || l.action, ' ', l.target_email || 'una cuenta borrada', l.detail ? ` (${RL(l.detail)})` : '')))));
@@ -603,7 +604,7 @@ async function adminLog() {
   // la función RPC aplica autorización en Supabase y la tabla no permite SELECT al paciente.
   const { data: access, error: accessError } = await sb.rpc('admin_study_access_log');
   if (accessError) {
-    mainEl().append(h('div', { class: 'card' }, h('p', { class: 'alert bad' }, errorText(accessError))));
+    m.append(h('div', { class: 'card' }, h('p', { class: 'alert bad' }, errorText(accessError))));
     return;
   }
   const ACTIONS = { estudio_creado: 'cargó un estudio', estudio_publicado: 'publicó un estudio',
@@ -625,7 +626,7 @@ async function adminLog() {
     }
     auditCard.append(list);
   }
-  mainEl().append(auditCard);
+  m.append(auditCard);
 }
 
 /* ---------------- paciente ---------------- */
