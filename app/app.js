@@ -1077,6 +1077,49 @@ function metadataFromReport(text) {
 }
 
 
+/* Hecho por ChatGPT · 2026-11-02 · Sugerencias gratuitas desde el PDF.
+   Siempre se puede corregir la sugerencia antes de solicitar la IA. */
+function pdfFilenameSuggestion(name) {
+  const base = String(name || '').replace(/\.pdf$/i, '');
+  const iso = base.match(/(?:^|[_.\s-])(20\d{2})[-_.](0?[1-9]|1[012])[-_.]([0-2]?\d|3[01])(?=$|[_.\s-])/);
+  const dmy = base.match(/(?:^|[_.\s-])([0-2]?\d|3[01])[-_.]([01]?\d)[-_.](20\d{2})(?=$|[_.\s-])/);
+  const dateText = iso ? iso[3]+'/'+iso[2]+'/'+iso[1] : dmy ? dmy[1]+'/'+dmy[2]+'/'+dmy[3] : '';
+  const parsed = parseDMY(dateText);
+  const safeDate = parsed && parsed <= todayISO() ? parsed : null;
+  let rawTitle = base.replace(/\d{4}[-_.]\d{1,2}[-_.]\d{1,2}|\d{1,2}[-_.]\d{1,2}[-_.]\d{4}/g, ' ')
+    .replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (/^(scan|escaneo|documento|archivo|image|img|whatsapp|cam|file|pdf|informe)[\s\d-]*$/i.test(rawTitle)
+    || !/[a-záéíóúñ]{3,}/i.test(rawTitle)) rawTitle = '';
+  return { title: rawTitle ? rawTitle.slice(0, 150) : null, date: safeDate };
+}
+async function pdfAutoMetadata(file) {
+  const nameData = pdfFilenameSuggestion(file?.name);
+  let detected = { title: null, date: null }, text = '';
+  let note = 'Chely no pudo leer texto de este PDF. Podrás usar «Leer el archivo» cuando quieras.';
+  try {
+    if (!window.ChelyPdf) throw new Error('No está disponible el lector local.');
+    const local = await window.ChelyPdf.read(file);
+    detected = metadataFromReport(local.header);
+    // No rellenar con títulos genéricos de exportación ni con metadatos dudosos.
+    const pdfTitle = String(local.pdfTitle || '').trim();
+    if (!detected.title && pdfTitle.length > 4 &&
+        !/^(scan|escaneo|documento|untitled|microsoft word|adobe|informe)\b/i.test(pdfTitle))
+      detected.title = pdfTitle.slice(0, 150);
+    text = local.complete && local.hasSelectableText ? local.text : '';
+    note = local.hasSelectableText
+      ? local.complete
+        ? 'Chely obtuvo el texto del PDF en tu navegador, sin gastar IA. Revisá los datos.'
+        : 'Este PDF es extenso: se sugieren datos, pero necesitarás comprobar el informe completo.'
+      : 'El PDF parece escaneado: se guardó sin usar IA. Para leer su texto elegí «Leer el archivo».';
+  } catch {
+    note = 'No se pudo leer el PDF localmente. Quedará guardado sin IA; podés leerlo más adelante.';
+  }
+  return {
+    title: detected.title || nameData.title, date: detected.date || nameData.date,
+    reportText: text, note
+  };
+}
+
 // El paciente sube un estudio propio.
 // Selector de archivo propio: el del navegador muestra sus textos en el idioma del sistema.
 function filePicker(input, buttonLabel = 'Elegir archivo') {
@@ -1143,13 +1186,21 @@ function patientUpload() {
     btn.disabled = true; btn.replaceChildren(h('span', { class: 'spinner' }), ' Guardando…');
     try {
       const autoMetadata = mode !== 'texto';
-      // La base requiere título y fecha mientras se reconoce el documento.
-      // «Estudio por identificar» indica al editor que debe solicitar confirmación.
+      if (autoMetadata && f.type === 'application/pdf') {
+        msg.className = 'alert info';
+        msg.textContent = 'Revisando el PDF en este dispositivo para identificar nombre y fecha, sin IA…';
+      }
+      const guess = autoMetadata && f.type === 'application/pdf'
+        ? await pdfAutoMetadata(f) : null;
+      const detectedBoth = !!(guess?.title && guess?.date);
+      // Nunca colocar una fecha inventada como si fuera la fecha del análisis.
+      // El marcador de título pendiente obliga a revisarlos si falta cualquiera.
       const { data: st, error } = await sb.from('studies').insert({
         patient_id: state.me.id, doctor_id: null, self_uploaded: true,
-        title: autoMetadata ? STUDY_PENDING_TITLE : title.value.trim(),
-        study_date: autoMetadata ? todayISO() : date,
-        report_text: autoMetadata ? '' : pasted
+        title: autoMetadata && !detectedBoth ? STUDY_PENDING_TITLE
+          : autoMetadata ? guess.title : title.value.trim(),
+        study_date: autoMetadata ? (guess?.date || todayISO()) : date,
+        report_text: autoMetadata ? (guess?.reportText || '') : pasted
       }).select('id').single();
       if (error || !st) throw error || new Error('No se pudo crear el estudio.');
       if (autoMetadata) {
@@ -1182,24 +1233,38 @@ function patientUpload() {
     h('p', { class: 'muted' }, 'Elegí la forma más fácil para vos. Chely lee informes escritos, no interpreta imágenes diagnósticas como radiografías o placas.'),
     source.root, meta,
     h('p', { class: 'hint study-file-guidance' },
-      'El archivo se guarda sin usar IA. Cuando toques «Leer el archivo» Chely sugerirá el nombre y la fecha para que los revises antes de explicar.'),
+      'Para PDF con texto, Chely intentará obtener nombre, fecha e informe al subirlo, sin IA. Si el documento es una imagen escaneada, podés usar «Leer el archivo» después.'),
     msg, h('div', { class: 'row' }, btn)));
 
   // Hecho por ChatGPT · 2026-11-02 · Importacion de muchos PDF.
   // Cada archivo queda independiente y NO se ejecuta transcripcion ni explicacion.
   const bulkFiles = h('input', { type: 'file', accept: 'application/pdf,.pdf', multiple: true,
     id: 'bulk-pdf-files' });
+  // webkitdirectory está disponible en Chrome/Edge y la mayoría de navegadores
+  // modernos; filtrar por extensión después de seleccionar la carpeta.
+  const bulkFolder = h('input', { type: 'file', multiple: true, webkitdirectory: true,
+    directory: true, id: 'bulk-pdf-folder' });
+  let selectedBatch = [];
   const bulkState = h('p', { role: 'status', 'aria-live': 'polite', class: 'hint' },
-    'Podés seleccionar hasta 150 PDF. Cada archivo puede pesar hasta 20 MB.');
+    'Elegí varios PDF o una carpeta. Hasta 150 documentos, de máximo 20 MB cada uno.');
+  const chooseBatch = files => {
+    const all = Array.from(files || []);
+    selectedBatch = all.filter(file => /\.pdf$/i.test(file.name));
+    bulkState.textContent = selectedBatch.length + ' PDF seleccionados' +
+      (all.length > selectedBatch.length ? ' (' + (all.length-selectedBatch.length) + ' archivos no PDF omitidos)' : '') +
+      '. Al guardar, Chely intentará obtener nombre, fecha y texto del PDF sin IA.';
+  };
+  bulkFiles.addEventListener('change', () => { bulkFolder.value = ''; chooseBatch(bulkFiles.files); });
+  bulkFolder.addEventListener('change', () => { bulkFiles.value = ''; chooseBatch(bulkFolder.files); });
   const bulkButton = h('button', { type: 'button', class: 'btn primary' }, 'Guardar PDF sin usar IA');
   let activeBatch = false;
   bulkButton.addEventListener('click', async () => {
     if (activeBatch) return;
-    const files = Array.from(bulkFiles.files || []);
+    const files = selectedBatch.slice();
     if (!files.length || files.length > 150) return toast('Seleccioná entre 1 y 150 archivos PDF.');
     if (files.some(file => !studyUploadFileValid(file, 'pdf')))
       return toast('Cada documento debe ser un PDF válido de hasta 20 MB.');
-    activeBatch = true; bulkButton.disabled = true; bulkFiles.disabled = true;
+    activeBatch = true; bulkButton.disabled = true; bulkFiles.disabled = true; bulkFolder.disabled = true;
     let completed = 0;
     let failed = 0;
     let temporaryFallback = false;
@@ -1209,9 +1274,14 @@ function patientUpload() {
         bulkState.textContent = 'Guardando PDF ' + (i + 1) + ' de ' + files.length +
           ': ' + file.name + '. No cierres ni actualices esta pestaña.';
         try {
+          bulkState.textContent = 'Leyendo PDF ' + (i + 1) + ' de ' + files.length +
+            ': ' + file.name + ' (sin IA)…';
+          const guess = await pdfAutoMetadata(file);
+          const detectedBoth = !!(guess.title && guess.date);
           const { data: st, error } = await sb.from('studies').insert({
             patient_id: state.me.id, doctor_id: null, self_uploaded: true,
-            title: STUDY_PENDING_TITLE, study_date: todayISO(), report_text: ''
+            title: detectedBoth ? guess.title : STUDY_PENDING_TITLE,
+            study_date: guess.date || todayISO(), report_text: guess.reportText || ''
           }).select('id').single();
           if (error || !st) throw error || new Error('No se pudo crear el estudio.');
           // Si falla el guardado, se conserva el registro para recuperarlo;
@@ -1238,14 +1308,18 @@ function patientUpload() {
           'Podés consultar cada estudio en Mis estudios.');
       if (completed) toast(completed + ' PDF guardados sin usar IA.');
     } finally {
-      activeBatch = false; bulkButton.disabled = false; bulkFiles.disabled = false;
+      activeBatch = false; bulkButton.disabled = false; bulkFiles.disabled = false; bulkFolder.disabled = false;
     }
   });
-  m.append(h('div', { class: 'card' },
-    h('h2', {}, 'Cargar muchos PDF sin usar IA'),
-    h('p', { class: 'muted small' }, 'Para historiales extensos: guardá los archivos primero, y después elegí cuáles leer o explicar. Cada PDF queda con el título y fecha pendientes de confirmar.'),
-    h('label', { class: 'field', for: 'bulk-pdf-files' }, 'Seleccionar archivos PDF', bulkFiles),
-    bulkState, h('div', { class: 'row' }, bulkButton)));
+  const batchCard = h('div', { class: 'card' },
+    h('h2', {}, 'Subir varios PDF o una carpeta'),
+    h('p', { class: 'muted small' }, 'Chely intentará obtener el nombre, fecha y texto del archivo en tu dispositivo, sin usar IA. Los PDF escaneados pueden requerir lectura posterior. Revisá siempre los datos detectados.'),
+    h('div', { class: 'grid2' },
+      h('label', { class: 'field', for: 'bulk-pdf-files' }, 'Elegir varios PDF', bulkFiles),
+      h('label', { class: 'field', for: 'bulk-pdf-folder' }, 'Elegir una carpeta completa', bulkFolder)),
+    bulkState, h('div', { class: 'row' }, bulkButton));
+  // Mostrar el lote antes del formulario individual para que sea fácil encontrarlo.
+  m.insertBefore(batchCard, m.children[1] || null);
 }
 
 // Estudio propio sin explicar: revisar el texto y pedir la explicación.
@@ -1262,9 +1336,16 @@ async function patientOwnStudy() {
   // cuando se pasa a otra sección, sólo en memoria de la pestaña.
   const editKey = 'self:' + s.id;
   const savedDraft = studyEditDrafts.get(editKey);
+  const suggestion = s.title === STUDY_PENDING_TITLE
+    ? metadataFromReport(s.report_text || '') : null;
+  const fallback = s.title === STUDY_PENDING_TITLE
+    ? pdfFilenameSuggestion(s.file_name || '') : null;
   const editDraft = savedDraft || { report: s.report_text || '',
-    title: s.title === STUDY_PENDING_TITLE ? '' : s.title,
-    date: s.title === STUDY_PENDING_TITLE ? null : s.study_date };
+    title: s.title === STUDY_PENDING_TITLE
+      ? (suggestion?.title || fallback?.title || '') : s.title,
+    date: s.title === STUDY_PENDING_TITLE
+      ? (suggestion?.date || fallback?.date || (s.study_date !== todayISO() ? s.study_date : null))
+      : s.study_date };
   studyEditDrafts.set(editKey, editDraft);
   const report = h('textarea', { id: 'own-report', class: 'report' }, editDraft.report);
   report.addEventListener('input', () => { editDraft.report = report.value; });
@@ -1279,7 +1360,7 @@ async function patientOwnStudy() {
   const metaPicker = datePicker({ id: 'own-date', value: selectedDate,
     onChange: iso => { selectedDate = iso; editDraft.date = iso; } });
   const metadataNote = h('p', { class: 'hint', role: 'status' },
-    pending ? 'Chely está leyendo el informe para sugerir el nombre y la fecha. Revisalos antes de continuar.'
+    pending ? 'Chely intentó reconocer los datos del PDF sin gastar IA. Revisá el nombre y la fecha antes de guardar.'
       : 'Podés corregir el nombre y la fecha antes de explicar el estudio.');
   const saveMetadata = async () => {
     const name = metaTitle.value.trim();
