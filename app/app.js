@@ -2323,13 +2323,26 @@ async function doctorStudy() {
   if (error || !s) { toast('No encontramos ese estudio.'); return go('paciente', { patientId: state.patientId }); }
   const { data: p } = await sb.from('profiles').select('full_name, birth_date').eq('id', s.patient_id).maybeSingle();
   if (s.status === 'publicado') sb.rpc('log_study_access', { p_study: s.id, p_action: 'visto_por_medico' });
-  const ed = { ...s, glossary: [...(s.glossary || [])], lab_values: [...(s.lab_values || [])] };
-  let dirty = false, previewing = false;
-  const markDirty = () => { dirty = true; status.textContent = 'Cambios sin guardar'; status.className = 'pill warn'; };
+  // Hecho por ChatGPT · 2026-11-02 · Conservar cambios médicos no guardados
+  // sólo en memoria al cambiar de sección; nunca en localStorage.
+  const draftKey='doctor-edit:'+s.id;
+  const previous=studyEditDrafts.get(draftKey);
+  const ed = { ...s, ...(previous||{}),
+    glossary: (previous?.glossary||s.glossary||[]).map(x=>({...x})),
+    lab_values: (previous?.lab_values||s.lab_values||[]).map(x=>({...x})) };
+  let dirty = !!previous, previewing = false;
+  const markDirty = () => {
+    dirty = true;
+    studyEditDrafts.set(draftKey,{title:ed.title,study_date:ed.study_date,
+      report_text:ed.report_text,explanation:ed.explanation,doctor_note:ed.doctor_note,
+      glossary:ed.glossary.map(x=>({...x})),lab_values:ed.lab_values.map(x=>({...x}))});
+    status.textContent = 'Cambios sin guardar'; status.className = 'pill warn';
+  };
   const m = mainEl();
-  const status = h('span', { class: 'pill ' + (s.status === 'publicado' ? 'ok' : 'warn') }, s.status === 'publicado' ? 'Publicado' : 'Borrador');
+  const status = h('span', { class: 'pill ' + (dirty ? 'warn' : s.status === 'publicado' ? 'ok' : 'warn') },
+    dirty ? 'Cambios sin guardar (conservados en esta pestaña)' : s.status === 'publicado' ? 'Publicado' : 'Borrador');
   const back = async () => {
-    if (dirty && !await confirmBox({ title: 'Hay cambios sin guardar', text: 'Si salís ahora, se pierden.', ok: 'Salir sin guardar', danger: true })) return;
+    if(dirty)toast('Tus cambios siguen disponibles al volver a este estudio.');
     go('paciente', { patientId: s.patient_id });
   };
   m.append(h('div', { class: 'row' }, h('button', { class: 'btn quiet sm', onclick: back }, '‹ ' + ((p && p.full_name) || 'Paciente'))));
@@ -2342,7 +2355,8 @@ async function doctorStudy() {
     const { data, error: e } = await sb.from('studies').update(row).eq('id', s.id).select('*').single();
     if (e) { toast(errorText(e)); return false; }
     Object.assign(s, data); Object.assign(ed, data, { glossary: [...(data.glossary || [])], lab_values: [...(data.lab_values || [])] });
-    dirty = false; status.textContent = s.status === 'publicado' ? 'Publicado' : 'Borrador'; status.className = 'pill ' + (s.status === 'publicado' ? 'ok' : 'warn');
+    dirty = false;studyEditDrafts.delete(draftKey);
+    status.textContent = s.status === 'publicado' ? 'Publicado' : 'Borrador'; status.className = 'pill ' + (s.status === 'publicado' ? 'ok' : 'warn');
     return true;
   }
   async function callAI(action, label, btn) {
@@ -2456,7 +2470,8 @@ async function doctorStudy() {
     }
     const { error: e } = await sb.from('studies').delete().eq('id', s.id);
     if (e) return toast(errorText(e));
-    dirty = false; toast('Borrador borrado.'); go('paciente', { patientId: s.patient_id });
+    dirty = false;studyEditDrafts.delete(draftKey);
+    toast('Borrador borrado.'); go('paciente', { patientId: s.patient_id });
   } }, 'Borrar borrador'));
   const FB = { si: 'Respondió que lo entendió.', mas_o_menos: 'Respondió que lo entendió más o menos.', no: 'Respondió que no lo entendió.' };
   m.append(h('div', { class: 'card' }, h('h2', {}, s.status === 'publicado' ? 'Publicado' : 'Publicar'),
