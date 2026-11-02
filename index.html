@@ -301,6 +301,58 @@ body.sectioned section[data-section-panel] { padding-block: 2.6rem 3.2rem; scrol
   .section-link { font-size: .86rem; padding: .65rem .45rem; }
   .section-link:last-child { grid-column: span 2; }
 }
+
+/* Chely · 2026-11-02 · Menos ruido inicial y redes visibles. */
+.hero { padding-block: clamp(1.4rem, 3vw, 2.3rem); }
+.hero .copy { gap:.85rem; }
+.hero .lead { max-width:50ch; }
+.chely-social {
+ display:flex;flex-wrap:wrap;align-items:center;gap:.4rem .55rem;min-width:0;
+}
+.chely-social-label {
+ font-weight:700;color:var(--muted);font-size:.84rem;margin-right:.25rem;
+}
+.chely-social-item {
+ display:inline-flex;align-items:center;gap:.4rem;
+ padding:.3rem .48rem;border:1px solid var(--line);
+ border-radius:999px;color:var(--muted);font-size:.83rem;font-weight:700;
+ background:var(--paper);white-space:nowrap;
+}
+a.chely-social-item { color:var(--fg);text-decoration:none; }
+a.chely-social-item:hover,a.chely-social-item:focus-visible {
+ color:var(--teal-deep);background:var(--tint);border-color:var(--teal);
+}
+.chely-social-icon {
+ display:inline-flex;align-items:center;justify-content:center;
+ min-width:1.2rem;height:1.2rem;color:var(--teal);
+ font-family:Arial,sans-serif;font-weight:900;font-size:1.13rem;
+}
+.chely-social-hero { margin-top:.15rem; }
+.chely-social-footer { margin-top:.3rem; }
+.chely-footer-social { align-items:center;justify-content:space-between; }
+.chely-footer-info a { color:inherit; }
+.section-picker {padding-block:.5rem;}
+.section-picker .in {gap:0;}
+.chely-explore-details {width:100%;border:0;}
+.chely-explore-details summary {
+ list-style:none;cursor:pointer;min-height:3.2rem;
+ display:flex;gap:.2rem .9rem;align-items:center;flex-wrap:wrap;
+ padding:.55rem 0;color:var(--fg);
+}
+.chely-explore-details summary::-webkit-details-marker {display:none;}
+.chely-explore-details summary::before {
+ content:"+";font-size:1.3rem;color:var(--teal);font-weight:900;
+}
+.chely-explore-details[open] summary::before{content:"−";}
+.chely-explore-details summary>span {font-weight:800;}
+.chely-explore-details summary>small {color:var(--muted);font-size:.82rem;}
+.chely-explore-details .section-links {padding:.3rem 0 1rem;}
+@media(max-width:650px){
+ .chely-social-item{font-size:.76rem;padding:.35rem .45rem;}
+ .chely-social-label{flex-basis:100%;margin-bottom:0;}
+ .chely-explore-details summary>small{flex-basis:100%;padding-left:1.6rem;}
+ .chely-explore-details .section-links{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));}
+}
 </style>
 </head>
 <body>
@@ -313,9 +365,8 @@ body.sectioned section[data-section-panel] { padding-block: 2.6rem 3.2rem; scrol
     <a class="logo" href="https://chely.app/" aria-label="Chely, ir a la página principal"><img alt="" src="data:image/webp;base64,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"><b>Chely</b></a>
     <a class="l" href="#como">Cómo funciona</a>
     <a class="l" href="#demo">Ver ejemplo</a>
-    <a class="l" href="#piloto">El piloto</a>
-    <a class="btn sm" href="#sumate">Sumate</a>
-    <a class="btn primary sm" href="app/">Ingresar a mi cuenta</a>
+    <a class="l" href="#redes">Redes sociales</a>
+    <a class="btn primary sm" href="app/">Entrar</a>
   </div>
 </nav>
 
@@ -324,15 +375,23 @@ body.sectioned section[data-section-panel] { padding-block: 2.6rem 3.2rem; scrol
 <header class="band hero" id="inicio">
   <div class="in">
     <div class="copy">
-      <span class="eyebrow">Prueba piloto · Informes médicos explicados</span>
+      <span class="eyebrow">Chely · Tus estudios, más fáciles de entender</span>
       <!-- Hecho por ChatGPT · 2026-11-01 · Lema actualizado por solicitud del equipo. -->
       <h1>Tus estudios médicos, <em>en palabras sencillas</em></h1>
-      <p class="lead">¿Recibiste un estudio médico y no entendés qué dice? Subí el PDF, una foto o el texto. Chely te ayuda a comprender los resultados y a preparar preguntas para tu médico.</p><p class="small muted">Estamos en prueba piloto y podés participar gratis. Algunas funciones tienen límites de uso.</p>
+      <p class="lead">Subí tu estudio médico y entendé sus resultados en palabras sencillas. Chely te ayuda a preparar preguntas para tu médico.</p>
       <div class="ctas">
-        <a class="btn primary" href="app/#crear">Crear mi cuenta gratis</a>
-        <a class="btn" href="#demo">Mirá un ejemplo</a>
+        <a class="btn primary" href="app/#crear">Empezar gratis</a>
+        <a class="btn" href="#demo">Ver un ejemplo</a>
       </div>
-      <p class="small muted">Chely explica, no diagnostica. En esta prueba la explicación la hace una inteligencia artificial y no la revisa un médico: consultá siempre con el tuyo.</p>
+      <p class="small muted">Chely utiliza IA para explicar, no para diagnosticar. Consultá siempre con tu médico.</p>
+      <div class="chely-social chely-social-hero" id="redes" aria-label="Redes sociales de Chely">
+        <span class="chely-social-label">Encontranos en</span>
+        <span class="chely-social-item" data-social="instagram" aria-label="Instagram" title="Instagram: enlace a confirmar"><span class="chely-social-icon" aria-hidden="true">◎</span><span>Instagram</span></span>
+        <span class="chely-social-item" data-social="facebook" aria-label="Facebook" title="Facebook: enlace a confirmar"><span class="chely-social-icon" aria-hidden="true">f</span><span>Facebook</span></span>
+        <span class="chely-social-item" data-social="tiktok" aria-label="TikTok" title="TikTok: enlace a confirmar"><span class="chely-social-icon" aria-hidden="true">♪</span><span>TikTok</span></span>
+        <span class="chely-social-item" data-social="youtube" aria-label="YouTube" title="YouTube: enlace a confirmar"><span class="chely-social-icon" aria-hidden="true">▶</span><span>YouTube</span></span>
+        <span class="chely-social-item" data-social="linkedin" aria-label="LinkedIn" title="LinkedIn: enlace a confirmar"><span class="chely-social-icon" aria-hidden="true">in</span><span>LinkedIn</span></span>
+      </div>
     </div>
     <div class="translate" aria-live="polite">
       <div class="switcher" role="group" aria-label="Elegir ejemplo">
@@ -353,11 +412,8 @@ body.sectioned section[data-section-panel] { padding-block: 2.6rem 3.2rem; scrol
 <!-- Hecho por ChatGPT · 2026-11-01 · Secciones para disminuir scroll; mantener el HTML original accesible. -->
 <nav class="section-picker band" id="explorar" aria-label="Secciones de Chely">
   <div class="in">
-    <div style="display:grid;gap:.35rem">
-      <span class="eyebrow">Descubrí Chely</span>
-      <h2>Conocé Chely paso a paso</h2>
-      <p>Podés empezar por ver un ejemplo o conocer cómo se protegen tus datos.</p>
-    </div>
+    <details class="chely-explore-details">
+      <summary><span>Conocé más sobre Chely</span><small>Cómo funciona, privacidad, preguntas frecuentes y más</small></summary>
     <div class="section-links">
       <a class="section-link" data-section="como" href="#como">Cómo funciona</a>
       <a class="section-link" data-section="demo" href="#demo">Probá el ejemplo</a>
@@ -367,6 +423,7 @@ body.sectioned section[data-section-panel] { padding-block: 2.6rem 3.2rem; scrol
       <a class="section-link" data-section="preguntas" href="#preguntas">Preguntas frecuentes</a>
       <a class="section-link" data-section="sumate" href="#sumate">Participar</a>
     </div>
+    </details>
   </div>
 </nav>
 
@@ -501,13 +558,57 @@ body.sectioned section[data-section-panel] { padding-block: 2.6rem 3.2rem; scrol
 </main>
 <!-- Hecho por ChatGPT · 2026-11-01 · Lema actualizado también en el pie de página. -->
 <footer>
-  <div class="in"><span>Chely · Tus estudios, explicados en palabras claras · Prueba piloto</span><span>Contacto: <span style="user-select:all">info@chely.app</span></span><span>Presentación con ejemplos ficticios. Chely no reemplaza la consulta médica.</span></div>
+  <div class="in chely-footer-info"><span>Chely · Tus estudios médicos, en palabras sencillas</span>
+  <span>Contacto: <a href="mailto:info@chely.app">info@chely.app</a></span>
+  <span>Ejemplos ficticios. Chely no reemplaza la consulta médica.</span></div>
+  <div class="in chely-footer-social"><span class="chely-social-label">Redes sociales</span><div class="chely-social chely-social-footer"  aria-label="Redes sociales de Chely">
+        
+        <span class="chely-social-item" data-social="instagram" aria-label="Instagram" title="Instagram: enlace a confirmar"><span class="chely-social-icon" aria-hidden="true">◎</span><span>Instagram</span></span>
+        <span class="chely-social-item" data-social="facebook" aria-label="Facebook" title="Facebook: enlace a confirmar"><span class="chely-social-icon" aria-hidden="true">f</span><span>Facebook</span></span>
+        <span class="chely-social-item" data-social="tiktok" aria-label="TikTok" title="TikTok: enlace a confirmar"><span class="chely-social-icon" aria-hidden="true">♪</span><span>TikTok</span></span>
+        <span class="chely-social-item" data-social="youtube" aria-label="YouTube" title="YouTube: enlace a confirmar"><span class="chely-social-icon" aria-hidden="true">▶</span><span>YouTube</span></span>
+        <span class="chely-social-item" data-social="linkedin" aria-label="LinkedIn" title="LinkedIn: enlace a confirmar"><span class="chely-social-icon" aria-hidden="true">in</span><span>LinkedIn</span></span>
+      </div></div>
 </footer>
 
 <script>
 'use strict';
 // Contacto del equipo: completar antes de compartir (email o WhatsApp).
 const CONTACT = 'info@chely.app';
+// Agregar aquí las URL oficiales cuando se confirmen. Nunca apuntar
+// los botones a cuentas de otras personas ni a la página general del sitio.
+const CHELY_SOCIAL_URLS = Object.freeze({
+  instagram: '',
+  facebook: '',
+  tiktok: '',
+  youtube: '',
+  linkedin: ''
+});
+document.querySelectorAll('[data-social]').forEach(item => {
+  const network = item.dataset.social;
+  const url = CHELY_SOCIAL_URLS[network];
+  if (!url) return;
+  try {
+    const parsed = new URL(url);
+    const domains = {
+      instagram: ['instagram.com'],
+      facebook: ['facebook.com', 'fb.com'],
+      tiktok: ['tiktok.com'],
+      youtube: ['youtube.com', 'youtu.be'],
+      linkedin: ['linkedin.com']
+    };
+    if (parsed.protocol !== 'https:' ||
+        !domains[network].some(d => parsed.hostname === d || parsed.hostname.endsWith('.' + d)))
+      return;
+    const link = document.createElement('a');
+    link.href = parsed.href;
+    link.target = '_blank'; link.rel = 'noopener noreferrer';
+    link.className = item.className;
+    link.setAttribute('aria-label', 'Chely en ' + network);
+    link.innerHTML = item.innerHTML;
+    item.replaceWith(link);
+  } catch { /* Si es incorrecta, no crear un enlace inseguro. */ }
+});
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
