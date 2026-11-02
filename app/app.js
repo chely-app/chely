@@ -925,8 +925,13 @@ async function patientStudies() {
       renderExplanation(overall.explanation)));
   }
   const overviewStatus = h('p', { class: 'hint', role: 'status', 'aria-live': 'polite' });
+  // Si todas las fichas están clasificadas, un fallo de consolidación
+  // NO vuelve a enviar los documentos originales a la IA.
+  const justFinalRetry = storedJob?.status === 'failed' &&
+    summaryCounts.pending === 0 && summaryCounts.done > 0;
   const overviewButton = h('button', { type: 'button', class: 'btn primary' },
-    overall?.explanation ? 'Actualizar evaluación integral' : 'Evaluar todo mi historial');
+    justFinalRetry ? 'Reintentar solo la conclusión'
+      : overall?.explanation ? 'Actualizar evaluación integral' : 'Evaluar todo mi historial');
   const evalProgress = h('div', { class: 'history-eval-progress', hidden: true },
     h('div', { class: 'row' },
       h('span', { class: 'spinner', 'aria-hidden': 'true' }),
@@ -961,9 +966,14 @@ async function patientStudies() {
     ' informes por leer. Preparalos antes de pedir la evaluación integral.';
   else if (storedJob?.status === 'failed') {
     overviewStatus.className = 'alert bad';
-    overviewStatus.textContent = 'El último intento no pudo completarse: ' +
-      (storedJob.last_error || 'Error del servidor.') +
-      ' Podés solicitar un nuevo intento sin volver a subir los estudios.';
+    overviewStatus.textContent = justFinalRetry
+      ? 'Falló la conclusión general, pero los ' + summaryCounts.done +
+        ' informes analizados siguen guardados. Al reintentar, Chely utilizará esas fichas sin volver a leerlas. ' +
+        (summaryCounts.review ? 'La conclusión será parcial: hay ' +
+          summaryCounts.review + ' informes para revisión manual.' : '')
+      : 'El último intento no pudo completarse: ' +
+        (storedJob.last_error || 'Error del servidor.') +
+        ' Los avances completados permanecen guardados.';
   } else if (storedJob?.status === 'done' && !overall) {
     overviewStatus.className = 'alert warn';
     overviewStatus.textContent = 'La evaluación guardada ya no está disponible porque cambió el historial. Podés generar una actualizada.';
@@ -973,9 +983,15 @@ async function patientStudies() {
         runningHistoryEvaluations.has(overviewOwner))
       return toast('La evaluación ya está en proceso. Se guardará automáticamente.');
     const allowed = await confirmBox({
-      title: 'Evaluar todo mi historial',
-      text: 'Chely enviará los informes escritos y los datos declarados a la IA para una evaluación cronológica. La solicitud quedará guardada en el servidor y no dependerá de mantener abierto el navegador. Puede tener costo.',
-      ok: 'Solicitar evaluación'
+      title: justFinalRetry ? 'Reintentar la conclusión guardada' : 'Evaluar todo mi historial',
+      text: justFinalRetry
+        ? 'Los ' + summaryCounts.done +
+          ' análisis individuales ya están guardados. Chely generará nuevamente solo la conclusión general, sin repetir esas lecturas. ' +
+          (summaryCounts.review ? 'Hay ' + summaryCounts.review +
+            ' documentos apartados; la evaluación será parcial y deberá advertirlo. ' : '') +
+          'Este paso utiliza una consulta de IA y puede generar un costo.'
+        : 'Chely enviará los informes escritos y los datos declarados a la IA para una evaluación cronológica. La solicitud quedará guardada en el servidor y no dependerá de mantener abierto el navegador. Puede tener costo.',
+      ok: justFinalRetry ? 'Reintentar conclusión' : 'Solicitar evaluación'
     });
     if (!allowed || historyEvaluationProgress.has(overviewOwner) ||
         runningHistoryEvaluations.has(overviewOwner)) return;
