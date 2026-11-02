@@ -247,3 +247,6 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); outline
   .study-method-icon { font-size: 1.55rem; }
   .study-source-panel { padding: .75rem; }
 }
+
+/* Hecho por ChatGPT · 2026-11-02 · Opciones claras para cámara y galería. */
+.study-photo-options { display: grid; gap: .8rem; grid-template-columns: repeat(auto-fit,minmax(13rem,1fr)); }
