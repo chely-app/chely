@@ -505,6 +505,7 @@ function viewConsent() {
 }
 
 /* ---------------- panel del equipo ---------------- */
+// Hecho por Claude · 2026-11-02 · panel de control del equipo (resumen, cuentas, cambio de rol y registro).
 // Precios de Claude Haiku 5.5 por millón de tokens, para estimar el gasto.
 const AI_PRICE = { input: 0.10, output: 0.50 };
 const ROLE_LABEL = { patient: 'Paciente', doctor: 'Médico', admin: 'Equipo' };

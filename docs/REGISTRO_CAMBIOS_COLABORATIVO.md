@@ -43,3 +43,16 @@ Este archivo documenta los cambios realizados por distintos colaboradores (human
 - `public.is_doctor(uuid)` y `public.is_linked(uuid,uuid)` pasan a `SECURITY INVOKER`, manteniendo el acceso sujeto a las políticas RLS existentes.
 - Las siete funciones con elevación de privilegios necesaria permanecen documentadas y requieren pruebas de roles al actualizarse.
 - La protección de contraseñas filtradas requiere activación manual si el plan Supabase lo permite.
+
+## 2026-11-02 — Hecho por Claude
+**Objetivo:** panel de control para el equipo de Chely: ver pacientes y médicos y administrar las cuentas.
+
+**Archivos:** `supabase/migrations/20261102020000_panel_de_control.sql`, `app/app.js`, `app/styles.css`, `tests/db/*`, `tests/ui/*`, `INSTRUCCIONES.md`.
+- Nuevo rol `admin` (cuenta del equipo) y tabla `admin_log`, sin políticas: solo se usa desde funciones.
+- Funciones `admin_overview`, `admin_users`, `admin_set_role` y `admin_recent_log`. Todas comprueban `is_admin()` y no devuelven texto de estudios ni explicaciones.
+- En la app, el rol `admin` ve **Panel** (resumen y cuentas, con cambio paciente ↔ médico), **Registro** y **Mi cuenta**, con su propio compromiso de confidencialidad (`equipo-v1`).
+- Migración aplicada en Supabase como `panel_de_control` (después de `security_rpc_roles_20261102`). Comprobado en la base real con una prueba que se deshace sola.
+- Pruebas: 13 nuevas en la base y 3 pasos nuevos en el recorrido del navegador. Se ajustaron dos pruebas existentes al cambio de ChatGPT que retiró `invitation_info` (ahora se espera que esté bloqueada y se busca el texto nuevo de la invitación).
+
+**No se modificó:** la lógica de pacientes ni la de médicos, las reglas RLS existentes ni las funciones `ia` y `borrar-cuenta`.
+
