@@ -1675,7 +1675,7 @@ async function minorHealthPanel(host, minor) {
     h('p',{class:'muted small'},'Datos propios del menor. Los adultos vinculados pueden consultarlos y actualizarlos.'));
   host.append(card);
   const {data,error}=await sb.from('minor_health_details')
-    .select('document_type,document_number,height_cm,weight_kg,allergies,health_coverage')
+    .select('document_type,document_number,height_cm,weight_kg,allergies,health_coverage,health_coverages')
     .eq('minor_id',minor.id).maybeSingle();
   if(error)return card.append(h('div',{class:'alert bad'},errorText(error)));
   const type=h('select',{id:'minor-doc-type'},
@@ -1688,8 +1688,7 @@ async function minorHealthPanel(host, minor) {
     placeholder:'Ej.: 110',value:data?.height_cm==null?'':String(data.height_cm)});
   const weight=h('input',{id:'minor-weight',type:'number',min:1,max:400,step:'.1',
     placeholder:'Ej.: 18',value:data?.weight_kg==null?'':String(data.weight_kg)});
-  const coverage=h('input',{id:'minor-coverage',type:'text',maxlength:160,
-    list:'health-coverage-options',placeholder:'Obra social o prepaga',value:data?.health_coverage||''});
+  const coverageEditor=healthCoveragesEditor('minor',data?.health_coverages,data?.health_coverage);
   const allergyInput=h('input',{id:'minor-allergy',type:'text',maxlength:120,
     placeholder:'Ej.: penicilina'});
   const allergies=Array.isArray(data?.allergies)?[...data.allergies]:[];
@@ -1721,11 +1720,14 @@ async function minorHealthPanel(host, minor) {
     if(cm!==null&&(!Number.isFinite(cm)||cm<40||cm>250))return toast('Revisá la altura.');
     if(kg!==null&&(!Number.isFinite(kg)||kg<1||kg>400))return toast('Revisá el peso.');
     if(allergies.join('|').length>2500)return toast('La lista de alergias es demasiado larga.');
+    const coverages=coverageEditor.values();
+    if(!coverages)return;
     save.disabled=true;
     try{
       const {error:e}=await sb.from('minor_health_details').upsert({
         minor_id:minor.id,document_type:dt||null,document_number:digits||null,
-        height_cm:cm,weight_kg:kg,allergies,health_coverage:coverage.value.trim()||null,
+        height_cm:cm,weight_kg:kg,allergies,
+        health_coverages:coverages,health_coverage:coverages[0]||null,
         updated_by:state.me.id,updated_at:new Date().toISOString()
       },{onConflict:'minor_id'});
       if(e)toast(errorText(e));else toast('Datos del menor guardados.');
@@ -1740,8 +1742,8 @@ async function minorHealthPanel(host, minor) {
     h('div',{class:'field'},h('label',{for:'minor-allergy',style:'font-weight:700'},'Alergias'),
       h('div',{class:'row'},allergyInput,
         h('button',{class:'btn quiet sm',type:'button',onclick:addAllergy},'Agregar alergia')),tags),
-    h('label',{class:'field',for:'minor-coverage'},'Obra social o prepaga',coverage),
-    healthCoverageSuggestions(),h('div',{class:'row'},save));
+    coverageEditor.root,
+    h('div',{class:'row'},save));
 }
 
 
