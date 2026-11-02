@@ -224,7 +224,15 @@ async function evaluateWithIsolation(admin:ReturnType<typeof serviceClient>,job:
 async function buildFinal(items:Item[],studies:Study[],
   health:Record<string,unknown>,lastDate:string|null):Promise<string>{
   const byId=new Map(studies.map(s=>[s.id,s]));
-  const included=items.filter(i=>i.status==="done" && i.summary).map((i,n)=>{
+  const chronological=items.filter(i=>i.status==="done" && i.summary)
+    .sort((a,b)=>{
+      const dateA=byId.get(a.study_id);
+      const dateB=byId.get(b.study_id);
+      const aDate=dateA?.title==="Estudio por identificar"?null:dateA?.study_date;
+      const bDate=dateB?.title==="Estudio por identificar"?null:dateB?.study_date;
+      return (aDate||"9999-99-99").localeCompare(bDate||"9999-99-99");
+    });
+  const included=chronological.map((i,n)=>{
     const s=byId.get(i.study_id);
     return {ref:"E"+String(n+1).padStart(3,"0"),
       title:s?.title==="Estudio por identificar"?"Tipo sin confirmar":s?.title || "Informe",
