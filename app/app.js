@@ -872,8 +872,9 @@ async function patientStudies() {
         // Si la lectura es incompleta, no hacerla pasar por un antecedente fiable.
         if (text.length < 25 || text.length > 60000)
           throw new Error('No se obtuvo un texto completo y válido. Revisá este archivo individualmente.');
-        if (job.cancelRequested || state.me?.id !== ownerId ||
-            state.session?.user?.id !== ownerId) {
+        // Si el usuario pidió detenerse, guardar igual la lectura actual
+        // que ya consumió IA; detener recién ANTES del próximo estudio.
+        if (state.me?.id !== ownerId || state.session?.user?.id !== ownerId) {
           job.cancelRequested = true;
           break;
         }
