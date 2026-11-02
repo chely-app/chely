@@ -38,9 +38,10 @@ grant select on inv to authenticated, anon;
 select pg_temp.check((select length(code) = 10 from inv), 'código de invitación de 10 letras');
 select pg_temp.expect_error($$insert into public.studies (patient_id, doctor_id, title, study_date) values ('00000000-0000-0000-0000-00000000000a', auth.uid(), 'x', '2026-10-01')$$, 'médica carga estudio antes del vínculo');
 
--- Info pública de la invitación (sin sesión).
+-- Info de la invitación: desde 20261102010000 ya no se expone sin sesión.
+-- Hecho por Claude · 2026-11-02 · la prueba sigue el cambio de ChatGPT que retiró invitation_info.
 select pg_temp.as_admin(); set role anon;
-select pg_temp.check((select doctor_name from public.invitation_info((select code from inv))) = 'Dra. Prueba', 'invitación muestra el nombre de la médica');
+select pg_temp.expect_error($$select * from public.invitation_info((select code from inv))$$, 'anónimo consulta una invitación');
 select pg_temp.expect_error($$select * from public.profiles$$, 'anónimo lee perfiles');
 reset role;
 

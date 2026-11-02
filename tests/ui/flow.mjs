@@ -33,7 +33,7 @@ await p.click('text=Salir');
 // La paciente usa el enlace.
 const pp = await page(390);
 await pp.goto(link); await pp.waitForSelector('#auth-email');
-await pp.waitForFunction(() => /te invitó/.test(document.body.innerText));
+await pp.waitForFunction(() => /Recibimos tu código de invitación/.test(document.body.innerText));  // Hecho por Claude · 2026-11-02 · texto nuevo de la invitación
 await pp.screenshot({ path: out + '/3-paciente-invitacion.png', fullPage: true });
 await pp.click('role=tab[name="Entrar"]');
 await pp.fill('#auth-email', 'paciente@ej.com'); await pp.fill('#auth-pass', 'clave1234'); await pp.click('button[type=submit]');

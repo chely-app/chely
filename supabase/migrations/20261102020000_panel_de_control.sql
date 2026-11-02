@@ -1,3 +1,4 @@
+-- Hecho por Claude · 2026-11-02 · panel de control del equipo (aplicada en Supabase como panel_de_control).
 -- Panel de control del equipo de Chely: rol 'admin', resumen y lista de cuentas.
 -- El panel muestra cuentas y números; nunca el texto de los estudios ni sus explicaciones.
 -- El rol 'admin' se asigna a mano desde el SQL Editor de Supabase, como el de médico.

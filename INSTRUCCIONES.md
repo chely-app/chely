@@ -100,7 +100,7 @@ La página de presentación sigue en `chely.app`, y la app queda en `app.chely.a
 
 El panel muestra cuántos pacientes y médicos hay, la lista de cuentas, los estudios cargados y el gasto estimado de la IA. También permite pasar una cuenta a médico o de vuelta a paciente. No muestra el contenido de los estudios.
 
-1. Aplicar la migración `supabase/migrations/20261102000000_panel_de_control.sql` (Claude, o `supabase db push`).
+1. Aplicar la migración `supabase/migrations/20261102020000_panel_de_control.sql` (Claude, o `supabase db push`).
 2. Crear la cuenta del equipo desde `https://chely.app/app` → **Crear cuenta**, con una contraseña larga y única (12 caracteres o más). La contraseña no se escribe en ningún chat ni archivo.
 3. En Supabase → **SQL Editor**, marcarla como cuenta del equipo:
 
