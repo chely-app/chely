@@ -92,3 +92,10 @@ Este archivo documenta los cambios realizados por distintos colaboradores (human
 - Invitaciones personales de un uso, ligadas a correo verificado; control de permisos y RLS desde Supabase. Roles «responsable» y «colaborador» para acceso futuro a los estudios; sólo responsable gestiona vínculos.
 - **Primera fase únicamente**: no se habilitan aún estudios, carga de archivos, IA ni datos pediátricos. Se necesita completar validaciones médicas/legales y de seguridad.
 - Verificar la migración y las RPC antes de publicar el frontend; sin cambios en datos médicos preexistentes.
+
+## 2026-11-02 — Hecho por ChatGPT (calendario estándar integrado)
+**Archivos:** `app/app.js`, `app/styles.css`.
+- Ícono compacto de calendario dentro del campo de fecha, sin botón externo «Calendario».
+- Formato de entrada `dd/mm/aaaa`; la base conserva fechas ISO.
+- El mismo componente se utiliza en nacimiento del paciente, nacimiento del menor y fechas de carga/edición de estudios.
+- Cierre con Escape o clic fuera y atributos accesibles para el botón; diseño adaptado a celulares.
