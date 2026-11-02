@@ -140,3 +140,132 @@ async def save_patient_latest(authorization: str | None = Header(None)):
         if os.path.exists(tmp):
             os.unlink(tmp)
     return {"status": "stored", "source_signature": signature}
+
+
+# Hecho por ChatGPT · 2026-11-02 · Borrado de copias privadas.
+# IMPORTANTE: primero desplegar en Debian y probar autenticación. El navegador
+# no obtiene permisos para borrar archivos de otros pacientes.
+
+def _unlink_file(path: Path) -> bool:
+    # Se rehúsa a seguir enlaces simbólicos, incluso si alguien modificó el disco.
+    if path.is_symlink():
+        raise HTTPException(409, "Ruta de almacenamiento insegura")
+    if not path.exists():
+        return False
+    if not path.is_file():
+        raise HTTPException(409, "El almacenamiento contiene un tipo inesperado")
+    path.unlink()
+    fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    return True
+
+
+@router.delete("/patient-latest")
+async def delete_latest_for_study(
+    study_id: str,
+    authorization: str | None = Header(None),
+):
+    token, patient_id = verified_user(authorization)
+    del token
+    try:
+        study_id = str(uuid.UUID(study_id))
+    except ValueError:
+        raise HTTPException(400, "Estudio inválido")
+    require_encrypted_mount()
+    if DEST.is_symlink():
+        raise HTTPException(409, "Directorio de resumen inseguro")
+    target = DEST / (patient_id + ".json")
+    if target.is_symlink():
+        raise HTTPException(409, "Copia de resumen insegura")
+    if not target.exists():
+        return {"status": "absent"}
+    try:
+        existing = json.loads(target.read_text("utf-8"))
+    except (OSError, json.JSONDecodeError):
+        raise HTTPException(409, "Copia de resumen dañada")
+    if existing.get("patient_id") != patient_id:
+        raise HTTPException(409, "Titular de copia inconsistente")
+    if existing.get("source_study_id") != study_id:
+        return {"status": "other_study"}
+    deleted = _unlink_file(target)
+    return {"status": "deleted" if deleted else "absent"}
+
+
+@router.delete("/patient-all")
+async def delete_all_patient_copies(authorization: str | None = Header(None)):
+    token, patient_id = verified_user(authorization)
+    require_encrypted_mount()
+    # Consultar únicamente los estudios creados por quien está pidiendo
+    # eliminar su cuenta. La consulta usa su propio JWT bajo RLS.
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            response = await client.get(
+                SUPABASE_URL + "/rest/v1/studies",
+                params={
+                    "patient_id": "eq." + patient_id,
+                    "self_uploaded": "eq.true",
+                    "select": "id,storage_backend,storage_file_id,file_path",
+                    "limit": "1000",
+                },
+                headers={"Authorization": "Bearer " + token, "apikey": publishable_key()},
+            )
+    except httpx.RequestError:
+        raise HTTPException(503, "No pudimos comprobar los estudios")
+    if response.status_code != 200:
+        raise HTTPException(503, "Supabase no permitió verificar los estudios")
+    try:
+        rows = response.json()
+    except ValueError:
+        raise HTTPException(503, "Respuesta de estudios inválida")
+    if not isinstance(rows, list) or len(rows) >= 1000:
+        raise HTTPException(409, "Demasiados estudios para borrar en una solicitud")
+    # Comprobar todas las rutas antes de eliminar cualquier archivo.
+    targets = []
+    dirs = []
+    base_studies = BASE / "estudios"
+    if base_studies.is_symlink():
+        raise HTTPException(409, "Directorio de estudios inseguro")
+    for row in rows:
+        if not isinstance(row, dict):
+            raise HTTPException(409, "Datos del estudio inválidos")
+        backend = row.get("storage_backend")
+        legacy = str(row.get("file_path") or "")
+        if backend != "debian" and not legacy.startswith("debian:"):
+            continue
+        try:
+            study_id = str(uuid.UUID(row["id"]))
+            file_id = str(uuid.UUID(row.get("storage_file_id") or legacy.removeprefix("debian:")))
+        except (TypeError, ValueError, AttributeError):
+            raise HTTPException(409, "Referencia Debian inválida")
+        folder = base_studies / study_id
+        if folder.is_symlink():
+            raise HTTPException(409, "Directorio de estudio inseguro")
+        target = folder / file_id
+        if target.is_symlink() or (target.exists() and not target.is_file()):
+            raise HTTPException(409, "Archivo de estudio inseguro")
+        # Cualquier otro archivo que permanezca en la carpeta se debe
+        # investigar antes de dar la eliminación como completada.
+        if folder.exists():
+            unknown = [p for p in folder.iterdir() if p.name != file_id]
+            if unknown:
+                raise HTTPException(409, "Quedan archivos de un estudio que requieren revisión")
+        targets.append(target)
+        dirs.append(folder)
+    if DEST.is_symlink():
+        raise HTTPException(409, "Directorio de resúmenes inseguro")
+    summary = DEST / (patient_id + ".json")
+    if summary.is_symlink():
+        raise HTTPException(409, "Copia de resumen insegura")
+    # Borrado idempotente: soporta reintentos después de interrupciones.
+    for target, folder in zip(targets, dirs):
+        _unlink_file(target)
+        if folder.exists():
+            try:
+                folder.rmdir()
+            except OSError:
+                raise HTTPException(409, "No pudimos vaciar el directorio del estudio")
+    _unlink_file(summary)
+    return {"status": "deleted", "files": len(targets)}
