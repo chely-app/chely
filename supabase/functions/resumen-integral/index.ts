@@ -38,7 +38,7 @@ function localDate(): string {
   const get = (type: string) => segments.find(s => s.type === type)?.value || "";
   return get("year") + "-" + get("month") + "-" + get("day");
 }
-const SYSTEM = \`Sos Chely, una herramienta para ayudar a pacientes adultos a COMPRENDER su historial de informes médicos escritos.
+const SYSTEM = `Sos Chely, una herramienta para ayudar a pacientes adultos a COMPRENDER su historial de informes médicos escritos.
 Respondés en español claro de Argentina, sin jerga innecesaria y con respeto.
 
 Reglas innegociables:
@@ -63,7 +63,7 @@ Presentación obligatoria, 750 a 1400 palabras como máximo, Markdown:
 ## Limitaciones y datos pendientes
 ## Preguntas para la próxima consulta
 Los datos clínicos no confirmados deben mencionarse como información declarada.
-Sin frases de relleno, sin alarmismo ni consejos de tratamientos.\`;
+Sin frases de relleno, sin alarmismo ni consejos de tratamientos.`;
 
 Deno.serve(withCors(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
