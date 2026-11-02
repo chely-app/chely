@@ -299,6 +299,19 @@ const minorUploadDrafts = new Map();
 const studyEditDrafts = new Map();
 const runningStudyReads = new Map(); // Evita transcripciones duplicadas.
 const runningStudyExplanations = new Map(); // Evita análisis duplicados.
+// Hecho por ChatGPT · 2026-11-02 · Lecturas en lote: nunca genera explicaciones.
+// El estado se conserva sólo mientras esta pestaña está abierta.
+let batchReadJob = null;
+let updateBatchReadDisplay = null;
+function refreshBatchReadDisplay() {
+  if (typeof updateBatchReadDisplay === 'function') updateBatchReadDisplay();
+}
+function cancelBatchRead() {
+  if (batchReadJob?.running) {
+    batchReadJob.cancelRequested = true;
+    refreshBatchReadDisplay();
+  }
+}
 function pendingOnce(map, key, task) {
   let pending=map.get(key);
   if (!pending) {
@@ -312,7 +325,10 @@ function pendingOnce(map, key, task) {
 let navigationEpoch = 0;
 let restoredRouteUser = null;
 function clearUploadDraft() { uploadDraft = null; }
-function clearPrivateDrafts() { uploadDraft = null; minorUploadDrafts.clear(); studyEditDrafts.clear(); }
+function clearPrivateDrafts() {
+  cancelBatchRead();
+  uploadDraft = null; minorUploadDrafts.clear(); studyEditDrafts.clear();
+}
 
 // Hecho por ChatGPT · 2026-11-02 · Restaurar la sección actual con F5.
 // history.state sólo contiene identificadores y sección, no datos clínicos.
@@ -783,6 +799,127 @@ async function patientStudies() {
         'Usó ' + latest.previous_studies_used + ' antecedentes con texto.'),
       content));
   }
+  // Hecho por ChatGPT · 2026-11-02 · Leer todos los estudios pendientes a pedido.
+  // No modifica explicaciones, no publica, no llama a la acción «explicar».
+  const ownStudies = studies.filter(st => st.self_uploaded);
+  const hasOriginal = st => (st.storage_backend === 'debian' && !!st.storage_file_id)
+    || !!st.file_path;
+  const pendingReads = ownStudies.filter(st =>
+    !String(st.report_text || '').trim() && hasOriginal(st));
+  const readCard = h('div', { class: 'card' },
+    h('h2', {}, 'Preparar el historial sin explicar'),
+    h('p', { class: 'muted' },
+      'Leé los PDF pendientes y guardá sus textos para utilizarlos como antecedentes cuando pidas una explicación. Los que ya tienen texto se omiten.'),
+    h('p', { class: 'hint' },
+      'Los PDF escaneados pueden requerir IA para leer su texto, y cada lectura puede generar un costo. No se generará ninguna explicación.'),
+    h('p', { class: 'muted small' },
+      ownStudies.filter(st => !!String(st.report_text || '').trim()).length +
+      ' estudios con texto guardado · ' + pendingReads.length + ' pendientes de lectura'));
+  const readProgress = h('p', { role: 'status', 'aria-live': 'polite', class: 'hint' });
+  const readStart = h('button', { class: 'btn primary', type: 'button' },
+    pendingReads.length ? 'Leer ' + pendingReads.length + ' pendientes sin explicar' : 'Todos los estudios están leídos');
+  const readStop = h('button', { class: 'btn', type: 'button' }, 'Detener después del actual');
+  readStop.addEventListener('click', cancelBatchRead);
+  const showReadJob = () => {
+    if (!readCard.isConnected) return;
+    const job = batchReadJob?.ownerId === state.me.id ? batchReadJob : null;
+    const running = !!job?.running;
+    readStart.disabled = running || pendingReads.length === 0;
+    readStop.hidden = !running;
+    readStop.disabled = !running || job.cancelRequested;
+    if (!job) { readProgress.textContent = ''; return; }
+    readProgress.textContent = (running ? 'Lectura en curso. ' : 'Última lectura. ') +
+      (job.processed + '/' + job.total) + ' procesados, ' +
+      job.completed + ' guardados, ' + job.failed + ' con error.' +
+      (running && job.cancelRequested ? ' Se detendrá después del actual.' :
+        running ? ' Podés cambiar de sección, pero no cierres ni actualices la pestaña.' :
+        job.cancelRequested ? ' Lectura detenida; podés retomarla.' : ' Proceso terminado.') +
+      (job.lastError ? ' Último error: ' + job.lastError : '');
+  };
+  updateBatchReadDisplay = showReadJob;
+  readStart.addEventListener('click', async () => {
+    if (batchReadJob?.running) return toast('Ya hay una lectura de estudios en curso.');
+    if (!pendingReads.length) return;
+    const approved = await confirmBox({
+      title: 'Leer sin generar explicaciones',
+      text: 'Chely intentará leer ' + pendingReads.length + ' archivos pendientes, uno por uno. ' +
+        'Cada documento sin texto puede requerir una llamada paga a la IA. ' +
+        'Solo se guardará el texto y, cuando se identifiquen con suficiente claridad, el nombre y la fecha. ' +
+        'No se generarán explicaciones. Escribí LEER para iniciar.',
+      ok: 'Iniciar lectura', typed: 'LEER'
+    });
+    if (!approved || batchReadJob?.running) return;
+    const ownerId = state.me.id;
+    const job = {
+      ownerId, running: true, cancelRequested: false, total: pendingReads.length,
+      processed: 0, completed: 0, failed: 0, lastError: ''
+    };
+    batchReadJob = job;
+    showReadJob();
+    for (const study of pendingReads) {
+      if (job.cancelRequested || state.me?.id !== ownerId ||
+          state.session?.user?.id !== ownerId) {
+        job.cancelRequested = true;
+        break;
+      }
+      try {
+        const { data, error } = await pendingOnce(runningStudyReads, 'adult:' + study.id,
+          () => sb.functions.invoke('ia', {
+            body: { action: 'transcribir', study_id: study.id, force: false }
+          }));
+        if (error) throw new Error(await fnError(error));
+        const text = typeof data?.text === 'string' ? data.text.trim() : '';
+        // Si la lectura es incompleta, no hacerla pasar por un antecedente fiable.
+        if (text.length < 25 || text.length > 60000)
+          throw new Error('No se obtuvo un texto completo y válido. Revisá este archivo individualmente.');
+        // Si el usuario pidió detenerse, guardar igual la lectura actual
+        // que ya consumió IA; detener recién ANTES del próximo estudio.
+        if (state.me?.id !== ownerId || state.session?.user?.id !== ownerId) {
+          job.cancelRequested = true;
+          break;
+        }
+        const payload = { report_text: text };
+        if (study.title === STUDY_PENDING_TITLE) {
+          const detected = metadataFromReport(text);
+          const nameGuess = pdfFilenameSuggestion(study.file_name || '');
+          const titleGuess = detected.title || nameGuess.title;
+          const dateGuess = detected.date || nameGuess.date;
+          if (titleGuess && dateGuess) {
+            payload.title = titleGuess.slice(0, 150);
+            payload.study_date = dateGuess;
+          }
+        }
+        const { error: writeError } = await sb.from('studies').update(payload)
+          .eq('id', study.id).eq('patient_id', ownerId).eq('self_uploaded', true);
+        if (writeError) throw writeError;
+        study.report_text = text;
+        if (payload.title) study.title = payload.title;
+        if (payload.study_date) study.study_date = payload.study_date;
+        job.completed++;
+      } catch (e) {
+        job.failed++;
+        // El texto del estudio no aparece en los errores.
+        job.lastError = errorText(e).slice(0, 180);
+        if (/máximo|24 horas|límite de IA|sesión vencida|429|503/i.test(job.lastError)) {
+          job.cancelRequested = true;
+        }
+      } finally {
+        job.processed++;
+        refreshBatchReadDisplay();
+      }
+      if (job.cancelRequested) break;
+    }
+    job.running = false;
+    refreshBatchReadDisplay();
+    if (state.me?.id === ownerId && state.page === 'estudios') render();
+    else if (state.me?.id === ownerId)
+      toast(job.completed + ' estudios leídos y guardados sin explicación.');
+  });
+  readCard.append(h('div', { class: 'row' }, readStart, readStop), readProgress);
+  readStop.hidden = true;
+  m.append(readCard);
+  showReadJob();
+
   const card = h('div', { class: 'card' }, h('h2', {}, 'Mis estudios'));
   if (!studies.length) card.append(h('p', { class: 'muted' }, 'Todavía no tenés estudios. Tocá «Subir un estudio» para empezar.'));
   const list = h('div', { class: 'list' });
@@ -791,6 +928,10 @@ async function patientStudies() {
     list.append(h('button', { class: 'item', onclick: () => go(pending ? 'mi-estudio' : 'estudio', { studyId: s.id }) },
       h('div', { class: 'row' }, h('h3', {}, s.title),
         pending ? h('span', { class: 'pill warn' }, 'Sin explicar') : !s.self_uploaded && !s.first_viewed_at ? h('span', { class: 'pill bad' }, 'Nuevo') : null,
+        s.self_uploaded && s.report_text?.trim()
+          ? h('span', { class: 'pill' }, 'Leído') :
+          s.self_uploaded && (s.file_path || s.storage_file_id)
+            ? h('span', { class: 'pill warn' }, 'Sin leer') : null,
         h('span', { class: 'pill' }, s.title === STUDY_PENDING_TITLE ? 'Fecha por confirmar' : fmtDate(s.study_date))),
       h('span', { class: 'muted small' }, s.self_uploaded ? 'Subido por vos' : `Enviado por ${names[s.doctor_id] || 'tu médico'} el ${fmtDate(s.published_at)}`)));
   }
@@ -1383,7 +1524,7 @@ async function patientOwnStudy() {
     s.report_text = report.value.trim();
     editDraft.report = report.value; return true;
   };
-  const readBtn = h('button', { class: 'btn' }, 'Leer el archivo');
+  const readBtn = h('button', { class: 'btn' }, 'Leer y guardar sin explicar');
   const explainBtn = h('button', { class: 'btn primary big' }, 'Explicar mi estudio');
   const saveWithoutAI = h('button', { class: 'btn', type: 'button' }, 'Guardar datos sin explicar');
   saveWithoutAI.addEventListener('click', async () => {
