@@ -297,6 +297,8 @@ let sb = null;
 let uploadDraft = null;
 const minorUploadDrafts = new Map();
 const studyEditDrafts = new Map();
+// Última pestaña de estudios elegida, sólo en memoria de la sesión.
+let patientStudiesTab = null;
 const runningStudyReads = new Map(); // Evita transcripciones duplicadas.
 const runningStudyExplanations = new Map(); // Evita análisis duplicados.
 // Hecho por ChatGPT · 2026-11-02 · Lecturas en lote: nunca genera explicaciones.
@@ -327,7 +329,7 @@ let restoredRouteUser = null;
 function clearUploadDraft() { uploadDraft = null; }
 function clearPrivateDrafts() {
   cancelBatchRead();
-  uploadDraft = null; minorUploadDrafts.clear(); studyEditDrafts.clear();
+  uploadDraft = null; minorUploadDrafts.clear(); studyEditDrafts.clear(); patientStudiesTab = null;
 }
 
 // Hecho por ChatGPT · 2026-11-02 · Restaurar la sección actual con F5.
@@ -920,44 +922,114 @@ async function patientStudies() {
   m.append(readCard);
   showReadJob();
 
-  // Hecho por ChatGPT · 2026-11-02 · Mantener 3-4 estudios visibles;
-  // la lista tiene su propio desplazamiento sin alargar toda la página.
+  // Hecho por ChatGPT · 2026-11-02 · Priorización por estado de preparación.
+  // Grupos excluyentes: completar datos > sin explicar > explicados.
+  // Una fecha de carga provisional NO se considera fecha médica confirmada.
+  const preparedStudies = studies.map(s => {
+    const needsDetails = s.self_uploaded &&
+      (s.title === STUDY_PENDING_TITLE || !s.study_date);
+    const explained = !!String(s.explanation || '').trim();
+    const group = needsDetails ? 'completar' : explained ? 'explicados' : 'sin-explicar';
+    const inferred = needsDetails ? metadataFromReport(s.report_text || '') : null;
+    const filenameHint = needsDetails ? pdfFilenameSuggestion(s.file_name || '') : null;
+    const title = needsDetails
+      ? (inferred?.title || filenameHint?.title || s.title)
+      : s.title;
+    const suggestedDate = inferred?.date || filenameHint?.date || null;
+    return { study: s, needsDetails, group, title, suggestedDate };
+  });
+  const completion = preparedStudies.filter(v => v.group === 'completar');
+  const unexplained = preparedStudies.filter(v => v.group === 'sin-explicar');
+  const explained = preparedStudies.filter(v => v.group === 'explicados');
+  const groups = [
+    { id: 'completar', name: 'Completar datos', description: 'Prioridad: estudios sin fecha o nombre confirmado.', data: completion },
+    { id: 'sin-explicar', name: 'Sin explicar', description: 'Estudios listos para pedir una explicación cuando quieras.', data: unexplained },
+    { id: 'explicados', name: 'Explicados', description: 'Estudios que ya tienen explicación guardada.', data: explained },
+    { id: 'todos', name: 'Todos', description: 'Todos los estudios, primero los que requieren completar datos.',
+      data: [...completion, ...unexplained, ...explained] }
+  ];
+  // Primera apertura: empezar por los que necesitan intervención.
+  // Al volver de corregir un estudio, conservar la pestaña mientras haya
+  // elementos; si se vació, avanzar a la próxima que tenga pendientes.
+  const preferred = patientStudiesTab && groups.find(g => g.id === patientStudiesTab);
+  let active = preferred && (preferred.data.length || preferred.id === 'todos')
+    ? preferred.id
+    : completion.length ? 'completar' : unexplained.length ? 'sin-explicar'
+      : explained.length ? 'explicados' : 'todos';
+  patientStudiesTab = active;
+
   const card = h('div', { class: 'card' },
     h('h2', {}, 'Mis estudios (' + studies.length + ')'));
-  if (!studies.length) card.append(h('p', { class: 'muted' }, 'Todavía no tenés estudios. Tocá «Subir un estudio» para empezar.'));
-  else if (studies.length > 4) card.append(h('p', { class: 'muted small' },
-    'Deslizá dentro de la lista para ver los demás estudios.'));
+  if (!studies.length) card.append(h('p', { class: 'muted' },
+    'Todavía no tenés estudios. Tocá «Subir un estudio» para empezar.'));
+  const filterTabs = h('div', {
+    class: 'study-filter-tabs', role: 'group', 'aria-label': 'Filtrar mis estudios'
+  });
+  const description = h('p', { class: 'muted small', role: 'status', 'aria-live': 'polite' });
   const list = h('div', {
     class: 'list studies-scroll-list',
     role: 'region',
     'aria-label': 'Mis estudios, lista desplazable',
     tabindex: '0'
   });
-  for (const s of studies) {
-    const pending = s.self_uploaded && s.status !== 'publicado';
-    // Mostrar la denominación sugerida aunque la fecha siga pendiente.
-    // El texto médico y la fecha real no se modifican sin confirmación.
-    const inferred = s.title === STUDY_PENDING_TITLE
-      ? metadataFromReport(s.report_text || '') : null;
-    const filenameHint = s.title === STUDY_PENDING_TITLE
-      ? pdfFilenameSuggestion(s.file_name || '') : null;
-    const displayedTitle = s.title === STUDY_PENDING_TITLE
-      ? (inferred?.title || filenameHint?.title || s.title) : s.title;
-    const inferredDate = inferred?.date || filenameHint?.date;
-    list.append(h('button', { class: 'item', onclick: () => go(pending ? 'mi-estudio' : 'estudio', { studyId: s.id }) },
-      h('div', { class: 'row' }, h('h3', {}, displayedTitle),
-        pending ? h('span', { class: 'pill warn' }, 'Sin explicar') : !s.self_uploaded && !s.first_viewed_at ? h('span', { class: 'pill bad' }, 'Nuevo') : null,
-        s.self_uploaded && s.report_text?.trim()
-          ? h('span', { class: 'pill' }, 'Leído') :
-          s.self_uploaded && (s.file_path || s.storage_file_id)
-            ? h('span', { class: 'pill warn' }, 'Sin leer') : null,
-        h('span', { class: 'pill' }, s.title === STUDY_PENDING_TITLE
-          ? (inferredDate ? 'Fecha sugerida: ' + fmtDate(inferredDate) : 'Fecha por confirmar')
-          : fmtDate(s.study_date))),
-      h('span', { class: 'muted small' }, s.self_uploaded ? 'Subido por vos' : `Enviado por ${names[s.doctor_id] || 'tu médico'} el ${fmtDate(s.published_at)}`)));
+  const drawList = () => {
+    const chosen = groups.find(g => g.id === active);
+    filterTabs.querySelectorAll('button').forEach(button => {
+      button.setAttribute('aria-pressed', String(button.dataset.filter === active));
+    });
+    description.textContent = chosen.description +
+      (chosen.data.length > 4 ? ' Deslizá dentro de la lista para ver los demás.' : '');
+    list.replaceChildren();
+    list.scrollTop = 0;
+    if (!chosen.data.length) {
+      list.append(h('p', { class: 'muted study-list-empty' },
+        chosen.id === 'completar'
+          ? '¡Excelente! No hay estudios pendientes de nombre o fecha.'
+          : chosen.id === 'sin-explicar'
+            ? 'No hay estudios pendientes de explicación.'
+            : chosen.id === 'explicados'
+              ? 'Todavía no hay estudios con explicaciones.'
+              : 'Todavía no tenés estudios.'));
+      return;
+    }
+    for (const item of chosen.data) {
+      const s = item.study;
+      const pending = s.self_uploaded && s.status !== 'publicado';
+      const goTo = pending ? 'mi-estudio' : 'estudio';
+      list.append(h('button', { class: 'item', onclick: () => go(goTo, { studyId: s.id }) },
+        h('div', { class: 'row' }, h('h3', {}, item.title),
+          item.needsDetails
+            ? h('span', { class: 'pill warn' }, 'Completar datos')
+            : null,
+          pending ? h('span', { class: 'pill warn' }, 'Sin explicar')
+            : !s.self_uploaded && !s.first_viewed_at
+              ? h('span', { class: 'pill bad' }, 'Nuevo') : null,
+          s.self_uploaded && s.report_text?.trim()
+            ? h('span', { class: 'pill' }, 'Leído')
+            : s.self_uploaded && (s.file_path || s.storage_file_id)
+              ? h('span', { class: 'pill warn' }, 'Sin leer') : null,
+          h('span', { class: 'pill' }, item.needsDetails
+            ? (item.suggestedDate ? 'Fecha sugerida: ' + fmtDate(item.suggestedDate)
+              : 'Fecha por confirmar') : fmtDate(s.study_date))),
+        h('span', { class: 'muted small' }, s.self_uploaded ? 'Subido por vos'
+          : 'Enviado por ' + (names[s.doctor_id] || 'tu médico') +
+            ' el ' + fmtDate(s.published_at))));
+    }
+  };
+  for (const group of groups) {
+    const button = h('button', { type: 'button', class: 'study-filter-tab' },
+      group.name + ' (' + group.data.length + ')');
+    button.dataset.filter = group.id;
+    button.addEventListener('click', () => {
+      active = group.id;
+      patientStudiesTab = active;
+      drawList();
+    });
+    filterTabs.append(button);
   }
-  card.append(list);
+  card.append(filterTabs, description, list);
   m.append(card);
+  drawList();
   if (!links || !links.length) m.append(redeemCard('¿Tu médico usa Chely? Pedile el código de invitación para que también pueda enviarte estudios revisados por él.'));
 }
 function redeemCard(text) {
