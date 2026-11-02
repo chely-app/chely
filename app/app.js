@@ -297,7 +297,18 @@ let sb = null;
 let uploadDraft = null;
 const minorUploadDrafts = new Map();
 const studyEditDrafts = new Map();
-const runningStudyReads = new Map(); // Evita pedir dos veces la misma transcripción.
+const runningStudyReads = new Map(); // Evita transcripciones duplicadas.
+const runningStudyExplanations = new Map(); // Evita análisis duplicados.
+function pendingOnce(map, key, task) {
+  let pending=map.get(key);
+  if (!pending) {
+    pending=task();
+    map.set(key,pending);
+    const cleanup=()=>{if(map.get(key)===pending)map.delete(key);};
+    pending.then(cleanup,cleanup);
+  }
+  return pending;
+}
 let navigationEpoch = 0;
 let restoredRouteUser = null;
 function clearUploadDraft() { uploadDraft = null; }
@@ -1215,16 +1226,8 @@ async function patientOwnStudy() {
   const readFile = async () => {
     status.className = 'alert info'; status.textContent = 'Chely está leyendo tu archivo. Puede tardar un minuto; no cierres esta pantalla.';
     const done = busy(readBtn, 'Leyendo el archivo…');
-    let task = runningStudyReads.get(s.id);
-    if (!task) {
-      task = sb.functions.invoke('ia', { body: { action: 'transcribir', study_id: s.id } });
-      runningStudyReads.set(s.id, task);
-      task.then(
-        () => { if (runningStudyReads.get(s.id) === task) runningStudyReads.delete(s.id); },
-        () => { if (runningStudyReads.get(s.id) === task) runningStudyReads.delete(s.id); }
-      );
-    }
-    const { data, error } = await task;
+    const { data, error } = await pendingOnce(runningStudyReads, 'adult:'+s.id,
+      () => sb.functions.invoke('ia', { body: { action: 'transcribir', study_id: s.id } }));
     done();
     if (error) { status.className = 'alert bad'; status.textContent = await fnError(error); return false; }
     report.value = data.text;
@@ -1254,7 +1257,8 @@ async function patientOwnStudy() {
     if (!await saveText() || !await saveMetadata()) return;
     status.className = 'alert info'; status.textContent = 'Chely está escribiendo la explicación de tu estudio. Puede tardar hasta dos minutos; no cierres esta pantalla.';
     const done = busy(explainBtn, 'Escribiendo la explicación…');
-    const { data, error } = await sb.functions.invoke('ia', { body: { action: 'explicar', study_id: s.id } });
+    const { data, error } = await pendingOnce(runningStudyExplanations, 'adult:'+s.id,
+      () => sb.functions.invoke('ia', { body: { action: 'explicar', study_id: s.id } }));
     if (error) { done(); status.className = 'alert bad'; status.textContent = await fnError(error); return; }
     const explanation = (data.aviso_urgente ? `## Aviso importante del informe\n${data.aviso_urgente}\n\n` : '') + data.explicacion;
     const { error: e2 } = await sb.from('studies').update({ explanation, glossary: data.glosario || [], lab_values: data.valores || [],
@@ -2087,7 +2091,8 @@ function minorStudyEditor(host,study){
   const read=h('button',{class:'btn',type:'button',onclick:async()=>{
     read.disabled=true;status.className='alert info';status.textContent='Chely está leyendo el archivo…';
     try{
-      const {data,error}=await sb.functions.invoke('ia-menores',{body:{action:'transcribir',study_id:study.id}});
+      const {data,error}=await pendingOnce(runningStudyReads,'minor:'+study.id,
+        ()=>sb.functions.invoke('ia-menores',{body:{action:'transcribir',study_id:study.id}}));
       if(error)throw new Error(await fnError(error));
       report.value=data.text||'';draft.report=report.value;
       if(!await saveReport())throw new Error('No se pudo guardar el texto transcripto.');
@@ -2111,7 +2116,8 @@ function minorStudyEditor(host,study){
     if(!await save())return;
     explain.disabled=true;status.className='alert info';status.textContent='Chely está preparando la explicación…';
     try{
-      const {data,error}=await sb.functions.invoke('ia-menores',{body:{action:'explicar',study_id:study.id}});
+      const {data,error}=await pendingOnce(runningStudyExplanations,'minor:'+study.id,
+        ()=>sb.functions.invoke('ia-menores',{body:{action:'explicar',study_id:study.id}}));
       if(error)throw new Error(await fnError(error));
       const text=(data.aviso_urgente?'## Aviso importante del informe\n'+data.aviso_urgente+'\n\n':'')+data.explicacion;
       const {error:up}=await sb.from('minor_studies').update({
@@ -2365,7 +2371,9 @@ async function doctorStudy() {
   async function callAI(action, label, btn) {
     btn.disabled = true; const old = btn.textContent;
     btn.replaceChildren(h('span', { class: 'spinner' }), ' ' + label);
-    const { data, error: e } = await sb.functions.invoke('ia', { body: { action, study_id: s.id } });
+    const { data, error: e } = await pendingOnce(
+      action === 'transcribir' ? runningStudyReads : runningStudyExplanations,
+      'doctor:'+s.id, () => sb.functions.invoke('ia', { body: { action, study_id: s.id } }));
     btn.disabled = false; btn.textContent = old;
     if (e) { toast(await fnError(e)); return null; }
     return data;
