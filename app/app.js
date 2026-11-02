@@ -1061,6 +1061,7 @@ function patientUpload() {
   const m = mainEl();
   if (!uploadDraft) uploadDraft = { title: '', date: null, text: '', file: null, mode: 'foto', url: '' };
   let date = uploadDraft.date || null;
+  const currentDraft = uploadDraft;
   const source = studySourceChooser('up', uploadDraft);
   const title = h('input', { type: 'text', id: 'up-title', maxlength: 180,
     placeholder: 'Ej.: Análisis de sangre', value: uploadDraft.title || '' });
@@ -1069,6 +1070,7 @@ function patientUpload() {
     h('div', { class: 'field' }, h('label', { for: 'up-date', style: 'font-weight:700' }, 'Fecha del estudio'),
       datePicker({ id: 'up-date', value: date, onChange: iso => { date = iso; uploadDraft.date = iso; } })));
   const msg = h('div', { role: 'alert' });
+  if (currentDraft.pending) { msg.className = 'alert info'; msg.textContent = 'El estudio sigue cargándose en segundo plano. Podés volver a esta sección para ver el resultado.'; }
   title.addEventListener('input', () => { uploadDraft.title = title.value; });
   const refresh = () => { meta.hidden = source.getMode() !== 'texto'; };
   source.root.addEventListener('study-method-change', refresh);
@@ -1082,7 +1084,9 @@ function patientUpload() {
   });
   refresh();
   const btn = h('button', { class: 'btn primary big', type: 'button' }, 'Continuar con el estudio');
+  btn.disabled = !!currentDraft.pending;
   btn.addEventListener('click', async () => {
+    if (currentDraft.pending) return toast('Ya hay una carga en curso. Esperá a que termine.');
     msg.className = ''; msg.textContent = '';
     const mode = source.getMode();
     const f = source.getFile();
@@ -1103,6 +1107,9 @@ function patientUpload() {
         msg.className = 'alert bad'; msg.textContent = 'El archivo debe ser PDF o una imagen válida de hasta 20 MB.'; return;
       }
     }
+    currentDraft.pending = true;
+    const navAtStart = navigationEpoch;
+    const ownerAtStart = state.me.id;
     btn.disabled = true; btn.replaceChildren(h('span', { class: 'spinner' }), ' Guardando…');
     try {
       const autoMetadata = mode !== 'texto';
@@ -1120,11 +1127,22 @@ function patientUpload() {
         catch (e) { throw new Error('El estudio fue creado, pero falló la carga del archivo: ' +
           errorText(e) + '. Podés volver a la lista y corregirlo.'); }
       }
-      clearUploadDraft();
-      go('mi-estudio', { studyId: st.id, autoExplain: !autoMetadata });
+      if (uploadDraft === currentDraft) clearUploadDraft();
+      if (state.me?.id === ownerAtStart && state.page === 'subir'
+          && navigationEpoch === navAtStart) {
+        go('mi-estudio', { studyId: st.id, autoExplain: !autoMetadata });
+      } else {
+        if (state.me?.id === ownerAtStart)
+          toast('El estudio terminó de subirse y está disponible en Mis estudios.');
+        if (state.page === 'subir') render();
+      }
     } catch (e) {
       msg.className = 'alert bad'; msg.textContent = errorText(e);
+      if (state.page !== 'subir' || navigationEpoch !== navAtStart) toast('No se pudo completar la carga: ' + errorText(e));
+    } finally {
+      currentDraft.pending = false;
       btn.disabled = false; btn.textContent = 'Continuar con el estudio';
+      if (state.page === 'subir' && navigationEpoch !== navAtStart) render();
     }
   });
   m.append(h('div', { class: 'row' },
