@@ -1115,7 +1115,8 @@ async function pdfAutoMetadata(file) {
     note = 'No se pudo leer el PDF localmente. Quedará guardado sin IA; podés leerlo más adelante.';
   }
   return {
-    title: detected.title || nameData.title, date: detected.date || nameData.date,
+    title: (detected.title || nameData.title || '').slice(0, 150) || null,
+    date: detected.date || nameData.date,
     reportText: text, note
   };
 }
@@ -1186,11 +1187,11 @@ function patientUpload() {
     btn.disabled = true; btn.replaceChildren(h('span', { class: 'spinner' }), ' Guardando…');
     try {
       const autoMetadata = mode !== 'texto';
-      if (autoMetadata && f.type === 'application/pdf') {
+      if (autoMetadata && /\.pdf$/i.test(f.name)) {
         msg.className = 'alert info';
         msg.textContent = 'Revisando el PDF en este dispositivo para identificar nombre y fecha, sin IA…';
       }
-      const guess = autoMetadata && f.type === 'application/pdf'
+      const guess = autoMetadata && /\.pdf$/i.test(f.name)
         ? await pdfAutoMetadata(f) : null;
       const detectedBoth = !!(guess?.title && guess?.date);
       // Nunca colocar una fecha inventada como si fuera la fecha del análisis.
