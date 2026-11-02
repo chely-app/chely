@@ -265,3 +265,47 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); outline
 @media (max-width: 560px) {
   .coverage-entry > button { width: 100%; }
 }
+
+
+/* Hecho por ChatGPT · 2026-11-02 · Grillas adaptables al tamaño real de letras.
+   Auto-fit reduce las columnas ANTES de que las etiquetas y campos se deformen.
+   Las filas de rótulos tienen altura mínima coherente para alinear los inputs. */
+.account-fields {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  align-items: stretch;
+}
+.account-fields > .field {
+  display: grid;
+  grid-template-rows: minmax(3.2rem, auto) 3.2rem auto;
+  align-content: start;
+  min-width: 0;
+}
+.account-fields > .field > label,
+.account-fields > .field > input,
+.account-fields > .field > .date-picker {
+  min-width: 0;
+  width: 100%;
+}
+.account-fields > .field > input,
+.account-fields > .field > .date-picker { height: 3.2rem; }
+.account-fields .date-picker > input { min-height: 3.2rem; }
+.account-fields > .field > label,
+.account-fields > .field { overflow-wrap: break-word; }
+.health-fields {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  align-items: stretch;
+}
+.health-fields > label.field {
+  display: grid;
+  grid-template-rows: minmax(3.5rem, auto) 3.2rem;
+  align-content: start;
+  min-width: 0;
+}
+.health-fields > label.field > input,
+.health-fields > label.field > select { width: 100%; min-width: 0; height: 3.2rem; }
+.minor-account-card > .row .btn { flex: 0 1 auto; white-space: normal; text-align: center; }
+.minor-account-card .stack { min-width: 0; }
+@media (max-width: 560px) {
+  .account-fields > .field { grid-template-rows: auto 3.2rem auto; }
+  .health-fields > label.field { grid-template-rows: auto 3.2rem; }
+}

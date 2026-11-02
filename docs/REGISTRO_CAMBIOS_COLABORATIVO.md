@@ -131,3 +131,13 @@ Este archivo documenta los cambios realizados por distintos colaboradores (human
 - Se incorporó la columna `health_coverages text[]` a `patient_health_details` y `minor_health_details`; los valores previos se migraron automáticamente al arreglo sin perderse.
 - Se mantiene la columna anterior `health_coverage` con la primera cobertura para compatibilidad, y la interfaz nueva escribe ambos campos.
 - Verificación tras aplicar la migración: dos columnas y dos límites activos, cero valores anteriores perdidos, y ausencia de permiso de lectura pública en las dos tablas.
+
+## 2026-11-02 — Hecho por ChatGPT (cuenta adaptable, vincular menor al final, grupo sanguíneo)
+**Archivos:** `app/app.js`, `app/styles.css`, `supabase/migrations/20261102060000_blood_type_private_profiles.sql`.
+- Reemplazada grilla rígida por columnas automáticas que se adaptan al ancho del contenedor y al tamaño de fuente (incluidos A+/A−), con rótulos e inputs de altura coherente, sin desbordamientos en celular.
+- Eliminado el desplegable de menores de la parte superior de «Mi cuenta». Se agregó tarjeta «Menores a cargo» con botón visible «Vincular o registrar un menor», inmediatamente encima de «Borrar mi cuenta». El botón abre/cierra los formularios de registro y aceptación de invitación sin cambiar RPC ni permisos.
+- Agregado campo opcional «Grupo y factor sanguíneo (ABO/Rh)» en datos de salud de pacientes y menores: A+/A−, B+/B−, AB+/AB−, O+/O− o sin especificar.
+- Migración no destructiva: `blood_type` con validación CHECK en ambas tablas privadas. Sin establecer por defecto un grupo desconocido. No se modifican datos médicos existentes ni políticas RLS.
+- Advertencia junto al campo: grupo sanguíneo autodeclarado, no verificado por Chely; no sustituye prueba clínica ni debe utilizarse para decisiones transfusionales.
+- Verificación Supabase: 2 restricciones de valor, RLS habilitada en ambos perfiles y sin permisos de lectura anónima.
+- Pendiente comprobación visual en navegador con tamaños de letra 17/19/22/25 px, celular y PC.
