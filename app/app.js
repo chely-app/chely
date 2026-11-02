@@ -917,7 +917,7 @@ async function fileFromPublicLink(value) {
 }
 function studySourceChooser(prefix, draft = {}) {
   let mode = STUDY_UPLOAD_MODES.some(x => x.id === draft.mode) ? draft.mode : 'foto';
-  let imported = null;
+  let imported = draft.imported instanceof File ? draft.imported : null;
   const options = h('div', { class: 'study-method-grid', role: 'group', 'aria-label': 'Cómo querés subir tu estudio' });
   const body = h('div', { class: 'study-method-body' });
   const photo = h('input', { type: 'file', id: prefix + '-photo', accept: 'image/jpeg,image/png,image/webp', capture: 'environment' });
@@ -926,7 +926,7 @@ function studySourceChooser(prefix, draft = {}) {
   const report = h('textarea', { id: prefix + '-text', class: 'report', placeholder: 'Pegá acá el texto del informe…' }, draft.text || '');
   report.addEventListener('input', () => { draft.text = report.value; root.dispatchEvent(new CustomEvent('study-report-input', { detail: { text: report.value } })); });
   const url = h('input', { type: 'url', id: prefix + '-url', placeholder: 'https://portal-medico.com/estudio.pdf', autocomplete: 'off', value: draft.url || '' });
-  url.addEventListener('input', () => { imported = null; draft.url = url.value; });
+  url.addEventListener('input', () => { imported = null; draft.imported = null; draft.url = url.value; updateFileInfo(); });
   const importInfo = h('div', { class: 'hint', role: 'status', 'aria-live': 'polite' });
   const importButton = h('button', { type: 'button', class: 'btn primary' }, 'Importar archivo del enlace');
   importButton.addEventListener('click', async () => {
@@ -935,8 +935,10 @@ function studySourceChooser(prefix, draft = {}) {
     importInfo.textContent = 'Intentando importar el informe…';
     try {
       imported = await fileFromPublicLink(url.value);
+      draft.imported = imported;
       importInfo.textContent = 'Archivo importado: ' + imported.name + '. Ahora podés continuar.';
-    } catch (e) { imported = null; importInfo.textContent = errorText(e); }
+      updateFileInfo();
+    } catch (e) { imported = null; draft.imported = null; importInfo.textContent = errorText(e); }
     finally { importButton.disabled = false; }
   });
   const open = h('button', { type: 'button', class: 'btn quiet sm',
@@ -963,7 +965,15 @@ function studySourceChooser(prefix, draft = {}) {
       h('div', { class: 'row' }, importButton, open), importInfo,
       h('p', { class: 'hint' }, 'Solo se pueden importar enlaces públicos que permitan la descarga. No ingreses contraseñas de portales médicos en Chely.'))
   };
-  const root = h('div', { class: 'study-source' }, h('h2', {}, '¿Cómo querés enviar tu estudio?'), options, body);
+  const selectedInfo = h('p', { class: 'hint', role: 'status', 'aria-live': 'polite' });
+  const root = h('div', { class: 'study-source' }, h('h2', {}, '¿Cómo querés enviar tu estudio?'), options, body, selectedInfo);
+  const updateFileInfo = () => {
+    const selected = mode === 'enlace' ? imported
+      : mode === 'foto' ? photo.files?.[0] || gallery.files?.[0] || draft.file
+      : mode === 'pdf' ? pdf.files?.[0] || draft.file : null;
+    selectedInfo.textContent = selected && mode !== 'texto'
+      ? 'Archivo seleccionado: ' + selected.name + '. Se conserva al cambiar de sección en esta pestaña.' : '';
+  };
   const render = () => {
     buttons.forEach((button, i) => {
       const active = STUDY_UPLOAD_MODES[i].id === mode;
@@ -972,19 +982,32 @@ function studySourceChooser(prefix, draft = {}) {
     });
     body.replaceChildren(panels[mode]);
     draft.mode = mode;
+    updateFileInfo();
     root.dispatchEvent(new CustomEvent('study-method-change', { detail: { mode } }));
   };
   STUDY_UPLOAD_MODES.forEach(item => {
     const button = h('button', { type: 'button', class: 'study-method',
-      onclick: () => { mode = item.id; imported = null; draft.file = null; photo.value = ''; gallery.value = ''; pdf.value = ''; render(); } },
+      onclick: () => {
+        if (mode !== item.id) {
+          mode = item.id; imported = null; draft.imported = null; draft.file = null;
+          photo.value = ''; gallery.value = ''; pdf.value = '';
+        }
+        render();
+      } },
       h('span', { class: 'study-method-icon', 'aria-hidden': 'true' }, item.icon),
       h('strong', {}, item.name),
       h('span', { class: 'muted small' }, item.help));
     buttons.push(button); options.append(button);
   });
-  photo.addEventListener('change', () => { if (photo.files?.length) gallery.value = ''; draft.file = photo.files?.[0] || null; });
-  gallery.addEventListener('change', () => { if (gallery.files?.length) photo.value = ''; draft.file = gallery.files?.[0] || null; });
-  pdf.addEventListener('change', () => { draft.file = pdf.files?.[0] || null; });
+  photo.addEventListener('change', () => {
+    if (photo.files?.length) gallery.value = '';
+    draft.file = photo.files?.[0] || null; updateFileInfo();
+  });
+  gallery.addEventListener('change', () => {
+    if (gallery.files?.length) photo.value = '';
+    draft.file = gallery.files?.[0] || null; updateFileInfo();
+  });
+  pdf.addEventListener('change', () => { draft.file = pdf.files?.[0] || null; updateFileInfo(); });
   render();
   return {
     root, getMode: () => mode, getText: () => report.value.trim(),
