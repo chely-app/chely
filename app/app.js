@@ -631,12 +631,21 @@ async function adminLog() {
 
 /* ---------------- paciente ---------------- */
 async function renderPatient() {
-  if (!['estudios', 'estudio', 'subir', 'mi-estudio', 'medicos', 'cuenta'].includes(state.page)) state.page = 'estudios';
-  shell(navFor([['estudios', 'Mis estudios'], ['medicos', 'Mis médicos'], ['cuenta', 'Mi cuenta']]));
+  // Hecho por ChatGPT · 2026-11-02 · Sólo mostrar Menores a cargo cuando existe un vínculo vigente.
+  const { data: linkedMinors, error: minorError } = await sb.rpc('minor_list');
+  if (minorError) return showError(minorError, render);
+  state.linkedMinors = linkedMinors || [];
+  if (!['estudios', 'estudio', 'subir', 'mi-estudio', 'medicos', 'cuenta', 'menores'].includes(state.page)
+      || (state.page === 'menores' && !state.linkedMinors.length)) state.page = 'estudios';
+  const tabs = [['estudios', 'Mis estudios'], ['medicos', 'Mis médicos']];
+  if (state.linkedMinors.length) tabs.push(['menores', 'Menores a cargo']);
+  tabs.push(['cuenta', 'Mi cuenta']);
+  shell(navFor(tabs));
   if (state.page === 'estudio') return patientStudy();
   if (state.page === 'subir') return patientUpload();
   if (state.page === 'mi-estudio') return patientOwnStudy();
   if (state.page === 'medicos') return patientDoctors();
+  if (state.page === 'menores') return minorManagement();
   if (state.page === 'cuenta') return accountView();
   return patientStudies();
 }
@@ -1073,6 +1082,9 @@ async function accountView() {
         h('div', { class: 'row' }, saveHealthBtn));
     }
   }
+
+  /* Hecho por ChatGPT · 2026-11-02 · Registrar/vincular menores desde Mi cuenta. */
+  if (me.role === 'patient') appendMinorAccountOptions(m);
 
   /* Hecho por ChatGPT · 2026-11-02 · Confirmación también al cambiar contraseña desde Mi cuenta. */
   const pass = h('input', { type: 'password', id: 'acc-pass', autocomplete: 'new-password', minlength: 8 });
