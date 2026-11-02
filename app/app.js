@@ -808,8 +808,12 @@ async function adminLog() {
 
 /* ---------------- paciente ---------------- */
 async function renderPatient() {
+  const requestedEpoch = navigationEpoch;
+  const requestedUser = state.me?.id;
   // Hecho por ChatGPT · 2026-11-02 · Sólo mostrar Menores a cargo cuando existe un vínculo vigente.
   const { data: linkedMinors, error: minorError } = await sb.rpc('minor_list');
+  // Ignorar una pantalla anterior si se cambió de sección durante el await.
+  if (requestedEpoch !== navigationEpoch || requestedUser !== state.me?.id) return;
   if (minorError) return showError(minorError, render);
   state.linkedMinors = linkedMinors || [];
   if (!['estudios', 'estudio', 'subir', 'mi-estudio', 'medicos', 'cuenta', 'menores'].includes(state.page)
@@ -841,18 +845,22 @@ async function namesFor(ids) {
   return Object.fromEntries((data || []).map(p => [p.id, p.full_name]));
 }
 async function patientStudies() {
+  const requestedEpoch = navigationEpoch;
+  const requestedUser = state.me?.id;
   loading();
   let studies, links;
   try {
     studies = await loadPatientStudies();
     ({ data: links } = await sb.from('care_links').select('doctor_id').eq('patient_id', state.me.id).eq('active', true));
   } catch (e) { return showError(e, patientStudies); }
+  if (requestedEpoch !== navigationEpoch || state.page !== 'estudios' || requestedUser !== state.me?.id) return;
   const names = await namesFor(studies.map(s => s.doctor_id));
   const { data: latest, error: latestError } = await sb.from('patient_latest_explanations')
     .select('source_study_id,explanation,glossary,model,generated_at,previous_studies_used,debian_sync_status')
     .eq('patient_id', state.me.id).maybeSingle();
   // Si Supabase no responde con la copia, mantener accesible la lista de estudios.
   if (latestError) console.warn('No se pudo mostrar la ultima explicacion.');
+  if (requestedEpoch !== navigationEpoch || state.page !== 'estudios' || requestedUser !== state.me?.id) return;
   const m = mainEl();
   m.append(h('div', { class: 'row' }, h('h1', { class: 'grow' }, `Hola, ${state.me.full_name.split(' ')[0] || ''}`)));
   m.append(h('div', { class: 'card' }, h('h2', {}, 'Entendé tu estudio'),
@@ -873,6 +881,7 @@ async function patientStudies() {
   ]);
   if (overallError) console.warn('No se pudo leer la evaluación integral guardada.');
   if (jobError) console.warn('No se pudo leer el trabajo de evaluación integral.');
+  if (requestedEpoch !== navigationEpoch || state.page !== 'estudios' || requestedUser !== state.me?.id) return;
   const jobActive = storedJob?.status === 'running' || storedJob?.status === 'queued';
   if (jobActive) {
     historyEvaluationProgress.set(overviewOwner, {
