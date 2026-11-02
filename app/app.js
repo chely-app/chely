@@ -1202,6 +1202,7 @@ function patientUpload() {
     activeBatch = true; bulkButton.disabled = true; bulkFiles.disabled = true;
     let completed = 0;
     let failed = 0;
+    let temporaryFallback = false;
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
@@ -1215,16 +1216,25 @@ function patientUpload() {
           if (error || !st) throw error || new Error('No se pudo crear el estudio.');
           // Si falla el guardado, se conserva el registro para recuperarlo;
           // no reintentar automaticamente ni duplicar un PDF.
-          await archivoDebian('upload', st.id, null, file);
+          const uploadResult = await archivoDebian('upload', st.id, null, file);
           completed++;
+          // Si el servidor Debian deja de responder, no llenar Storage de
+          // Supabase con todo el lote por el respaldo automatico de emergencia.
+          if (uploadResult?.temporary && uploadResult?.storage_backend === 'supabase') {
+            temporaryFallback = true;
+            break;
+          }
         } catch (error) {
           failed++;
           console.warn('Fallo una carga PDF del lote:', file.name, errorText(error));
         }
       }
-      bulkState.textContent = 'Terminó la carga: ' + completed + ' PDF guardados y ' +
-        failed + ' con errores. No se utilizó IA. ' +
-        (failed ? 'Revisá Mis estudios antes de volver a intentar los fallidos.' :
+      bulkState.textContent = (temporaryFallback
+        ? 'Se detuvo el lote porque Debian no está disponible. Un PDF quedó guardado temporalmente en Supabase. '
+        : 'Terminó la carga. ') +
+        completed + ' PDF guardados y ' + failed + ' con errores. No se utilizó IA. ' +
+        (temporaryFallback ? 'Revisá la conexión a Debian antes de continuar.' :
+          failed ? 'Revisá Mis estudios antes de volver a intentar los fallidos.' :
           'Podés consultar cada estudio en Mis estudios.');
       if (completed) toast(completed + ' PDF guardados sin usar IA.');
     } finally {
