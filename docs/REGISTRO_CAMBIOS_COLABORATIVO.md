@@ -83,3 +83,12 @@ Este archivo documenta los cambios realizados por distintos colaboradores (human
 - El PDF lo guarda el usuario desde el diálogo de impresión del navegador; la opción de envío puede transferir un archivo de texto a una app elegida por la persona.
 - **Aviso:** una copia enviada fuera de Chely no se puede revocar y no adjunta automáticamente el archivo original.
 - Se mantiene la funcionalidad de abrir/descargar el informe original por separado para el paciente autenticado.
+
+## 2026-11-02 — Hecho por ChatGPT (formularios alineados y alta de menores)
+**Archivos:** `app/app.js`, `app/styles.css`, `supabase/migrations/20261102030000_minor_guardians_first_phase.sql`, `docs/MENORES_COMPARTIDOS_2026-11-02.md`.
+- Corrige el estiramiento de campos en «Mi cuenta» causado por los textos de ayuda y distribuye DNI/CUIT, altura y peso en cuatro columnas alineadas en PC, con adaptación responsive.
+- Incluye «Registrar o vincular a un menor» al principio de «Mi cuenta». Sólo después del vínculo vigente se muestra la pestaña «Menores a cargo».
+- Crea los datos de identidad mínima del menor y las relaciones de varios adultos, sin crear cuentas ficticias ni permitir buscar menores ajenos.
+- Invitaciones personales de un uso, ligadas a correo verificado; control de permisos y RLS desde Supabase. Roles «responsable» y «colaborador» para acceso futuro a los estudios; sólo responsable gestiona vínculos.
+- **Primera fase únicamente**: no se habilitan aún estudios, carga de archivos, IA ni datos pediátricos. Se necesita completar validaciones médicas/legales y de seguridad.
+- Verificar la migración y las RPC antes de publicar el frontend; sin cambios en datos médicos preexistentes.
