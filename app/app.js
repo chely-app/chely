@@ -1067,6 +1067,9 @@ async function accountView() {
         h('label', { class: 'field', for: 'health-coverage' }, 'Obra social o prepaga', coverage,
           h('span', { class: 'hint' }, 'Escribí para buscar entre sugerencias o poné el nombre manualmente.')),
         healthCoverageSuggestions(),
+        h('p', { class: 'hint' }, 'Si no encontrás tu cobertura, escribila igual. ',
+          h('a', { href: 'https://www.argentina.gob.ar/agentes-del-seguro-rnas', target: '_blank', rel: 'noopener noreferrer' },
+            'Consultar el registro oficial de Agentes del Seguro de Salud.')),
         h('div', { class: 'row' }, saveHealthBtn));
     }
   }
