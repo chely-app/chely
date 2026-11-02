@@ -250,3 +250,18 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); outline
 
 /* Hecho por ChatGPT · 2026-11-02 · Opciones claras para cámara y galería. */
 .study-photo-options { display: grid; gap: .8rem; grid-template-columns: repeat(auto-fit,minmax(13rem,1fr)); }
+
+
+/* Hecho por ChatGPT · 2026-11-02 · Contraseñas de igual altura y línea base. */
+.password-fields { align-items: start; }
+.password-fields > label.field { display: flex; flex-direction: column; align-items: stretch; gap: .45rem; min-width: 0; }
+.password-fields input[type=password] { flex: 0 0 auto; box-sizing: border-box; height: 3.1rem; min-height: 3.1rem; }
+
+/* Hecho por ChatGPT · 2026-11-02 · Coberturas múltiples, similar al editor de alergias. */
+.coverage-field { display: grid; gap: .5rem; min-width: 0; }
+.coverage-entry > input { flex: 1 1 14rem; min-width: 0; }
+.coverage-entry > button { flex: 0 0 auto; }
+.coverage-field > .allergy-tags { min-height: 2rem; }
+@media (max-width: 560px) {
+  .coverage-entry > button { width: 100%; }
+}

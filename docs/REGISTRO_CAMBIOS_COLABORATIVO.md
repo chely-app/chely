@@ -122,3 +122,12 @@ Este archivo documenta los cambios realizados por distintos colaboradores (human
 - Se aplica el mismo selector a estudios personales y al módulo de menores; no cambia autenticación, permisos de estudios, RLS, Storage ni el motor de IA.
 - Se conserva el borrador en memoria de la pestaña (sin guardar datos médicos en localStorage). El archivo original, si se sube, sigue protegido por los mecanismos existentes.
 - Comprobación de sintaxis JS y casos de inferencia de metadatos realizados. Pendiente: prueba de interfaz, permisos de cámara, enlace CORS y carga real en PC y móvil.
+
+## 2026-11-02 — Hecho por ChatGPT (coberturas múltiples y contraseña alineada)
+**Archivos:** `app/app.js`, `app/styles.css`, `supabase/migrations/20261102050000_multiple_health_coverages.sql`.
+- «Cambiar la contraseña»: los dos campos se presentan a la misma altura y con dimensiones iguales. La ayuda «Al menos 8 caracteres» se ubica debajo del primer campo para no desplazarlo.
+- «Obras sociales o prepagas» admite agregar y quitar hasta ocho coberturas independientes, sin sobrescribir las anteriores. La información se guarda por paciente y por menor bajo las políticas RLS existentes.
+- Se agregan `PAMI Veteranos de Guerra` y `INSSSEP` a la lista local de sugerencias. También es posible escribir coberturas no incluidas. No se afirma verificar la condición real de afiliado.
+- Se incorporó la columna `health_coverages text[]` a `patient_health_details` y `minor_health_details`; los valores previos se migraron automáticamente al arreglo sin perderse.
+- Se mantiene la columna anterior `health_coverage` con la primera cobertura para compatibilidad, y la interfaz nueva escribe ambos campos.
+- Verificación tras aplicar la migración: dos columnas y dos límites activos, cero valores anteriores perdidos, y ausencia de permiso de lectura pública en las dos tablas.

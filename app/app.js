@@ -1326,9 +1326,9 @@ async function patientDoctors() {
 const HEALTH_COVERAGE_SUGGESTIONS = [
   'OSDE', 'Swiss Medical', 'Galeno', 'Sancor Salud', 'Medicus',
   'Accord Salud', 'Prevención Salud', 'Unión Personal', 'OSECAC',
-  'OSDEPYM', 'OSPEDYC', 'OSPAT', 'OSPRERA', 'PAMI', 'IOMA',
-  'INSSSEP', 'Jerárquicos Salud', 'Hospital Italiano', 'Avalian',
-  'Federada Salud', 'OSECAC', 'OSPE', 'OSPEDYC'
+  'OSDEPYM', 'OSPEDYC', 'OSPAT', 'OSPRERA', 'PAMI',
+  'PAMI Veteranos de Guerra', 'INSSSEP', 'IOMA', 'Jerárquicos Salud',
+  'Hospital Italiano', 'Avalian', 'Federada Salud', 'OSPE'
 ];
 function healthCoverageSuggestions() {
   const list = h('datalist', { id: 'health-coverage-options' });
@@ -1337,6 +1337,51 @@ function healthCoverageSuggestions() {
   }
   return list;
 }
+
+/* Hecho por ChatGPT · 2026-11-02 · Múltiples coberturas de salud.
+   Se mantiene la cobertura anterior, y se evita guardar duplicados o perder
+   un texto escrito si el usuario se olvida de tocar «Agregar cobertura». */
+function healthCoveragesEditor(prefix, current, legacy) {
+  const old = Array.isArray(current) && current.length
+    ? current
+    : legacy && String(legacy).trim() ? [String(legacy).trim()] : [];
+  const coverages = [...new Map(old.filter(v => typeof v === 'string' && v.trim())
+    .map(v => [normalize(v.trim()), v.trim()])).values()];
+  const input = h('input', { id: prefix + '-coverage', type: 'text',
+    list: 'health-coverage-options', autocomplete: 'off', maxlength: 160,
+    placeholder: 'Ej.: PAMI Veteranos de Guerra' });
+  const tags = h('div', { class: 'allergy-tags', 'aria-live': 'polite' });
+  const redraw = () => {
+    tags.replaceChildren();
+    if (!coverages.length) tags.append(h('span', { class: 'muted small' }, 'Todavía no agregaste coberturas.'));
+    coverages.forEach((coverage, index) => tags.append(
+      h('span', { class: 'allergy-tag' }, h('span', {}, coverage),
+        h('button', { class: 'allergy-remove', type: 'button',
+          'aria-label': 'Quitar cobertura: ' + coverage, onclick: () => {
+            coverages.splice(index, 1); redraw();
+          } }, '×'))));
+  };
+  const add = () => {
+    const val = input.value.trim();
+    if (!val) return true;
+    if (coverages.some(v => normalize(v) === normalize(val))) {
+      input.value = ''; return true;
+    }
+    if (coverages.length >= 8) { toast('Podés registrar hasta 8 coberturas.'); return false; }
+    coverages.push(val); input.value = ''; redraw(); return true;
+  };
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+  const addBtn = h('button', { class: 'btn quiet sm', type: 'button', onclick: add }, 'Agregar cobertura');
+  redraw();
+  const root = h('div', { class: 'field coverage-field' },
+    h('label', { for: prefix + '-coverage', style: 'font-weight:700' }, 'Obras sociales o prepagas'),
+    h('div', { class: 'row coverage-entry' }, input, addBtn),
+    tags,
+    h('span', { class: 'hint' }, 'Podés agregar varias coberturas y quitarlas cuando quieras.'),
+    healthCoverageSuggestions());
+  return { root, values: () => add() ? [...coverages] : null };
+}
+
 async function accountView() {
   const m = mainEl();
   const me = state.me;
@@ -1372,7 +1417,7 @@ async function accountView() {
       h('p', { class: 'muted small' }, 'Todos los campos son opcionales. Esta información se guarda en una ficha privada, distinta del perfil público de tu cuenta.'));
     m.append(card);
     const { data: details, error: detailsError } = await sb.from('patient_health_details')
-      .select('document_type,document_number,height_cm,weight_kg,allergies,health_coverage').eq('id', me.id).maybeSingle();
+      .select('document_type,document_number,height_cm,weight_kg,allergies,health_coverage,health_coverages').eq('id', me.id).maybeSingle();
     if (detailsError) {
       card.append(h('div', { class: 'alert bad' }, 'No pudimos cargar tus datos de salud. ', errorText(detailsError)));
     } else {
@@ -1385,9 +1430,7 @@ async function accountView() {
         value: details?.height_cm == null ? '' : String(details.height_cm) });
       const weight = h('input', { id: 'health-weight', type: 'number', min: 1, max: 400, step: '0.1', placeholder: 'Ej.: 70',
         value: details?.weight_kg == null ? '' : String(details.weight_kg) });
-      const coverage = h('input', { id: 'health-coverage', type: 'text', list: 'health-coverage-options', maxlength: 160,
-        autocomplete: 'off', placeholder: 'Buscá o escribí tu obra social / prepaga',
-        value: details?.health_coverage || '' });
+      const coverageEditor = healthCoveragesEditor('health', details?.health_coverages, details?.health_coverage);
       const allergies = Array.isArray(details?.allergies) ? [...details.allergies] : [];
       const allergyInput = h('input', { id: 'health-allergy', type: 'text', maxlength: 120, placeholder: 'Ej.: penicilina' });
       const allergyList = h('div', { class: 'allergy-tags', 'aria-live': 'polite' });
@@ -1421,8 +1464,11 @@ async function accountView() {
         if (cm != null && (!Number.isFinite(cm) || cm < 40 || cm > 250)) return toast('Revisá la altura en centímetros.');
         if (kg != null && (!Number.isFinite(kg) || kg < 1 || kg > 400)) return toast('Revisá el peso en kilogramos.');
         if (allergies.join('|').length > 2500) return toast('La lista de alergias es demasiado larga.');
+        const coverages = coverageEditor.values();
+        if (!coverages) return;
         const payload = { id: me.id, document_type: dt || null, document_number: digits || null,
-          height_cm: cm, weight_kg: kg, allergies, health_coverage: coverage.value.trim() || null,
+          height_cm: cm, weight_kg: kg, allergies,
+          health_coverages: coverages, health_coverage: coverages[0] || null,
           updated_at: new Date().toISOString() };
         saveHealthBtn.disabled = true;
         try {
@@ -1441,9 +1487,7 @@ async function accountView() {
           h('label', { for: 'health-allergy', style: 'font-weight:700' }, 'Alergias'),
           h('div', { class: 'row' }, allergyInput, addBtn), allergyList,
           h('span', { class: 'hint' }, 'Agregá cada alergia por separado. Podés quitarla cuando quieras.')),
-        h('label', { class: 'field', for: 'health-coverage' }, 'Obra social o prepaga', coverage,
-          h('span', { class: 'hint' }, 'Escribí para buscar entre sugerencias o poné el nombre manualmente.')),
-        healthCoverageSuggestions(),
+        coverageEditor.root,
         h('p', { class: 'hint' }, 'Si no encontrás tu cobertura, escribila igual. ',
           h('a', { href: 'https://www.argentina.gob.ar/agentes-del-seguro-rnas', target: '_blank', rel: 'noopener noreferrer' },
             'Consultar el registro oficial de Agentes del Seguro de Salud.')),
@@ -1466,8 +1510,9 @@ async function accountView() {
     } finally { changePass.disabled = false; }
   });
   m.append(h('div', { class: 'card' }, h('h2', {}, 'Cambiar la contraseña'),
-    h('div', { class: 'grid2' },
-      h('label', { class: 'field', for: 'acc-pass' }, 'Contraseña nueva', h('span', { class: 'hint' }, 'Al menos 8 caracteres.'), pass),
+    h('div', { class: 'grid2 password-fields' },
+      h('label', { class: 'field', for: 'acc-pass' }, 'Contraseña nueva', pass,
+        h('span', { class: 'hint' }, 'Al menos 8 caracteres.')),
       h('label', { class: 'field', for: 'acc-pass-confirm' }, 'Confirmar contraseña nueva', passConfirm)),
     h('div', { class: 'row' }, changePass)));
 
@@ -1630,7 +1675,7 @@ async function minorHealthPanel(host, minor) {
     h('p',{class:'muted small'},'Datos propios del menor. Los adultos vinculados pueden consultarlos y actualizarlos.'));
   host.append(card);
   const {data,error}=await sb.from('minor_health_details')
-    .select('document_type,document_number,height_cm,weight_kg,allergies,health_coverage')
+    .select('document_type,document_number,height_cm,weight_kg,allergies,health_coverage,health_coverages')
     .eq('minor_id',minor.id).maybeSingle();
   if(error)return card.append(h('div',{class:'alert bad'},errorText(error)));
   const type=h('select',{id:'minor-doc-type'},
@@ -1643,8 +1688,7 @@ async function minorHealthPanel(host, minor) {
     placeholder:'Ej.: 110',value:data?.height_cm==null?'':String(data.height_cm)});
   const weight=h('input',{id:'minor-weight',type:'number',min:1,max:400,step:'.1',
     placeholder:'Ej.: 18',value:data?.weight_kg==null?'':String(data.weight_kg)});
-  const coverage=h('input',{id:'minor-coverage',type:'text',maxlength:160,
-    list:'health-coverage-options',placeholder:'Obra social o prepaga',value:data?.health_coverage||''});
+  const coverageEditor=healthCoveragesEditor('minor',data?.health_coverages,data?.health_coverage);
   const allergyInput=h('input',{id:'minor-allergy',type:'text',maxlength:120,
     placeholder:'Ej.: penicilina'});
   const allergies=Array.isArray(data?.allergies)?[...data.allergies]:[];
@@ -1676,11 +1720,14 @@ async function minorHealthPanel(host, minor) {
     if(cm!==null&&(!Number.isFinite(cm)||cm<40||cm>250))return toast('Revisá la altura.');
     if(kg!==null&&(!Number.isFinite(kg)||kg<1||kg>400))return toast('Revisá el peso.');
     if(allergies.join('|').length>2500)return toast('La lista de alergias es demasiado larga.');
+    const coverages=coverageEditor.values();
+    if(!coverages)return;
     save.disabled=true;
     try{
       const {error:e}=await sb.from('minor_health_details').upsert({
         minor_id:minor.id,document_type:dt||null,document_number:digits||null,
-        height_cm:cm,weight_kg:kg,allergies,health_coverage:coverage.value.trim()||null,
+        height_cm:cm,weight_kg:kg,allergies,
+        health_coverages:coverages,health_coverage:coverages[0]||null,
         updated_by:state.me.id,updated_at:new Date().toISOString()
       },{onConflict:'minor_id'});
       if(e)toast(errorText(e));else toast('Datos del menor guardados.');
@@ -1695,8 +1742,8 @@ async function minorHealthPanel(host, minor) {
     h('div',{class:'field'},h('label',{for:'minor-allergy',style:'font-weight:700'},'Alergias'),
       h('div',{class:'row'},allergyInput,
         h('button',{class:'btn quiet sm',type:'button',onclick:addAllergy},'Agregar alergia')),tags),
-    h('label',{class:'field',for:'minor-coverage'},'Obra social o prepaga',coverage),
-    healthCoverageSuggestions(),h('div',{class:'row'},save));
+    coverageEditor.root,
+    h('div',{class:'row'},save));
 }
 
 
