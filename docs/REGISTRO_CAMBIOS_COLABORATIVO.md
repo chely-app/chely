@@ -81,3 +81,8 @@ Este archivo documenta los cambios realizados por distintos colaboradores (human
 - Se agrega pestaña condicional «Menores a cargo»; alta y aceptación de invitación en «Mi cuenta».
 - Invitaciones por correo específico, token aleatorio de un solo uso, vencimiento de siete días y comprobaciones de seguridad en Supabase.
 - **No se habilitan estudios ni IA pediátricos hasta adaptar todas las capas de autorización.** Revisión de tutela y representación legal pendiente para datos reales.
+
+## 2026-11-02 — Hecho por ChatGPT (aclaración del modelo familiar)
+- Dos niveles: «Responsable» y «Adulto autorizado / colaborador». Ambos tendrán lectura y modificación de estudios del menor; sólo «Responsable» administra invitaciones y otros adultos.
+- La opción «Compartir un estudio» no concede acceso a la ficha. Se planifica usar una copia independiente, como en los estudios de pacientes adultos.
+- **La implementación completa de estudios médicos de menores sigue pendiente** y la PR #10 continúa como borrador sin cambios en producción.
