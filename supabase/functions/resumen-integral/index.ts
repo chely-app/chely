@@ -100,12 +100,8 @@ function textOf(m:Anthropic.Beta.BetaMessage):string {
   return m.content.filter(c=>c.type==="text").map(c=>c.text).join("\n").trim();
 }
 function isInfrastructureError(e:unknown):boolean {
-  return e instanceof Anthropic.AuthenticationError ||
-    e instanceof Anthropic.PermissionDeniedError ||
-    e instanceof Anthropic.RateLimitError ||
-    e instanceof Anthropic.InternalServerError ||
-    e instanceof Anthropic.APIConnectionError ||
-    e instanceof Anthropic.APIConnectionTimeoutError;
+  // No confundir errores del servicio/modelo con un informe médico defectuoso.
+  return e instanceof Anthropic.APIError;
 }
 async function currentJob(admin:ReturnType<typeof serviceClient>,uid:string):Promise<Job|null>{
   const {data,error}=await admin.from("patient_history_jobs").select("*")
