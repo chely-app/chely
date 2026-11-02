@@ -880,7 +880,7 @@ async function patientStudies() {
       .select('job_id,status,attempts,study_count,created_at,started_at,finished_at,last_error')
       .eq('patient_id', overviewOwner).maybeSingle(),
     sb.from('patient_history_items')
-      .select('study_id,status,reason')
+      .select('study_id,status,reason,summary')
       .eq('patient_id', overviewOwner).limit(251)
   ]);
   if (overallError) console.warn('No se pudo leer la evaluación integral guardada.');
@@ -910,10 +910,89 @@ async function patientStudies() {
     ownHistory.some(st => st.updated_at && new Date(st.updated_at) > new Date(overall.generated_at)));
   const overviewCard = h('div', { class: 'card' },
     h('h2', {}, 'Evaluación integral del historial'),
-    h('p', {}, 'Chely puede comparar los estudios escritos y explicar su evolución. Los estudios anteriores no permiten confirmar por sí solos el estado de salud de hoy.'),
+    h('p', {}, 'Primero se muestran los informes recientes. Los estudios antiguos sirven como antecedentes para entender la evolución, pero no describen por sí solos la situación clínica actual.'),
     h('p', { class: 'hint' },
       ownHistory.length + ' estudios registrados · ' +
-      (ownHistory.length - unreadHistory) + ' con texto guardado. La IA se utiliza solo a pedido.'));
+      (ownHistory.length - unreadHistory) + ' con texto guardado. Los resúmenes existentes se leen sin gastar IA.'));
+
+  // Hecho por ChatGPT · 2026-11-02 · Mostrar lo reciente a partir de los
+  // informes ya leídos y sus fichas existentes (costo adicional de IA: cero).
+  // La carga no es la fecha clínica. Las fechas extraídas de PDF antiguos
+  // pendientes de confirmar se presentan como SUGERIDAS, nunca verificadas.
+  const sortedUploads = ownHistory.slice().sort((a,b) =>
+    String(b.created_at || '').localeCompare(String(a.created_at || '')));
+  const newestUpload = sortedUploads[0];
+  const itemByStudyId = new Map(currentItems.map(x => [x.study_id, x]));
+  if (newestUpload) {
+    const draft = newestUpload.title === STUDY_PENDING_TITLE
+      ? metadataFromReport(newestUpload.report_text || '') : null;
+    const lastName = draft?.title || (newestUpload.title === STUDY_PENDING_TITLE
+      ? 'Tipo de estudio pendiente de confirmar' : newestUpload.title);
+    const dateHint = draft?.date || null;
+    const lastDate = newestUpload.title !== STUDY_PENDING_TITLE
+      ? newestUpload.study_date : dateHint;
+    const lastItem = itemByStudyId.get(newestUpload.id);
+    const latestCard = h('section', { class: 'history-latest-study' },
+      h('h3', {}, 'Último informe incorporado'),
+      h('p', { class: 'muted small' }, 'Ordenado por carga, no necesariamente por fecha médica.'),
+      h('p', {}, h('strong', {}, lastName)),
+      h('p', { class: 'hint' },
+        lastDate ? (newestUpload.title === STUDY_PENDING_TITLE
+          ? 'Fecha encontrada en el informe (pendiente de confirmar): '
+          : 'Fecha clínica registrada: ') + fmtDate(lastDate)
+          : 'Fecha clínica no confirmada. No se usa el día de carga como fecha del estudio.'));
+    if (lastItem?.status === 'done' && lastItem.summary?.trim()) {
+      latestCard.append(h('p', { class: 'muted small' },
+        'Lectura ya guardada. Mostrarla no consume créditos:'),
+        renderExplanation(lastItem.summary));
+    } else if (lastItem?.status === 'review') {
+      latestCard.append(h('p', { class: 'hint' },
+        'Este estudio está pendiente de revisión manual: ' +
+        (lastItem.reason || 'No hay una lectura fiable guardada.')));
+    } else {
+      latestCard.append(h('p', { class: 'hint' },
+        'Todavía no hay una ficha de lectura individual guardada para este informe.'));
+    }
+    const openLatest = h('button', { type: 'button', class: 'btn' },
+      'Abrir y confirmar datos de este estudio');
+    openLatest.addEventListener('click', () => go('mi-estudio', { studyId: newestUpload.id }));
+    latestCard.append(h('div', { class: 'row' }, openLatest));
+    overviewCard.append(latestCard);
+  }
+
+  const datedReports = ownHistory.map(st => {
+    const needsConfirmation = st.title === STUDY_PENDING_TITLE;
+    const meta = needsConfirmation ? metadataFromReport(st.report_text || '') : null;
+    return {
+      st, date: needsConfirmation ? meta?.date || null : st.study_date,
+      needsConfirmation, title: needsConfirmation ? meta?.title || st.title : st.title,
+      item: itemByStudyId.get(st.id)
+    };
+  }).filter(x => x.date && x.item?.status !== 'excluded')
+    .sort((a,b) => b.date.localeCompare(a.date) ||
+      String(b.st.created_at || '').localeCompare(String(a.st.created_at || '')));
+  if (datedReports.length) {
+    const recent = h('details', { class: 'history-recent-list', open: true },
+      h('summary', {}, 'Ver estudios recientes por fecha médica (' +
+        Math.min(5, datedReports.length) + ')'));
+    const entries = h('div', { class: 'stack' });
+    for (const row of datedReports.slice(0,5)) {
+      const button = h('button', { type: 'button', class: 'item' },
+        h('div', { class: 'row' },
+          h('strong', {}, row.title),
+          h('span', { class: 'pill' }, fmtDate(row.date))),
+        h('p', { class: 'muted small' }, row.needsConfirmation
+          ? 'Fecha sugerida por el PDF; requiere confirmación'
+          : 'Fecha clínica registrada'),
+        h('p', { class: 'muted small' }, row.item?.status === 'done'
+          ? 'Análisis individual guardado' : row.item?.status === 'review'
+            ? 'Requiere revisión manual' : 'Sin ficha de análisis'));
+      button.addEventListener('click', () => go('mi-estudio', { studyId: row.st.id }));
+      entries.append(button);
+    }
+    recent.append(entries);
+    overviewCard.append(recent);
+  }
   if (overall?.explanation) {
     const partial = summaryCounts.review > 0 || summaryCounts.pending > 0;
     overviewCard.append(h('div', { class: 'alert ok', role: 'status' },
@@ -927,7 +1006,7 @@ async function patientStudies() {
     if (changedHistory) overviewCard.append(h('p', { class: 'hint' },
       'El historial cambió desde esta evaluación. La versión guardada sigue disponible para consultar.'));
     overviewCard.append(h('details', { class: 'stack', open: true },
-      h('summary', {}, 'Evaluación guardada — ver u ocultar el resultado'),
+      h('summary', {}, 'Evaluación histórica guardada — ver u ocultar'),
       renderExplanation(overall.explanation)));
   }
   const overviewStatus = h('p', { class: 'hint', role: 'status', 'aria-live': 'polite' });
@@ -1655,7 +1734,7 @@ function metadataFromReport(text) {
       ['Análisis de laboratorio',/\b(laboratorio|bioqu[ií]mica|glucemia|perfil lip[ií]dico|colesterol|hematolog[ií]a)\b/i],
       ['Ecografía',/\b(ecograf[ií]a|ecogr[aá]fico|ultrasonido)\b/i],
       ['Radiografía',/\b(radiograf[ií]a|rayos\s*x)\b/i],
-      ['Tomografía',/\b(tomograf[ií]a|tomogr[aá]fico|tac)\b/i],
+      ['Tomografía',/\b(tomograf[ií]a|tomogr[aá]fico|tcms|tac)\b/i],
       ['Resonancia magnética',/\b(resonancia magn[eé]tica|rmn)\b/i],
       ['Electrocardiograma',/\b(electrocardiograma|electrocardiogr[aá]fico|ecg)\b/i]
     ];
@@ -1664,19 +1743,28 @@ function metadataFromReport(text) {
   // Priorizar fechas de estudio/realización/informe, no fecha de nacimiento.
   let date = null;
   const pattern = /(?:\bfecha\s*(?:de(?:l)?\s*)?(?:estudio|informe|extracci[oó]n|realizaci[oó]n|an[aá]lisis|toma(?:\s+de\s+muestra)?|emisi[oó]n|procedimiento|muestra|recolecci[oó]n)|\brealizado\s+el|\bfecha\s*[:\-])\s*[:\-]?\s*(\d{1,2}[/.\\-]\d{1,2}[/.\\-]\d{4}|\d{4}-\d{1,2}-\d{1,2})/i;
-  for (const line of lines) {
-    if (/\bnacimiento\b|f\.?\s*nac\.?/i.test(line)) continue;
-    const matched = line.match(pattern);
-    if (!matched) continue;
-    const candidate = matched[1];
+  // Algunos hospitales ponen "Fecha de estudio" y la fecha real
+  // en la línea SIGUIENTE. No confundir con fecha de nacimiento ni de carga.
+  const dateOnly = /^(\d{1,2}[/.\\-]\d{1,2}[/.\\-]\d{4}|\d{4}-\d{1,2}-\d{1,2})$/;
+  const clinicalDateLabel = /^(?:fecha\s*(?:de(?:l)?\s*)?(?:estudio|informe|extracci[oó]n|realizaci[oó]n|an[aá]lisis|toma(?:\s+de\s+muestra)?|emisi[oó]n|procedimiento|muestra|recolecci[oó]n)|realizado\s+el)\s*[:\-]?$/i;
+  const parseDateCandidate = candidate => {
     const iso = candidate.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
     const formatted = iso
       ? iso[3].padStart(2, '0') + '/' + iso[2].padStart(2, '0') + '/' + iso[1]
       : candidate.replace(/[.-]/g, '/');
     const parsed = parseDMY(formatted);
-    if (parsed && parsed <= todayISO() && parsed >= '1910-01-01') {
-      date = parsed; break;
-    }
+    return parsed && parsed <= todayISO() && parsed >= '1910-01-01' ? parsed : null;
+  };
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/\bnacimiento\b|f\.?\s*nac\.?/i.test(line)) continue;
+    const matched = line.match(pattern);
+    let candidate = matched?.[1] || null;
+    if (!candidate && clinicalDateLabel.test(line) && lines[i + 1])
+      candidate = lines[i + 1].match(dateOnly)?.[1] || null;
+    if (!candidate) continue;
+    date = parseDateCandidate(candidate);
+    if (date) break;
   }
   return { title: title ? title.slice(0, 180) : null, date };
 }
