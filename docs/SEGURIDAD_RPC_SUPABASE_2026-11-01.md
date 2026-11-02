@@ -32,3 +32,14 @@ Después de cambiar el control, volver a revisar Supabase Security Advisor. Si s
 
 ## Nota de seguridad
 No se deben eliminar las advertencias solo para obtener un panel «verde». La prioridad es que las operaciones de los pacientes estén limitadas y auditadas. Las funciones `SECURITY DEFINER` intencionales requieren controles de identidad dentro de sus cuerpos y pruebas posteriores de acceso cruzado entre usuarios.
+
+## Verificación posterior — 2026-11-01 (Hecho por ChatGPT)
+
+- Migración **aplicada con éxito** en Supabase: `security_rpc_roles_20261102`, versión `20261102010004`.
+- Consultas a permisos: `invitation_info` sin `EXECUTE` para `anon` ni `authenticated`; `is_doctor` y `is_linked` sin `SECURITY DEFINER`.
+- Security Advisor ejecutado luego de la migración: **ningún aviso 0028 para acceso anónimo**; 0029 reducido de **10 a 7** funciones, que siguen siendo operaciones RPC privilegiadas utilizadas por la aplicación.
+- Aviso de **Leaked Password Protection** continúa; no se puede habilitar desde la conexión Supabase SQL. Requiere operación del usuario en el panel Auth y plan compatible.
+- Prueba no destructiva con `SET LOCAL ROLE authenticated` y JWT de una cuenta paciente existente: sesión detectada, **1 perfil visible**, **1 estudio visible**, **0 vínculos**, `is_doctor()=false`, `is_linked()` con tercero inexistente `false`.
+- Actualmente las 3 cuentas de la tabla `public.profiles` son de tipo paciente; no hay un perfil de médico disponible para ensayo de invitaciones con cuentas de prueba. Esta limitación impide declarar completamente validado el flujo médico-paciente.
+
+**Pendiente:** comprobar despliegue actualizado de `app/app.js` en Cloudflare, probar alta real de médico/paciente con cuentas de prueba y habilitar protección de contraseñas filtradas cuando esté disponible.
