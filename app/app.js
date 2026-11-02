@@ -367,17 +367,12 @@ async function viewAuth() {
   if (!authTab) authTab = invite || location.hash === '#crear' ? 'crear' : 'entrar';
   const box = h('div', { class: 'card auth' });
   if (invite) {
-    const info = h('div', { class: 'alert info' }, 'Revisando tu invitación…');
-    box.append(info);
-    sb.rpc('invitation_info', { p_code: invite }).then(({ data }) => {
-      const row = data && data[0];
-      info.textContent = !row ? 'El código de invitación no existe. Revisalo con tu médico.'
-        : !row.valid ? 'Esta invitación venció o ya se usó. Pedile una nueva a tu médico.'
-        : `${row.doctor_name || 'Tu médico'} te invitó a Chely para recibir tus estudios explicados. Creá tu cuenta o entrá si ya tenés una.`;
-      if (!row || !row.valid) { info.className = 'alert warn'; clearInvite(); }
-    });
+    // Hecho por ChatGPT · 2026-11-01 · La consulta de invitaciones se reserva a usuarios autenticados.
+    // La validez del código se verifica en redeem_invitation después de iniciar sesión y aceptar el consentimiento.
+    box.append(h('div', { class: 'alert info' },
+      'Recibimos tu código de invitación. Creá tu cuenta o entrá para vincularte con tu médico. Vamos a comprobar el código cuando inicies sesión.'));
   } else {
-    box.append(h('div', { class: 'stack' }, h('h1', {}, 'Tus estudios, en criollo'), h('p', { class: 'muted' }, 'Entrá para ver tus estudios explicados por tu médico.')));
+    box.append(h('div', { class: 'stack' }, h('h1', {}, 'Tus estudios, explicados en palabras claras'), h('p', { class: 'muted' }, 'Entrá para ver tus estudios explicados en palabras claras.')));
   }
   const tabs = h('div', { class: 'tabs', role: 'tablist' },
     h('button', { role: 'tab', 'aria-selected': String(authTab === 'entrar'), onclick: () => { authTab = 'entrar'; viewAuth(); } }, 'Entrar'),
