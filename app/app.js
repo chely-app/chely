@@ -916,7 +916,7 @@ function studySourceChooser(prefix, draft = {}) {
   };
   STUDY_UPLOAD_MODES.forEach(item => {
     const button = h('button', { type: 'button', class: 'study-method',
-      onclick: () => { mode = item.id; imported = null; render(); } },
+      onclick: () => { mode = item.id; imported = null; draft.file = null; photo.value = ''; pdf.value = ''; render(); } },
       h('span', { class: 'study-method-icon', 'aria-hidden': 'true' }, item.icon),
       h('strong', {}, item.name),
       h('span', { class: 'muted small' }, item.help));
@@ -927,8 +927,8 @@ function studySourceChooser(prefix, draft = {}) {
   render();
   return {
     root, getMode: () => mode, getText: () => report.value.trim(),
-    getFile: () => mode === 'foto' ? (photo.files?.[0] || draft.file && draft.mode === 'foto' ? draft.file : null)
-      : mode === 'pdf' ? (pdf.files?.[0] || draft.file && draft.mode === 'pdf' ? draft.file : null)
+    getFile: () => mode === 'foto' ? (photo.files?.[0] || draft.file || null)
+      : mode === 'pdf' ? (pdf.files?.[0] || draft.file || null)
       : mode === 'enlace' ? imported : null,
     getLink: () => url.value.trim()
   };
@@ -972,50 +972,74 @@ function filePicker(input) {
 
 function patientUpload() {
   const m = mainEl();
-  if (!uploadDraft) uploadDraft = { title: '', date: todayISO(), text: '', file: null };
-  let date = uploadDraft.date;
-
-  const title = h('input', { type: 'text', id: 'up-title', placeholder: 'Ej.: Análisis de sangre', value: uploadDraft.title });
-  const file = h('input', { type: 'file', id: 'up-file', accept: UPLOAD_TYPES.join(',') });
-  const text = h('textarea', { id: 'up-text', class: 'report', placeholder: 'O pegá acá el texto del informe…' }, uploadDraft.text);
+  if (!uploadDraft) uploadDraft = { title: '', date: todayISO(), text: '', file: null, mode: 'foto', url: '' };
+  let date = uploadDraft.date || todayISO();
+  const source = studySourceChooser('up', uploadDraft);
+  const title = h('input', { type: 'text', id: 'up-title', maxlength: 180,
+    placeholder: 'Ej.: Análisis de sangre', value: uploadDraft.title || '' });
+  const meta = h('div', { class: 'study-manual-meta grid2' },
+    h('label', { class: 'field', for: 'up-title' }, '¿Qué estudio es?', title),
+    h('div', { class: 'field' }, h('label', { for: 'up-date', style: 'font-weight:700' }, 'Fecha del estudio'),
+      datePicker({ id: 'up-date', value: date, onChange: iso => { date = iso; uploadDraft.date = iso; } })));
   const msg = h('div', { role: 'alert' });
-  // Conservar el File en memoria si la navegación interna o una sesión redibujan la página.
-  // No se guarda el contenido del informe en almacenamiento permanente del navegador.
   title.addEventListener('input', () => { uploadDraft.title = title.value; });
-  text.addEventListener('input', () => { uploadDraft.text = text.value; });
-  file.addEventListener('change', () => { uploadDraft.file = file.files[0] || null; });
-  const btn = h('button', { class: 'btn primary big' }, 'Subir estudio');
+  const refresh = () => { meta.hidden = source.getMode() !== 'texto'; };
+  source.root.addEventListener('study-method-change', refresh);
+  refresh();
+  const btn = h('button', { class: 'btn primary big', type: 'button' }, 'Continuar con el estudio');
   btn.addEventListener('click', async () => {
     msg.className = ''; msg.textContent = '';
-    const f = file.files[0] || uploadDraft?.file;
-    if (!title.value.trim()) { msg.className = 'alert bad'; msg.textContent = 'Escribí qué estudio es (por ejemplo, «Análisis de sangre»).'; return; }
-    if (!date) { msg.className = 'alert bad'; msg.textContent = 'Revisá la fecha: usá día/mes/año.'; return; }
-    if (!f && !text.value.trim()) { msg.className = 'alert bad'; msg.textContent = 'Elegí el archivo del informe o pegá su texto.'; return; }
-    if (f && (!UPLOAD_TYPES.includes(f.type) || f.size > MAX_UPLOAD)) { msg.className = 'alert bad'; msg.textContent = 'El archivo tiene que ser PDF, JPG o PNG de hasta 20 MB. Si es Word, guardalo como PDF.'; return; }
-    btn.disabled = true; btn.replaceChildren(h('span', { class: 'spinner' }), ' Subiendo…');
-    const { data: st, error } = await sb.from('studies').insert({ patient_id: state.me.id, doctor_id: null, self_uploaded: true, title: title.value.trim(), study_date: date, report_text: f ? '' : text.value.trim() }).select('id').single();
-    if (error) { btn.disabled = false; btn.textContent = 'Subir estudio'; msg.className = 'alert bad'; msg.textContent = errorText(error); return; }
-    if (f) {
-      try {
-        await archivoDebian('upload', st.id, null, f);
-      } catch (e) {
-        btn.disabled = false; btn.textContent = 'Subir estudio';
+    const mode = source.getMode();
+    const f = source.getFile();
+    const pasted = source.getText();
+    if (mode === 'texto') {
+      if (!pasted) { msg.className = 'alert bad'; msg.textContent = 'Pegá el texto del informe.'; return; }
+      if (title.value.trim().length < 2 || !date) {
+        msg.className = 'alert bad'; msg.textContent = 'Completá el nombre y la fecha del informe.'; return;
+      }
+    } else {
+      if (!f) {
         msg.className = 'alert bad';
-        msg.textContent = 'El estudio se creó, pero el archivo no se pudo guardar: ' + errorText(e) + '. Podés volver a la lista y corregirlo.';
+        msg.textContent = mode === 'enlace' ? 'Primero importá el archivo desde el enlace o descargalo desde el portal.'
+          : 'Elegí una foto o archivo PDF para continuar.';
         return;
       }
+      if (!studyUploadFileValid(f,mode)) {
+        msg.className = 'alert bad'; msg.textContent = 'El archivo debe ser PDF o una imagen válida de hasta 20 MB.'; return;
+      }
     }
-    clearUploadDraft();
-    go('mi-estudio', { studyId: st.id, autoExplain: true });
+    btn.disabled = true; btn.replaceChildren(h('span', { class: 'spinner' }), ' Guardando…');
+    try {
+      const autoMetadata = mode !== 'texto';
+      // La base requiere título y fecha mientras se reconoce el documento.
+      // «Estudio por identificar» indica al editor que debe solicitar confirmación.
+      const { data: st, error } = await sb.from('studies').insert({
+        patient_id: state.me.id, doctor_id: null, self_uploaded: true,
+        title: autoMetadata ? STUDY_PENDING_TITLE : title.value.trim(),
+        study_date: autoMetadata ? todayISO() : date,
+        report_text: autoMetadata ? '' : pasted
+      }).select('id').single();
+      if (error || !st) throw error || new Error('No se pudo crear el estudio.');
+      if (autoMetadata) {
+        try { await archivoDebian('upload', st.id, null, f); }
+        catch (e) { throw new Error('El estudio fue creado, pero falló la carga del archivo: ' +
+          errorText(e) + '. Podés volver a la lista y corregirlo.'); }
+      }
+      clearUploadDraft();
+      go('mi-estudio', { studyId: st.id, autoExplain: !autoMetadata });
+    } catch (e) {
+      msg.className = 'alert bad'; msg.textContent = errorText(e);
+      btn.disabled = false; btn.textContent = 'Continuar con el estudio';
+    }
   });
-  m.append(h('div', { class: 'row' }, h('button', { class: 'btn quiet sm', onclick: () => go('estudios') }, '‹ Mis estudios')));
-  m.append(h('div', { class: 'card' }, h('h1', {}, 'Subir un estudio'),
-    h('p', { class: 'muted' }, 'Solo informes escritos: análisis, ecografías, radiografías, etc. Chely no interpreta las imágenes de las placas.'),
-    h('div', { class: 'grid2' }, h('label', { class: 'field', for: 'up-title' }, '¿Qué estudio es?', title),
-      h('div', { class: 'field' }, h('label', { for: 'up-date', style: 'font-weight:700' }, 'Fecha del estudio'), datePicker({ id: 'up-date', value: date, onChange: iso => { date = iso; uploadDraft.date = iso; } }))),
-    h('label', { class: 'field', for: 'up-file' }, 'Archivo del informe ', h('span', { class: 'hint' }, 'PDF o foto (JPG, PNG), hasta 20 MB.'), filePicker(file)),
-    uploadDraft.file ? h('p', { class: 'hint' }, 'Archivo conservado en esta pestaña: ' + uploadDraft.file.name) : null,
-    h('label', { class: 'field', for: 'up-text' }, 'O el texto del informe ', h('span', { class: 'hint' }, '(solo si no tenés el archivo; si subís el archivo, Chely lo lee solo)'), text),
+  m.append(h('div', { class: 'row' },
+    h('button', { class: 'btn quiet sm', onclick: () => go('estudios') }, '‹ Mis estudios')));
+  m.append(h('div', { class: 'card' },
+    h('h1', {}, 'Subir un estudio'),
+    h('p', { class: 'muted' }, 'Elegí la forma más fácil para vos. Chely lee informes escritos, no interpreta imágenes diagnósticas como radiografías o placas.'),
+    source.root, meta,
+    h('p', { class: 'hint study-file-guidance' },
+      'Con una foto, un PDF o un archivo importado, Chely intentará identificar el nombre y la fecha. Vas a poder confirmarlos antes de recibir la explicación.'),
     msg, h('div', { class: 'row' }, btn)));
 }
 
