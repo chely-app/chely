@@ -193,3 +193,18 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); outline
   .account-fields, .health-fields { grid-template-columns: minmax(0, 1fr); }
   .health-fields > label.field { grid-template-rows: auto 3.2rem; }
 }
+
+
+/* Hecho por ChatGPT · 2026-11-02 · Selector universal: ícono de calendario dentro del cuadro. */
+.date-picker { position: relative; display: flex; min-width: 0; width: 100%; }
+.date-picker > input[type="text"] { width: 100%; min-width: 0; padding-right: 3.25rem; }
+.date-picker-toggle { position: absolute; right: .3rem; top: 50%; transform: translateY(-50%);
+  width: 2.65rem; height: 2.65rem; display: inline-flex; justify-content: center; align-items: center;
+  border: 0; border-radius: .6rem; background: transparent; color: var(--accent-strong); cursor: pointer; }
+.date-picker-toggle:hover { background: var(--surface-2); }
+.date-picker-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.date-picker-toggle svg { width: 1.3rem; height: 1.3rem; pointer-events: none; }
+.date-picker-popup { position: absolute; top: calc(100% + .45rem); left: 0;
+  width: min(21rem, calc(100vw - 40px)); z-index: 30;
+  box-shadow: 0 10px 30px rgba(0,0,0,.25); gap: .5rem; max-height: min(75vh, 30rem); overflow-y: auto; }
+@media (max-width: 560px) { .date-picker-popup { width: min(20rem, calc(100vw - 48px)); } }
