@@ -534,3 +534,31 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); outline
   .chely-latest-link { grid-template-columns:minmax(0,1fr); }
   .chely-latest-link .btn { grid-column:1; grid-row:auto; justify-self:stretch; }
 }
+
+/* Chely · 2026-11-02 · Lectura fácil de resultados guardados, sin consumir IA. */
+.chely-history-easy {
+  display:grid; gap:.85rem; min-width:0;
+  padding:1.15rem; background:var(--surface-2);
+  border:1px solid var(--line); border-radius:1rem;
+}
+.chely-history-easy h3 { color:var(--accent-strong); font-size:1.2rem; }
+.chely-history-easy-list {
+  display:grid; gap:.9rem;
+  padding-left:1.35rem; margin:0;
+}
+.chely-history-easy-list li { padding-left:.2rem; line-height:1.65; }
+.chely-technical-evaluation {
+  border:1px solid var(--line); border-radius:.9rem;
+  padding:.8rem 1rem;
+}
+.chely-technical-evaluation > summary {
+  cursor:pointer; min-height:2.5rem;
+  font-weight:700; color:var(--accent-strong);
+}
+.chely-technical-evaluation .explanation {
+  padding-top:1rem; overflow-wrap:anywhere;
+}
+@media(max-width:480px) {
+  .chely-history-easy { padding:.85rem; }
+  .chely-history-easy-list { gap:.75rem; }
+}
