@@ -410,6 +410,9 @@ function navFor(items) {
   return nav;
 }
 function go(page, extra = {}) {
+  // No reconstruir la misma pantalla por tocar su pestaña activa.
+  if (state.page === page && !extra.studyId && !extra.patientId &&
+      !extra.minorId && !extra.minorStudyId && !extra.autoExplain) return;
   window.onbeforeunload = null;
   navigationEpoch++;
   state.page = page; state.studyId = extra.studyId || null; state.autoExplain = !!extra.autoExplain;
@@ -438,17 +441,22 @@ async function boot() {
     history.replaceState(null, '', location.pathname + (params.toString() ? '?' + params : '') + location.hash);
   }
   sb.auth.onAuthStateChange((event, session) => {
+    const previousUser = state.session?.user?.id || null;
+    const currentUser = session?.user?.id || null;
     state.session = session;
     if (event === 'PASSWORD_RECOVERY') state.recovery = true;
-    if (event === 'SIGNED_OUT') {
+    if (event === 'SIGNED_OUT' || (previousUser && currentUser && currentUser !== previousUser)) {
       state.me = null; state.page = null; clearPrivateDrafts();
       clearRoute(); restoredRouteUser = null;
     }
-    if (session?.user?.id && state.me?.id && session.user.id !== state.me.id) {
-      state.me = null; state.page = null; clearPrivateDrafts();
-      clearRoute(); restoredRouteUser = null;
-    }
-    // No consultar la base dentro de este callback: se agenda.
+    // Hecho por ChatGPT · 2026-11-02:
+    // TOKEN_REFRESHED, USER_UPDATED y un SIGNED_IN de la MISMA sesión
+    // no implican navegación. Volver desde otra pestaña nunca debe
+    // destruir el DOM, el scroll ni un formulario a medio completar.
+    if ((event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED')
+      && previousUser === currentUser) return;
+    if (event === 'SIGNED_IN' && previousUser === currentUser && state.me && !state.recovery) return;
+    if (event === 'INITIAL_SESSION' && previousUser === currentUser && state.me && !state.recovery) return;
     setTimeout(render, 0);
   });
   const { data } = await sb.auth.getSession();
