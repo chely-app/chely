@@ -33,3 +33,13 @@ Este archivo documenta los cambios realizados por distintos colaboradores (human
 - Reglas de encabezados HTTP más restrictivas para `/app/*` y controles básicos en la portada.
 - Auditoría de Supabase **solo de lectura**; problemas pendientes documentados, sin alterar RLS, RPC ni Auth.
 - Etiquetas y commits con la convención `Hecho por ChatGPT`.
+
+## 2026-11-01 — Hecho por ChatGPT (Supabase Auth y RPC)
+**Objetivo:** reducir la exposición de funciones privilegiadas sin interrumpir el acceso a estudios.
+
+**Archivos:** `app/app.js`, `supabase/migrations/20261102010000_security_rpc_roles.sql`, `docs/SEGURIDAD_RPC_SUPABASE_2026-11-01.md`.
+- El formulario de invitación ya no solicita información sobre médicos antes de iniciar sesión.
+- Se retira el acceso de `anon` y `authenticated` a `public.invitation_info(text)` (función no utilizada después del cambio).
+- `public.is_doctor(uuid)` y `public.is_linked(uuid,uuid)` pasan a `SECURITY INVOKER`, manteniendo el acceso sujeto a las políticas RLS existentes.
+- Las siete funciones con elevación de privilegios necesaria permanecen documentadas y requieren pruebas de roles al actualizarse.
+- La protección de contraseñas filtradas requiere activación manual si el plan Supabase lo permite.
