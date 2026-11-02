@@ -831,6 +831,12 @@ async function patientStudy() {
 async function deleteOwnStudy(s) {
   if (!await confirmBox({ title: 'Borrar el estudio', text: 'Se borran el estudio, su explicación y el archivo. No se puede deshacer.', ok: 'Borrar', danger: true })) return;
   try {
+    // Hecho por ChatGPT · 2026-11-02 · Confirmar antes la eliminación de la
+    // última explicación del paciente almacenada en Debian.
+    const { error: syncError } = await sb.functions.invoke('sync-borrar', {
+      body: { study_id: s.id }
+    });
+    if (syncError) throw new Error(await fnError(syncError));
     // La marca en file_path permite detectar archivos Debian incluso si un campo
     // de ubicación no llegó al navegador. Nunca enviar una ruta debian: a Storage.
     const path = String(s.file_path || '');
