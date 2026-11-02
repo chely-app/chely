@@ -864,6 +864,7 @@ function studySourceChooser(prefix, draft = {}) {
   const options = h('div', { class: 'study-method-grid', role: 'group', 'aria-label': 'Cómo querés subir tu estudio' });
   const body = h('div', { class: 'study-method-body' });
   const photo = h('input', { type: 'file', id: prefix + '-photo', accept: 'image/jpeg,image/png,image/webp', capture: 'environment' });
+  const gallery = h('input', { type: 'file', id: prefix + '-gallery', accept: 'image/jpeg,image/png,image/webp' });
   const pdf = h('input', { type: 'file', id: prefix + '-pdf', accept: '.pdf,application/pdf' });
   const report = h('textarea', { id: prefix + '-text', class: 'report', placeholder: 'Pegá acá el texto del informe…' }, draft.text || '');
   report.addEventListener('input', () => { draft.text = report.value; });
@@ -890,10 +891,12 @@ function studySourceChooser(prefix, draft = {}) {
   const panels = {
     foto: h('div', { class: 'study-source-panel' },
       h('p', { class: 'muted' }, 'Usá la cámara para fotografiar el informe o elegí una foto ya guardada. Procurá que se lea todo el texto.'),
-      h('label', { class: 'field', for: prefix + '-photo' }, 'Foto del informe', filePicker(photo))),
+      h('div', { class: 'study-photo-options' },
+        h('label', { class: 'field', for: prefix + '-photo' }, 'Sacar foto con la cámara', filePicker(photo, 'Abrir cámara')),
+        h('label', { class: 'field', for: prefix + '-gallery' }, 'Elegir una foto guardada', filePicker(gallery, 'Elegir foto')))),
     pdf: h('div', { class: 'study-source-panel' },
       h('p', { class: 'muted' }, 'Elegí el informe en PDF. Chely intentará leer su título y fecha automáticamente.'),
-      h('label', { class: 'field', for: prefix + '-pdf' }, 'Archivo PDF', filePicker(pdf))),
+      h('label', { class: 'field', for: prefix + '-pdf' }, 'Archivo PDF', filePicker(pdf, 'Elegir PDF'))),
     texto: h('div', { class: 'study-source-panel' },
       h('p', { class: 'muted' }, 'Si pegás solamente el cuerpo del informe, completá el nombre y la fecha debajo.'),
       h('label', { class: 'field', for: prefix + '-text' }, 'Texto del informe', report)),
@@ -916,18 +919,19 @@ function studySourceChooser(prefix, draft = {}) {
   };
   STUDY_UPLOAD_MODES.forEach(item => {
     const button = h('button', { type: 'button', class: 'study-method',
-      onclick: () => { mode = item.id; imported = null; draft.file = null; photo.value = ''; pdf.value = ''; render(); } },
+      onclick: () => { mode = item.id; imported = null; draft.file = null; photo.value = ''; gallery.value = ''; pdf.value = ''; render(); } },
       h('span', { class: 'study-method-icon', 'aria-hidden': 'true' }, item.icon),
       h('strong', {}, item.name),
       h('span', { class: 'muted small' }, item.help));
     buttons.push(button); options.append(button);
   });
-  photo.addEventListener('change', () => { draft.file = photo.files?.[0] || null; });
+  photo.addEventListener('change', () => { if (photo.files?.length) gallery.value = ''; draft.file = photo.files?.[0] || null; });
+  gallery.addEventListener('change', () => { if (gallery.files?.length) photo.value = ''; draft.file = gallery.files?.[0] || null; });
   pdf.addEventListener('change', () => { draft.file = pdf.files?.[0] || null; });
   render();
   return {
     root, getMode: () => mode, getText: () => report.value.trim(),
-    getFile: () => mode === 'foto' ? (photo.files?.[0] || draft.file || null)
+    getFile: () => mode === 'foto' ? (photo.files?.[0] || gallery.files?.[0] || draft.file || null)
       : mode === 'pdf' ? (pdf.files?.[0] || draft.file || null)
       : mode === 'enlace' ? imported : null,
     getLink: () => url.value.trim()
@@ -962,12 +966,12 @@ function metadataFromReport(text) {
 
 // El paciente sube un estudio propio.
 // Selector de archivo propio: el del navegador muestra sus textos en el idioma del sistema.
-function filePicker(input) {
+function filePicker(input, buttonLabel = 'Elegir archivo') {
   input.className = 'file-input';
   const none = 'Ningún archivo elegido';
   const name = h('span', { class: 'hint' }, none);
   input.addEventListener('change', () => { name.textContent = input.files[0]?.name || none; });
-  return h('span', { class: 'filepick' }, input, h('span', { class: 'btn', 'aria-hidden': 'true' }, 'Elegir archivo'), name);
+  return h('span', { class: 'filepick' }, input, h('span', { class: 'btn', 'aria-hidden': 'true' }, buttonLabel), name);
 }
 
 function patientUpload() {
