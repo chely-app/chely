@@ -94,6 +94,8 @@ function errorText(error) {
   if (/Invalid login credentials/i.test(m)) return 'El correo o la contraseña no coinciden.';
   if (/Email not confirmed/i.test(m)) return 'Todavía no confirmaste tu correo. Buscá el mensaje de Chely en tu bandeja de entrada (y en spam).';
   if (/User already registered/i.test(m)) return 'Ya existe una cuenta con ese correo. Entrá con tu contraseña.';
+  // Hecho por Claude · 2026-11-02 · el error de correo mal escrito llegaba en inglés.
+  if (/validate email address|invalid format/i.test(m)) return 'El correo no está bien escrito. Revisá que no tenga espacios ni un punto al final.';
   if (/Password should be at least/i.test(m)) return 'La contraseña tiene que tener al menos 8 caracteres.';
   if (/rate limit|too many/i.test(m)) return 'Hubo demasiados intentos. Esperá unos minutos.';
   if (/JWT|session/i.test(m)) return 'Tu sesión venció. Volvé a entrar.';

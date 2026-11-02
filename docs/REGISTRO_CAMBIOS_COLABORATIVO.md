@@ -107,3 +107,8 @@ Este archivo documenta los cambios realizados por distintos colaboradores (human
 - Archivo privado independiente en Supabase Storage, con controles RLS por menor y estudio.
 - IA separada, con sesión verificada, edad real del menor y restricciones de acceso al estudio.
 - La explicación por IA no sustituye revisión médica. La representación legal del adulto se declara, pendiente de revisión de documentación en un despliegue amplio.
+
+## 2026-11-02 — Hecho por Claude (mensaje de correo inválido)
+**Archivo:** `app/app.js`, función `errorText`.
+- El error de Supabase para un correo mal escrito ("Unable to validate email address: invalid format") se mostraba en inglés. Ahora se muestra en español y sugiere revisar espacios o un punto al final.
+
