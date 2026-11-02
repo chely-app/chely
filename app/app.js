@@ -915,13 +915,19 @@ async function patientStudies() {
       ownHistory.length + ' estudios registrados · ' +
       (ownHistory.length - unreadHistory) + ' con texto guardado. La IA se utiliza solo a pedido.'));
   if (overall?.explanation) {
-    overviewCard.append(h('p', { class: 'muted small' },
-      'Última evaluación: ' + fmtDateTime(overall.generated_at) +
-      ' · ' + overall.unique_reports + ' informes diferentes examinados.'));
+    const partial = summaryCounts.review > 0 || summaryCounts.pending > 0;
+    overviewCard.append(h('div', { class: 'alert ok', role: 'status' },
+      h('strong', {}, partial ? 'Evaluación parcial disponible y guardada' : 'Evaluación guardada disponible'),
+      h('p', {}, 'Generada el ' + fmtDateTime(overall.generated_at) +
+        '. Podés leerla todas las veces que quieras sin utilizar créditos de IA.')));
+    if (partial) overviewCard.append(h('p', { class: 'hint' },
+      'Esta conclusión utiliza ' + summaryCounts.done + ' informes interpretados. ' +
+      summaryCounts.review + ' requieren revisión manual y no se consideraron interpretados. ' +
+      summaryCounts.excluded + ' copias idénticas se omitieron.'));
     if (changedHistory) overviewCard.append(h('p', { class: 'hint' },
-      'Agregaste o modificaste estudios desde esta evaluación. Podés actualizarla.'));
-    overviewCard.append(h('details', { class: 'stack' },
-      h('summary', {}, 'Leer la evaluación guardada'),
+      'El historial cambió desde esta evaluación. La versión guardada sigue disponible para consultar.'));
+    overviewCard.append(h('details', { class: 'stack', open: true },
+      h('summary', {}, 'Evaluación guardada — ver u ocultar el resultado'),
       renderExplanation(overall.explanation)));
   }
   const overviewStatus = h('p', { class: 'hint', role: 'status', 'aria-live': 'polite' });
@@ -930,8 +936,7 @@ async function patientStudies() {
   const justFinalRetry = storedJob?.status === 'failed' &&
     summaryCounts.pending === 0 && summaryCounts.done > 0;
   const overviewButton = h('button', { type: 'button', class: 'btn primary' },
-    justFinalRetry ? 'Reintentar solo la conclusión'
-      : overall?.explanation ? 'Actualizar evaluación integral' : 'Evaluar todo mi historial');
+    justFinalRetry ? 'Reintentar solo la conclusión' : 'Evaluar todo mi historial');
   const evalProgress = h('div', { class: 'history-eval-progress', hidden: true },
     h('div', { class: 'row' },
       h('span', { class: 'spinner', 'aria-hidden': 'true' }),
@@ -1102,7 +1107,10 @@ async function patientStudies() {
     }
     reviewCard.append(reviewList);
   }
-  overviewCard.append(h('div', { class: 'row' }, overviewButton), overviewStatus, evalProgress);
+  // Una evaluación ya guardada NO debe mostrar un CTA que parezca requerir
+  // otra consulta pagada. La lectura de lo existente es gratuita.
+  if (!overall?.explanation) overviewCard.append(h('div', { class: 'row' }, overviewButton));
+  overviewCard.append(overviewStatus, evalProgress);
   m.append(overviewCard);
   if (reviewCard) m.append(reviewCard);
   showHistoryProgress();
