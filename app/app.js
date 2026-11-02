@@ -2043,13 +2043,23 @@ async function minorOpenFile(study){
 }
 function minorStudyEditor(host,study){
   const box=h('div',{class:'card'},h('h3',{},'Estudio: '+study.title));
-  // Hecho por ChatGPT · 2026-11-02 · Revisión del título/fecha sugeridos en archivos pediátricos.
+  // Hecho por ChatGPT · 2026-11-02 · Conservar edición de menores en RAM
+  // mientras se cambia de sección, sin guardar textos en el navegador.
+  const draftKey='minor:'+study.id;
   const pending=study.title===STUDY_PENDING_TITLE;
+  const draft=studyEditDrafts.get(draftKey)||{
+    title:pending?'':study.title,
+    date:pending?null:study.study_date,
+    report:study.report_text||''
+  };
+  studyEditDrafts.set(draftKey,draft);
   const title=h('input',{id:'minor-edit-title',type:'text',maxlength:180,
-    placeholder:'Ej.: Ecografía abdominal',value:pending?'':study.title});
-  let date=pending?null:study.study_date;
-  const picker=datePicker({id:'minor-edit-date',value:date,onChange:iso=>{date=iso;}});
-  const report=h('textarea',{id:'minor-edit-report',class:'report'},study.report_text||'');
+    placeholder:'Ej.: Ecografía abdominal',value:draft.title});
+  title.addEventListener('input',()=>{draft.title=title.value;});
+  let date=draft.date;
+  const picker=datePicker({id:'minor-edit-date',value:date,onChange:iso=>{date=iso;draft.date=iso;}});
+  const report=h('textarea',{id:'minor-edit-report',class:'report'},draft.report);
+  report.addEventListener('input',()=>{draft.report=report.value;});
   const status=h('div',{role:'status'});
   const metadataNote=h('p',{class:'hint',role:'status'},
     pending?'Chely intentará reconocer el nombre y la fecha del informe. Revisalos antes de explicar.':'Podés editar el nombre y la fecha del estudio.');
@@ -2058,7 +2068,7 @@ function minorStudyEditor(host,study){
       report_text:report.value.trim(),updated_by:state.me.id
     }).eq('id',study.id);
     if(error){toast(errorText(error));return false;}
-    study.report_text=report.value.trim();
+    study.report_text=report.value.trim();draft.report=report.value;
     return true;
   };
   const save=async()=>{
@@ -2068,6 +2078,7 @@ function minorStudyEditor(host,study){
     }).eq('id',study.id);
     if(error)return toast(errorText(error)),false;
     study.title=title.value.trim();study.study_date=date;study.report_text=report.value.trim();
+    draft.title=title.value;draft.date=date;draft.report=report.value;
     return true;
   };
   const read=h('button',{class:'btn',type:'button',onclick:async()=>{
@@ -2075,13 +2086,13 @@ function minorStudyEditor(host,study){
     try{
       const {data,error}=await sb.functions.invoke('ia-menores',{body:{action:'transcribir',study_id:study.id}});
       if(error)throw new Error(await fnError(error));
-      report.value=data.text||'';
+      report.value=data.text||'';draft.report=report.value;
       if(!await saveReport())throw new Error('No se pudo guardar el texto transcripto.');
       if(study.title===STUDY_PENDING_TITLE){
         const suggested=metadataFromReport(data.text);
-        if(suggested.title)title.value=suggested.title;
+        if(suggested.title){title.value=suggested.title;draft.title=title.value;}
         if(suggested.date){
-          date=suggested.date;picker.querySelector('input').value=fmtDate(suggested.date);
+          date=suggested.date;draft.date=date;picker.querySelector('input').value=fmtDate(suggested.date);
         }
         metadataNote.textContent=suggested.title&&suggested.date
           ? 'Chely sugirió estos datos. Confirmá que sean correctos.'
@@ -2092,6 +2103,7 @@ function minorStudyEditor(host,study){
     finally{read.disabled=false;}
   }},'Leer archivo con IA');
   const explain=h('button',{class:'btn primary',type:'button',onclick:async()=>{
+    const navAtStart=navigationEpoch;
     if(!report.value.trim())return toast('Primero pegá el texto o leé el archivo.');
     if(!await save())return;
     explain.disabled=true;status.className='alert info';status.textContent='Chely está preparando la explicación…';
@@ -2104,7 +2116,9 @@ function minorStudyEditor(host,study){
         ai_model:data.model||null,ai_generated_at:new Date().toISOString(),updated_by:state.me.id
       }).eq('id',study.id);
       if(up)throw up;
-      toast('Explicación guardada para los adultos vinculados.');minorManagement();
+      studyEditDrafts.delete(draftKey);
+      toast('Explicación guardada para los adultos vinculados.');
+      if(state.page==='menores' && state.minorStudyId===study.id && navigationEpoch===navAtStart)minorManagement();
     }catch(e){status.className='alert bad';status.textContent=errorText(e);}
     finally{explain.disabled=false;}
   }},'Explicar con IA');
@@ -2137,7 +2151,8 @@ function minorStudyEditor(host,study){
       }
       const {error}=await sb.from('minor_studies').delete().eq('id',study.id);
       if(error)return toast(errorText(error));
-      state.minorStudyId=null;toast('Estudio eliminado.');minorManagement();
+      studyEditDrafts.delete(draftKey);
+      state.minorStudyId=null;saveRoute();toast('Estudio eliminado.');minorManagement();
     }},'Eliminar estudio')));
   host.append(box);
   if(state.minorAutoRead===study.id && study.file_path){
