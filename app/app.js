@@ -292,9 +292,62 @@ function renderEvolution(studies) {
 /* ---------------- estado y arranque ---------------- */
 const state = { session: null, me: null, page: null, studyId: null, patientId: null, recovery: false, busy: false };
 let sb = null;
-// Borrador efímero: no persiste documentos médicos en disco ni localStorage.
+// Hecho por ChatGPT · 2026-11-02 · Los borradores clínicos y archivos sólo se
+// mantienen en RAM de esta pestaña, nunca en localStorage ni sessionStorage.
 let uploadDraft = null;
+const minorUploadDrafts = new Map();
+const studyEditDrafts = new Map();
+const runningStudyReads = new Map(); // Evita transcripciones duplicadas.
+const runningStudyExplanations = new Map(); // Evita análisis duplicados.
+function pendingOnce(map, key, task) {
+  let pending=map.get(key);
+  if (!pending) {
+    pending=task();
+    map.set(key,pending);
+    const cleanup=()=>{if(map.get(key)===pending)map.delete(key);};
+    pending.then(cleanup,cleanup);
+  }
+  return pending;
+}
+let navigationEpoch = 0;
+let restoredRouteUser = null;
 function clearUploadDraft() { uploadDraft = null; }
+function clearPrivateDrafts() { uploadDraft = null; minorUploadDrafts.clear(); studyEditDrafts.clear(); }
+
+// Hecho por ChatGPT · 2026-11-02 · Restaurar la sección actual con F5.
+// history.state sólo contiene identificadores y sección, no datos clínicos.
+const NAV_PAGES = new Set(['estudios','estudio','mi-estudio','subir','medicos','menores',
+  'cuenta','pacientes','paciente','estudio-medico','panel','registro']);
+const VALID_ID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+const routeId = id => typeof id === 'string' && VALID_ID.test(id) ? id : null;
+function saveRoute() {
+  if (!state.me || !state.session?.user?.id || !NAV_PAGES.has(state.page)) return;
+  const prior = history.state && typeof history.state === 'object' ? history.state : {};
+  history.replaceState({ ...prior, chelyRoute: {
+    userId: state.session.user.id, role: state.me.role, page: state.page,
+    studyId: routeId(state.studyId), patientId: routeId(state.patientId),
+    minorId: routeId(state.minorId), minorStudyId: routeId(state.minorStudyId)
+  } }, '', location.href);
+}
+function clearRoute() {
+  const prior = history.state && typeof history.state === 'object' ? history.state : {};
+  const { chelyRoute: discarded, ...rest } = prior;
+  history.replaceState(rest, '', location.href);
+}
+function restoreRoute() {
+  const uid = state.session?.user?.id;
+  if (!uid || restoredRouteUser === uid) return;
+  restoredRouteUser = uid;
+  const saved = history.state?.chelyRoute;
+  if (!saved || saved.userId !== uid || saved.role !== state.me?.role
+      || !NAV_PAGES.has(saved.page)) return;
+  state.page = saved.page;
+  state.studyId = routeId(saved.studyId);
+  state.patientId = routeId(saved.patientId);
+  state.minorId = routeId(saved.minorId);
+  state.minorStudyId = routeId(saved.minorStudyId);
+  state.autoExplain = false; // No repetir una petición de IA tras F5.
+}
 
 
 function shell(nav) {
@@ -317,10 +370,16 @@ function navFor(items) {
 }
 function go(page, extra = {}) {
   window.onbeforeunload = null;
-  state.page = page; state.studyId = extra.studyId || null; state.autoExplain = !!extra.autoExplain; state.patientId = extra.patientId ?? (page === 'paciente' || page === 'estudio-medico' ? state.patientId : null);
+  navigationEpoch++;
+  state.page = page; state.studyId = extra.studyId || null; state.autoExplain = !!extra.autoExplain;
+  state.patientId = extra.patientId ?? (page === 'paciente' || page === 'estudio-medico' ? state.patientId : null);
+  saveRoute();
   render(); window.scrollTo({ top: 0 });
 }
-async function signOut() { clearUploadDraft(); await sb.auth.signOut(); state.me = null; state.page = null; render(); }
+async function signOut() {
+  clearPrivateDrafts(); clearRoute(); restoredRouteUser = null;
+  await sb.auth.signOut(); state.me = null; state.page = null; render();
+}
 function mainEl() { const m = $('#main'); m.innerHTML = ''; return m; }
 function loading(msg = 'Cargando…') { const m = mainEl(); m.append(h('div', { class: 'card row' }, h('span', { class: 'spinner' }), msg)); }
 
@@ -340,7 +399,14 @@ async function boot() {
   sb.auth.onAuthStateChange((event, session) => {
     state.session = session;
     if (event === 'PASSWORD_RECOVERY') state.recovery = true;
-    if (event === 'SIGNED_OUT') state.me = null;
+    if (event === 'SIGNED_OUT') {
+      state.me = null; state.page = null; clearPrivateDrafts();
+      clearRoute(); restoredRouteUser = null;
+    }
+    if (session?.user?.id && state.me?.id && session.user.id !== state.me.id) {
+      state.me = null; state.page = null; clearPrivateDrafts();
+      clearRoute(); restoredRouteUser = null;
+    }
     // No consultar la base dentro de este callback: se agenda.
     setTimeout(render, 0);
   });
@@ -365,6 +431,7 @@ async function render() {
       if (error || !data) { shell(); mainEl().append(h('div', { class: 'card' }, h('div', { class: 'alert bad' }, 'No pudimos cargar tu cuenta. ' + errorText(error)), h('button', { class: 'btn', onclick: () => location.reload() }, 'Reintentar'))); return; }
       state.me = data;
     }
+    restoreRoute();
     const c = CONSENT[state.me.role];
     if (state.me.consent_version !== c.version) return viewConsent();
     const invite = pendingInvite();
@@ -541,6 +608,7 @@ let adminFilter = 'patient', adminSearch = '';
 
 async function renderAdmin() {
   if (!['panel', 'registro', 'cuenta'].includes(state.page)) state.page = 'panel';
+  saveRoute();
   shell(navFor([['panel', 'Panel'], ['registro', 'Registro'], ['cuenta', 'Mi cuenta']]));
   if (state.page === 'registro') return adminLog();
   if (state.page === 'cuenta') return accountView();
@@ -658,6 +726,7 @@ async function renderPatient() {
   state.linkedMinors = linkedMinors || [];
   if (!['estudios', 'estudio', 'subir', 'mi-estudio', 'medicos', 'cuenta', 'menores'].includes(state.page)
       || (state.page === 'menores' && !state.linkedMinors.length)) state.page = 'estudios';
+  saveRoute();
   const tabs = [['estudios', 'Mis estudios'], ['medicos', 'Mis médicos']];
   if (state.linkedMinors.length) tabs.push(['menores', 'Menores a cargo']);
   tabs.push(['cuenta', 'Mi cuenta']);
@@ -860,7 +929,7 @@ async function fileFromPublicLink(value) {
 }
 function studySourceChooser(prefix, draft = {}) {
   let mode = STUDY_UPLOAD_MODES.some(x => x.id === draft.mode) ? draft.mode : 'foto';
-  let imported = null;
+  let imported = draft.imported instanceof File ? draft.imported : null;
   const options = h('div', { class: 'study-method-grid', role: 'group', 'aria-label': 'Cómo querés subir tu estudio' });
   const body = h('div', { class: 'study-method-body' });
   const photo = h('input', { type: 'file', id: prefix + '-photo', accept: 'image/jpeg,image/png,image/webp', capture: 'environment' });
@@ -869,7 +938,7 @@ function studySourceChooser(prefix, draft = {}) {
   const report = h('textarea', { id: prefix + '-text', class: 'report', placeholder: 'Pegá acá el texto del informe…' }, draft.text || '');
   report.addEventListener('input', () => { draft.text = report.value; root.dispatchEvent(new CustomEvent('study-report-input', { detail: { text: report.value } })); });
   const url = h('input', { type: 'url', id: prefix + '-url', placeholder: 'https://portal-medico.com/estudio.pdf', autocomplete: 'off', value: draft.url || '' });
-  url.addEventListener('input', () => { imported = null; draft.url = url.value; });
+  url.addEventListener('input', () => { imported = null; draft.imported = null; draft.url = url.value; updateFileInfo(); });
   const importInfo = h('div', { class: 'hint', role: 'status', 'aria-live': 'polite' });
   const importButton = h('button', { type: 'button', class: 'btn primary' }, 'Importar archivo del enlace');
   importButton.addEventListener('click', async () => {
@@ -878,8 +947,10 @@ function studySourceChooser(prefix, draft = {}) {
     importInfo.textContent = 'Intentando importar el informe…';
     try {
       imported = await fileFromPublicLink(url.value);
+      draft.imported = imported;
       importInfo.textContent = 'Archivo importado: ' + imported.name + '. Ahora podés continuar.';
-    } catch (e) { imported = null; importInfo.textContent = errorText(e); }
+      updateFileInfo();
+    } catch (e) { imported = null; draft.imported = null; importInfo.textContent = errorText(e); }
     finally { importButton.disabled = false; }
   });
   const open = h('button', { type: 'button', class: 'btn quiet sm',
@@ -906,7 +977,15 @@ function studySourceChooser(prefix, draft = {}) {
       h('div', { class: 'row' }, importButton, open), importInfo,
       h('p', { class: 'hint' }, 'Solo se pueden importar enlaces públicos que permitan la descarga. No ingreses contraseñas de portales médicos en Chely.'))
   };
-  const root = h('div', { class: 'study-source' }, h('h2', {}, '¿Cómo querés enviar tu estudio?'), options, body);
+  const selectedInfo = h('p', { class: 'hint', role: 'status', 'aria-live': 'polite' });
+  const root = h('div', { class: 'study-source' }, h('h2', {}, '¿Cómo querés enviar tu estudio?'), options, body, selectedInfo);
+  const updateFileInfo = () => {
+    const selected = mode === 'enlace' ? imported
+      : mode === 'foto' ? photo.files?.[0] || gallery.files?.[0] || draft.file
+      : mode === 'pdf' ? pdf.files?.[0] || draft.file : null;
+    selectedInfo.textContent = selected && mode !== 'texto'
+      ? 'Archivo seleccionado: ' + selected.name + '. Se conserva al cambiar de sección en esta pestaña.' : '';
+  };
   const render = () => {
     buttons.forEach((button, i) => {
       const active = STUDY_UPLOAD_MODES[i].id === mode;
@@ -915,19 +994,32 @@ function studySourceChooser(prefix, draft = {}) {
     });
     body.replaceChildren(panels[mode]);
     draft.mode = mode;
+    updateFileInfo();
     root.dispatchEvent(new CustomEvent('study-method-change', { detail: { mode } }));
   };
   STUDY_UPLOAD_MODES.forEach(item => {
     const button = h('button', { type: 'button', class: 'study-method',
-      onclick: () => { mode = item.id; imported = null; draft.file = null; photo.value = ''; gallery.value = ''; pdf.value = ''; render(); } },
+      onclick: () => {
+        if (mode !== item.id) {
+          mode = item.id; imported = null; draft.imported = null; draft.file = null;
+          photo.value = ''; gallery.value = ''; pdf.value = '';
+        }
+        render();
+      } },
       h('span', { class: 'study-method-icon', 'aria-hidden': 'true' }, item.icon),
       h('strong', {}, item.name),
       h('span', { class: 'muted small' }, item.help));
     buttons.push(button); options.append(button);
   });
-  photo.addEventListener('change', () => { if (photo.files?.length) gallery.value = ''; draft.file = photo.files?.[0] || null; });
-  gallery.addEventListener('change', () => { if (gallery.files?.length) photo.value = ''; draft.file = gallery.files?.[0] || null; });
-  pdf.addEventListener('change', () => { draft.file = pdf.files?.[0] || null; });
+  photo.addEventListener('change', () => {
+    if (photo.files?.length) gallery.value = '';
+    draft.file = photo.files?.[0] || null; updateFileInfo();
+  });
+  gallery.addEventListener('change', () => {
+    if (gallery.files?.length) photo.value = '';
+    draft.file = gallery.files?.[0] || null; updateFileInfo();
+  });
+  pdf.addEventListener('change', () => { draft.file = pdf.files?.[0] || null; updateFileInfo(); });
   render();
   return {
     root, getMode: () => mode, getText: () => report.value.trim(),
@@ -981,6 +1073,7 @@ function patientUpload() {
   const m = mainEl();
   if (!uploadDraft) uploadDraft = { title: '', date: null, text: '', file: null, mode: 'foto', url: '' };
   let date = uploadDraft.date || null;
+  const currentDraft = uploadDraft;
   const source = studySourceChooser('up', uploadDraft);
   const title = h('input', { type: 'text', id: 'up-title', maxlength: 180,
     placeholder: 'Ej.: Análisis de sangre', value: uploadDraft.title || '' });
@@ -989,6 +1082,7 @@ function patientUpload() {
     h('div', { class: 'field' }, h('label', { for: 'up-date', style: 'font-weight:700' }, 'Fecha del estudio'),
       datePicker({ id: 'up-date', value: date, onChange: iso => { date = iso; uploadDraft.date = iso; } })));
   const msg = h('div', { role: 'alert' });
+  if (currentDraft.pending) { msg.className = 'alert info'; msg.textContent = 'El estudio sigue cargándose en segundo plano. Podés volver a esta sección para ver el resultado.'; }
   title.addEventListener('input', () => { uploadDraft.title = title.value; });
   const refresh = () => { meta.hidden = source.getMode() !== 'texto'; };
   source.root.addEventListener('study-method-change', refresh);
@@ -1002,7 +1096,9 @@ function patientUpload() {
   });
   refresh();
   const btn = h('button', { class: 'btn primary big', type: 'button' }, 'Continuar con el estudio');
+  btn.disabled = !!currentDraft.pending;
   btn.addEventListener('click', async () => {
+    if (currentDraft.pending) return toast('Ya hay una carga en curso. Esperá a que termine.');
     msg.className = ''; msg.textContent = '';
     const mode = source.getMode();
     const f = source.getFile();
@@ -1023,6 +1119,9 @@ function patientUpload() {
         msg.className = 'alert bad'; msg.textContent = 'El archivo debe ser PDF o una imagen válida de hasta 20 MB.'; return;
       }
     }
+    currentDraft.pending = true;
+    const navAtStart = navigationEpoch;
+    const ownerAtStart = state.me.id;
     btn.disabled = true; btn.replaceChildren(h('span', { class: 'spinner' }), ' Guardando…');
     try {
       const autoMetadata = mode !== 'texto';
@@ -1040,11 +1139,22 @@ function patientUpload() {
         catch (e) { throw new Error('El estudio fue creado, pero falló la carga del archivo: ' +
           errorText(e) + '. Podés volver a la lista y corregirlo.'); }
       }
-      clearUploadDraft();
-      go('mi-estudio', { studyId: st.id, autoExplain: !autoMetadata });
+      if (uploadDraft === currentDraft) clearUploadDraft();
+      if (state.me?.id === ownerAtStart && state.page === 'subir'
+          && navigationEpoch === navAtStart) {
+        go('mi-estudio', { studyId: st.id, autoExplain: !autoMetadata });
+      } else {
+        if (state.me?.id === ownerAtStart)
+          toast('El estudio terminó de subirse y está disponible en Mis estudios.');
+        if (state.page === 'subir') render();
+      }
     } catch (e) {
       msg.className = 'alert bad'; msg.textContent = errorText(e);
+      if (state.page !== 'subir' || navigationEpoch !== navAtStart) toast('No se pudo completar la carga: ' + errorText(e));
+    } finally {
+      currentDraft.pending = false;
       btn.disabled = false; btn.textContent = 'Continuar con el estudio';
+      if (state.page === 'subir' && navigationEpoch !== navAtStart) render();
     }
   });
   m.append(h('div', { class: 'row' },
@@ -1068,16 +1178,26 @@ async function patientOwnStudy() {
   const s = studies.find(x => x.id === state.studyId && x.self_uploaded);
   if (!s) { toast('No encontramos ese estudio.'); return go('estudios'); }
   const m = mainEl();
-  const report = h('textarea', { id: 'own-report', class: 'report' }, s.report_text);
+  // Hecho por ChatGPT · 2026-11-02 · Conservar correcciones no guardadas
+  // cuando se pasa a otra sección, sólo en memoria de la pestaña.
+  const editKey = 'self:' + s.id;
+  const savedDraft = studyEditDrafts.get(editKey);
+  const editDraft = savedDraft || { report: s.report_text || '',
+    title: s.title === STUDY_PENDING_TITLE ? '' : s.title,
+    date: s.title === STUDY_PENDING_TITLE ? null : s.study_date };
+  studyEditDrafts.set(editKey, editDraft);
+  const report = h('textarea', { id: 'own-report', class: 'report' }, editDraft.report);
+  report.addEventListener('input', () => { editDraft.report = report.value; });
   const status = h('div', { role: 'status' });
   // Hecho por ChatGPT · 2026-11-02 · El archivo se lee y propone título y fecha;
   // si no se detectan, se solicitan antes de generar la explicación.
   const pending = s.title === STUDY_PENDING_TITLE;
   const metaTitle = h('input', { type: 'text', id: 'own-title', maxlength: 180,
-    value: pending ? '' : s.title, placeholder: 'Ej.: Ecografía abdominal' });
-  let selectedDate = pending ? null : s.study_date;
+    value: editDraft.title, placeholder: 'Ej.: Ecografía abdominal' });
+  metaTitle.addEventListener('input', () => { editDraft.title = metaTitle.value; });
+  let selectedDate = editDraft.date;
   const metaPicker = datePicker({ id: 'own-date', value: selectedDate,
-    onChange: iso => { selectedDate = iso; } });
+    onChange: iso => { selectedDate = iso; editDraft.date = iso; } });
   const metadataNote = h('p', { class: 'hint', role: 'status' },
     pending ? 'Chely está leyendo el informe para sugerir el nombre y la fecha. Revisalos antes de continuar.'
       : 'Podés corregir el nombre y la fecha antes de explicar el estudio.');
@@ -1091,28 +1211,32 @@ async function patientOwnStudy() {
     const { error } = await sb.from('studies').update({ title: name, study_date: selectedDate }).eq('id', s.id);
     if (error) { status.className = 'alert bad'; status.textContent = errorText(error); return false; }
     s.title = name; s.study_date = selectedDate;
+    editDraft.title = name; editDraft.date = selectedDate;
     return true;
   };
   const busy = (btn, label) => { btn.disabled = true; const old = btn.textContent; btn.replaceChildren(h('span', { class: 'spinner' }), ' ' + label); return () => { btn.disabled = false; btn.textContent = old; }; };
   const saveText = async () => {
     const { error } = await sb.from('studies').update({ report_text: report.value.trim() }).eq('id', s.id);
     if (error) { toast(errorText(error)); return false; }
-    s.report_text = report.value.trim(); return true;
+    s.report_text = report.value.trim();
+    editDraft.report = report.value; return true;
   };
   const readBtn = h('button', { class: 'btn' }, 'Leer el archivo');
   const explainBtn = h('button', { class: 'btn primary big' }, 'Explicar mi estudio');
   const readFile = async () => {
     status.className = 'alert info'; status.textContent = 'Chely está leyendo tu archivo. Puede tardar un minuto; no cierres esta pantalla.';
     const done = busy(readBtn, 'Leyendo el archivo…');
-    const { data, error } = await sb.functions.invoke('ia', { body: { action: 'transcribir', study_id: s.id } });
+    const { data, error } = await pendingOnce(runningStudyReads, 'adult:'+s.id,
+      () => sb.functions.invoke('ia', { body: { action: 'transcribir', study_id: s.id } }));
     done();
     if (error) { status.className = 'alert bad'; status.textContent = await fnError(error); return false; }
     report.value = data.text;
+    editDraft.report = report.value;
     if (s.title === STUDY_PENDING_TITLE) {
       const suggested = metadataFromReport(data.text);
-      if (suggested.title) metaTitle.value = suggested.title;
+      if (suggested.title) { metaTitle.value = suggested.title; editDraft.title = suggested.title; }
       if (suggested.date) {
-        selectedDate = suggested.date;
+        selectedDate = suggested.date; editDraft.date = selectedDate;
         metaPicker.querySelector('input').value = fmtDate(suggested.date);
       }
       metadataNote.textContent = suggested.title && suggested.date
@@ -1126,20 +1250,25 @@ async function patientOwnStudy() {
     status.className = 'alert ok'; status.textContent = 'Listo, Chely leyó el archivo. Revisá que el texto sea igual al del informe y tocá «Explicar mi estudio».';
   });
   const explainStudy = async () => {
+    const navAtStart = navigationEpoch;
     if (!report.value.trim()) { status.className = 'alert bad'; status.textContent = 'Falta el texto del informe. Tocá «Leer el archivo» o pegalo.'; return; }
     // Con archivo y un texto tan corto, seguramente falta leer el archivo.
     if (s.file_path && report.value.trim().length < 40) { status.className = 'alert bad'; status.textContent = 'El texto es muy corto para ser el informe completo. Tocá «Leer el archivo» y después «Explicar mi estudio».'; return; }
     if (!await saveText() || !await saveMetadata()) return;
     status.className = 'alert info'; status.textContent = 'Chely está escribiendo la explicación de tu estudio. Puede tardar hasta dos minutos; no cierres esta pantalla.';
     const done = busy(explainBtn, 'Escribiendo la explicación…');
-    const { data, error } = await sb.functions.invoke('ia', { body: { action: 'explicar', study_id: s.id } });
+    const { data, error } = await pendingOnce(runningStudyExplanations, 'adult:'+s.id,
+      () => sb.functions.invoke('ia', { body: { action: 'explicar', study_id: s.id } }));
     if (error) { done(); status.className = 'alert bad'; status.textContent = await fnError(error); return; }
     const explanation = (data.aviso_urgente ? `## Aviso importante del informe\n${data.aviso_urgente}\n\n` : '') + data.explicacion;
     const { error: e2 } = await sb.from('studies').update({ explanation, glossary: data.glosario || [], lab_values: data.valores || [],
       ai_model: data.model, ai_generated_at: new Date().toISOString(), status: 'publicado' }).eq('id', s.id);
     done();
     if (e2) { status.className = 'alert bad'; status.textContent = errorText(e2); return; }
-    go('estudio', { studyId: s.id });
+    studyEditDrafts.delete(editKey);
+    if (state.page === 'mi-estudio' && state.studyId === s.id
+      && navigationEpoch === navAtStart) go('estudio', { studyId: s.id });
+    else toast('Chely terminó de explicar el estudio. Ya está en Mis estudios.');
   };
   explainBtn.addEventListener('click', explainStudy);
   m.append(h('div', { class: 'row' }, h('button', { class: 'btn quiet sm', onclick: () => go('estudios') }, '‹ Mis estudios')));
@@ -1662,13 +1791,14 @@ async function minorManagement() {
   m.append(h('div', { class: 'card' }, h('h2', {}, 'Fichas vinculadas'), list));
   for (const minor of minors) {
     list.append(h('button', { class: 'item', type: 'button', onclick: () => {
-      state.minorId = minor.id; minorManagement();
+      state.minorId = minor.id; state.minorStudyId = null; saveRoute(); minorManagement();
     } }, h('strong', {}, minor.full_name),
       h('span', { class: 'muted small' }, ' · ' + fmtDate(minor.birth_date) + ' · ' +
         (minor.access_level === 'responsable' ? 'Responsable' : 'Adulto autorizado'))));
   }
   const minor = minors.find(item => item.id === state.minorId) || minors[0];
   state.minorId = minor.id;
+  saveRoute();
   const card = h('div', { class: 'card' },
     h('h2', {}, minor.full_name),
     h('p', {}, 'Nacimiento: ' + fmtDate(minor.birth_date) + ' · Relación: ' + minor.relationship),
@@ -1827,11 +1957,14 @@ async function minorStudiesPanel(host,minor){
   const upload=h('details',{class:'minor-upload'},
     h('summary',{},'Agregar un estudio'));
   // Hecho por ChatGPT · 2026-11-02 · Misma carga accesible de adultos: foto, PDF, texto o enlace.
-  const draft={mode:'foto',text:'',file:null,url:''};
+  let draft=minorUploadDrafts.get(minor.id);
+  if(!draft){ draft={mode:'foto',text:'',file:null,imported:null,url:'',title:'',date:null}; minorUploadDrafts.set(minor.id,draft); }
   const source=studySourceChooser('minor-study',draft);
-  const title=h('input',{type:'text',id:'minor-study-title',maxlength:180,placeholder:'Ej.: Análisis de sangre'});
-  let date=null;
-  const picker=datePicker({id:'minor-study-date',value:date,onChange:iso=>{date=iso;}});
+  const title=h('input',{type:'text',id:'minor-study-title',maxlength:180,
+    placeholder:'Ej.: Análisis de sangre',value:draft.title||''});
+  title.addEventListener('input',()=>{draft.title=title.value;});
+  let date=draft.date||null;
+  const picker=datePicker({id:'minor-study-date',value:date,onChange:iso=>{date=iso;draft.date=iso;}});
   const meta=h('div',{class:'study-manual-meta grid2'},
     h('label',{class:'field',for:'minor-study-title'},'¿Qué estudio es?',title),
     h('div',{class:'field'},h('label',{for:'minor-study-date'},'Fecha del estudio'),picker));
@@ -1839,13 +1972,16 @@ async function minorStudiesPanel(host,minor){
   source.root.addEventListener('study-method-change',sync);
   source.root.addEventListener('study-report-input',e=>{
     const info=metadataFromReport(e.detail.text);
-    if(!title.value.trim()&&info.title)title.value=info.title;
-    if(!date&&info.date){date=info.date;picker.querySelector('input').value=fmtDate(info.date);}
+    if(!title.value.trim()&&info.title){title.value=info.title;draft.title=info.title;}
+    if(!date&&info.date){date=info.date;draft.date=date;picker.querySelector('input').value=fmtDate(info.date);}
   });
   sync();
   const status=h('div',{role:'status'});
+  if(draft.pending){ status.className='alert info'; status.textContent='El estudio sigue cargándose. Podés cambiar de sección sin cancelar la operación.'; }
   const save=h('button',{class:'btn primary big',type:'button'},'Continuar con el estudio');
+  save.disabled=!!draft.pending;
   save.addEventListener('click',async()=>{
+    if(draft.pending)return toast('Este estudio ya se está cargando.');
     const mode=source.getMode(), chosen=source.getFile(), pasted=source.getText();
     if(mode==='texto'){
       if(!pasted)return toast('Pegá el texto del informe.');
@@ -1854,6 +1990,8 @@ async function minorStudiesPanel(host,minor){
       if(!chosen)return toast(mode==='enlace'?'Primero importá el documento del enlace.':'Elegí una foto o PDF.');
       if(!studyUploadFileValid(chosen,mode))return toast('Archivo no admitido o mayor a 20 MB.');
     }
+    draft.pending=true;
+    const navAtStart=navigationEpoch, ownerAtStart=state.me.id;
     save.disabled=true;status.className='alert info';status.textContent='Guardando el estudio…';
     try{
       const isFile=mode!=='texto';
@@ -1875,11 +2013,23 @@ async function minorStudiesPanel(host,minor){
         if(metaError)throw new Error('Archivo cargado sin confirmar el registro: '+errorText(metaError));
         state.minorAutoRead=created.id;
       }
-      state.minorStudyId=created.id;
-      toast(isFile?'Estudio guardado. Chely intentará leer el documento.':'Texto guardado. Podés pedir la explicación.');
-      minorManagement();
-    }catch(e){status.className='alert bad';status.textContent=errorText(e);}
-    finally{save.disabled=false;}
+      minorUploadDrafts.delete(minor.id);
+      if(state.me?.id===ownerAtStart && state.page==='menores'
+          && state.minorId===minor.id && navigationEpoch===navAtStart){
+        state.minorStudyId=created.id; saveRoute();
+        toast(isFile?'Estudio guardado. Chely intentará leer el documento.':'Texto guardado. Podés pedir la explicación.');
+        minorManagement();
+      }else{
+        if(state.me?.id===ownerAtStart)toast('El estudio del menor terminó de guardarse.');
+        if(state.page==='menores')minorManagement();
+      }
+    }catch(e){
+      status.className='alert bad';status.textContent=errorText(e);
+      if(state.page!=='menores'||navigationEpoch!==navAtStart)toast('No se completó la carga del menor: '+errorText(e));
+    }finally{
+      draft.pending=false; save.disabled=false;
+      if(state.page==='menores'&&navigationEpoch!==navAtStart)minorManagement();
+    }
   });
   upload.append(source.root,meta,
     h('p',{class:'hint'},'Con foto, PDF o enlace importado, Chely intentará completar título y fecha después de leer el documento.'),
@@ -1887,7 +2037,7 @@ async function minorStudiesPanel(host,minor){
   card.append(upload);
   if(!(studies||[]).length)card.append(h('p',{class:'muted'},'Este menor todavía no tiene estudios registrados.'));
   for(const study of studies||[])card.append(h('button',{class:'item',type:'button',onclick:()=>{
-    state.minorStudyId=study.id;minorManagement();
+    state.minorStudyId=study.id;saveRoute();minorManagement();
   }},h('span',{class:'grow'},study.title),h('span',{class:'pill'},study.title===STUDY_PENDING_TITLE?'Fecha por confirmar':fmtDate(study.study_date)),
     h('span',{class:'pill '+(study.explanation?'ok':'warn')},study.explanation?'Explicado':'Pendiente')));
   const selected=(studies||[]).find(x=>x.id===state.minorStudyId);
@@ -1900,13 +2050,23 @@ async function minorOpenFile(study){
 }
 function minorStudyEditor(host,study){
   const box=h('div',{class:'card'},h('h3',{},'Estudio: '+study.title));
-  // Hecho por ChatGPT · 2026-11-02 · Revisión del título/fecha sugeridos en archivos pediátricos.
+  // Hecho por ChatGPT · 2026-11-02 · Conservar edición de menores en RAM
+  // mientras se cambia de sección, sin guardar textos en el navegador.
+  const draftKey='minor:'+study.id;
   const pending=study.title===STUDY_PENDING_TITLE;
+  const draft=studyEditDrafts.get(draftKey)||{
+    title:pending?'':study.title,
+    date:pending?null:study.study_date,
+    report:study.report_text||''
+  };
+  studyEditDrafts.set(draftKey,draft);
   const title=h('input',{id:'minor-edit-title',type:'text',maxlength:180,
-    placeholder:'Ej.: Ecografía abdominal',value:pending?'':study.title});
-  let date=pending?null:study.study_date;
-  const picker=datePicker({id:'minor-edit-date',value:date,onChange:iso=>{date=iso;}});
-  const report=h('textarea',{id:'minor-edit-report',class:'report'},study.report_text||'');
+    placeholder:'Ej.: Ecografía abdominal',value:draft.title});
+  title.addEventListener('input',()=>{draft.title=title.value;});
+  let date=draft.date;
+  const picker=datePicker({id:'minor-edit-date',value:date,onChange:iso=>{date=iso;draft.date=iso;}});
+  const report=h('textarea',{id:'minor-edit-report',class:'report'},draft.report);
+  report.addEventListener('input',()=>{draft.report=report.value;});
   const status=h('div',{role:'status'});
   const metadataNote=h('p',{class:'hint',role:'status'},
     pending?'Chely intentará reconocer el nombre y la fecha del informe. Revisalos antes de explicar.':'Podés editar el nombre y la fecha del estudio.');
@@ -1915,7 +2075,7 @@ function minorStudyEditor(host,study){
       report_text:report.value.trim(),updated_by:state.me.id
     }).eq('id',study.id);
     if(error){toast(errorText(error));return false;}
-    study.report_text=report.value.trim();
+    study.report_text=report.value.trim();draft.report=report.value;
     return true;
   };
   const save=async()=>{
@@ -1925,20 +2085,22 @@ function minorStudyEditor(host,study){
     }).eq('id',study.id);
     if(error)return toast(errorText(error)),false;
     study.title=title.value.trim();study.study_date=date;study.report_text=report.value.trim();
+    draft.title=title.value;draft.date=date;draft.report=report.value;
     return true;
   };
   const read=h('button',{class:'btn',type:'button',onclick:async()=>{
     read.disabled=true;status.className='alert info';status.textContent='Chely está leyendo el archivo…';
     try{
-      const {data,error}=await sb.functions.invoke('ia-menores',{body:{action:'transcribir',study_id:study.id}});
+      const {data,error}=await pendingOnce(runningStudyReads,'minor:'+study.id,
+        ()=>sb.functions.invoke('ia-menores',{body:{action:'transcribir',study_id:study.id}}));
       if(error)throw new Error(await fnError(error));
-      report.value=data.text||'';
+      report.value=data.text||'';draft.report=report.value;
       if(!await saveReport())throw new Error('No se pudo guardar el texto transcripto.');
       if(study.title===STUDY_PENDING_TITLE){
         const suggested=metadataFromReport(data.text);
-        if(suggested.title)title.value=suggested.title;
+        if(suggested.title){title.value=suggested.title;draft.title=title.value;}
         if(suggested.date){
-          date=suggested.date;picker.querySelector('input').value=fmtDate(suggested.date);
+          date=suggested.date;draft.date=date;picker.querySelector('input').value=fmtDate(suggested.date);
         }
         metadataNote.textContent=suggested.title&&suggested.date
           ? 'Chely sugirió estos datos. Confirmá que sean correctos.'
@@ -1949,11 +2111,13 @@ function minorStudyEditor(host,study){
     finally{read.disabled=false;}
   }},'Leer archivo con IA');
   const explain=h('button',{class:'btn primary',type:'button',onclick:async()=>{
+    const navAtStart=navigationEpoch;
     if(!report.value.trim())return toast('Primero pegá el texto o leé el archivo.');
     if(!await save())return;
     explain.disabled=true;status.className='alert info';status.textContent='Chely está preparando la explicación…';
     try{
-      const {data,error}=await sb.functions.invoke('ia-menores',{body:{action:'explicar',study_id:study.id}});
+      const {data,error}=await pendingOnce(runningStudyExplanations,'minor:'+study.id,
+        ()=>sb.functions.invoke('ia-menores',{body:{action:'explicar',study_id:study.id}}));
       if(error)throw new Error(await fnError(error));
       const text=(data.aviso_urgente?'## Aviso importante del informe\n'+data.aviso_urgente+'\n\n':'')+data.explicacion;
       const {error:up}=await sb.from('minor_studies').update({
@@ -1961,7 +2125,9 @@ function minorStudyEditor(host,study){
         ai_model:data.model||null,ai_generated_at:new Date().toISOString(),updated_by:state.me.id
       }).eq('id',study.id);
       if(up)throw up;
-      toast('Explicación guardada para los adultos vinculados.');minorManagement();
+      studyEditDrafts.delete(draftKey);
+      toast('Explicación guardada para los adultos vinculados.');
+      if(state.page==='menores' && state.minorStudyId===study.id && navigationEpoch===navAtStart)minorManagement();
     }catch(e){status.className='alert bad';status.textContent=errorText(e);}
     finally{explain.disabled=false;}
   }},'Explicar con IA');
@@ -1994,7 +2160,8 @@ function minorStudyEditor(host,study){
       }
       const {error}=await sb.from('minor_studies').delete().eq('id',study.id);
       if(error)return toast(errorText(error));
-      state.minorStudyId=null;toast('Estudio eliminado.');minorManagement();
+      studyEditDrafts.delete(draftKey);
+      state.minorStudyId=null;saveRoute();toast('Estudio eliminado.');minorManagement();
     }},'Eliminar estudio')));
   host.append(box);
   if(state.minorAutoRead===study.id && study.file_path){
@@ -2006,6 +2173,7 @@ function minorStudyEditor(host,study){
 /* ---------------- médico ---------------- */
 async function renderDoctor() {
   if (!['pacientes', 'paciente', 'estudio-medico', 'cuenta'].includes(state.page)) state.page = 'pacientes';
+  saveRoute();
   shell(navFor([['pacientes', 'Pacientes'], ['cuenta', 'Mi cuenta']]));
   if (state.page === 'paciente') return doctorPatient();
   if (state.page === 'estudio-medico') return doctorStudy();
@@ -2091,35 +2259,71 @@ async function doctorPatient() {
   m.append(card);
 }
 function newStudyCard(p) {
-  let date = todayISO();
-  const title = h('input', { type: 'text', id: 'ns-title', placeholder: 'Ej.: Análisis de sangre' });
+  // Hecho por ChatGPT · 2026-11-02 · Borrador de médico por paciente,
+  // sólo en memoria de la pestaña y sin repetir envíos al navegar.
+  const key='doctor-new:'+p.id;
+  const draft=studyEditDrafts.get(key)||{title:'',date:todayISO(),text:'',file:null};
+  studyEditDrafts.set(key,draft);
+  let date=draft.date;
+  const title = h('input', { type: 'text', id: 'ns-title', placeholder: 'Ej.: Análisis de sangre',
+    value:draft.title });
+  title.addEventListener('input',()=>{draft.title=title.value;});
   const file = h('input', { type: 'file', id: 'ns-file', accept: UPLOAD_TYPES.join(',') });
-  const text = h('textarea', { id: 'ns-text', class: 'report', placeholder: 'O pegá acá el texto del informe…' });
+  file.addEventListener('change',()=>{draft.file=file.files?.[0]||null;});
+  const text = h('textarea', { id: 'ns-text', class: 'report',
+    placeholder: 'O pegá acá el texto del informe…' },draft.text);
+  text.addEventListener('input',()=>{draft.text=text.value;});
   const msg = h('div', { role: 'alert' });
-  const btn = h('button', { class: 'btn primary' }, 'Crear estudio');
+  if(draft.pending){msg.className='alert info';msg.textContent='La carga de este estudio sigue en curso.';}
+  const btn = h('button', { class: 'btn primary', disabled:!!draft.pending }, 'Crear estudio');
   btn.addEventListener('click', async () => {
+    if(draft.pending)return toast('Ya se está guardando este estudio.');
     msg.className = ''; msg.textContent = '';
-    const f = file.files[0];
+    const f = file.files?.[0]||draft.file;
     if (!title.value.trim()) { msg.className = 'alert bad'; msg.textContent = 'Escribí el nombre del estudio.'; return; }
     if (!date) { msg.className = 'alert bad'; msg.textContent = 'Revisá la fecha: usá día/mes/año.'; return; }
     if (!f && !text.value.trim()) { msg.className = 'alert bad'; msg.textContent = 'Subí el archivo o pegá el texto del informe.'; return; }
     if (f && (!UPLOAD_TYPES.includes(f.type) || f.size > MAX_UPLOAD)) { msg.className = 'alert bad'; msg.textContent = 'El archivo tiene que ser PDF, JPG o PNG de hasta 20 MB. Si es Word, guardalo como PDF.'; return; }
+    draft.pending=true;
+    const epoch=navigationEpoch, owner=state.me.id;
     btn.disabled = true; btn.textContent = 'Creando…';
-    const { data: st, error } = await sb.from('studies').insert({ patient_id: p.id, doctor_id: state.me.id, title: title.value.trim(), study_date: date, report_text: text.value.trim() }).select('id').single();
-    if (error) { btn.disabled = false; btn.textContent = 'Crear estudio'; msg.className = 'alert bad'; msg.textContent = errorText(error); return; }
-    if (f) {
-      const path = `${p.id}/${st.id}/${safeFileName(f.name)}`;
-      const { error: upErr } = await sb.storage.from('estudios').upload(path, f, { contentType: f.type, upsert: false });
-      if (upErr) toast('El estudio se creó, pero el archivo no se pudo subir: ' + errorText(upErr));
-      else await sb.from('studies').update({ file_path: path, file_name: f.name, file_type: f.type }).eq('id', st.id);
+    try{
+      const { data: st, error } = await sb.from('studies').insert({
+        patient_id: p.id, doctor_id: owner, title: title.value.trim(),
+        study_date: date, report_text: text.value.trim()
+      }).select('id').single();
+      if (error||!st) throw error||new Error('No se pudo registrar el estudio.');
+      if (f) {
+        const path = `${p.id}/${st.id}/${safeFileName(f.name)}`;
+        const { error: upErr } = await sb.storage.from('estudios').upload(path, f, { contentType: f.type, upsert: false });
+        if (upErr) throw new Error('El estudio se creó pero falló la carga del archivo: '+errorText(upErr));
+        const {error:metadataError}=await sb.from('studies').update({
+          file_path: path, file_name: f.name, file_type: f.type
+        }).eq('id', st.id);
+        if(metadataError) throw metadataError;
+      }
+      studyEditDrafts.delete(key);
+      if(state.me?.id===owner && state.page==='paciente' && state.patientId===p.id
+          && navigationEpoch===epoch)go('estudio-medico',{studyId:st.id,patientId:p.id});
+      else{
+        if(state.me?.id===owner)toast('El estudio quedó guardado en la ficha del paciente.');
+        if(state.page==='paciente' && state.patientId===p.id)doctorPatient();
+      }
+    }catch(e){
+      msg.className='alert bad';msg.textContent=errorText(e);
+      if(state.page!=='paciente'||navigationEpoch!==epoch)toast('La carga no terminó: '+errorText(e));
+    }finally{
+      draft.pending=false;btn.disabled=false;btn.textContent='Crear estudio';
+      if(state.page==='paciente'&&state.patientId===p.id&&navigationEpoch!==epoch)doctorPatient();
     }
-    go('estudio-medico', { studyId: st.id, patientId: p.id });
   });
   return h('div', { class: 'card' }, h('h2', {}, 'Nuevo estudio'),
     h('div', { class: 'grid2' }, h('label', { class: 'field', for: 'ns-title' }, 'Nombre del estudio', title),
-      h('div', { class: 'field' }, h('label', { for: 'ns-date', style: 'font-weight:700' }, 'Fecha del estudio'), datePicker({ id: 'ns-date', value: date, onChange: iso => { date = iso; } }))),
+      h('div', { class: 'field' }, h('label', { for: 'ns-date', style: 'font-weight:700' }, 'Fecha del estudio'), datePicker({ id: 'ns-date', value: date, onChange: iso => { date = iso; draft.date=iso; } }))),
     h('label', { class: 'field', for: 'ns-file' }, 'Archivo del informe ', h('span', { class: 'hint' }, 'PDF o foto (JPG, PNG), hasta 20 MB. Solo informes escritos.'), filePicker(file)),
-    h('label', { class: 'field', for: 'ns-text' }, 'Texto del informe ', h('span', { class: 'hint' }, '(si no subís archivo)'), text), msg, h('div', { class: 'row' }, btn));
+    h('label', { class: 'field', for: 'ns-text' }, 'Texto del informe ', h('span', { class: 'hint' }, '(si no subís archivo)'), text),
+    draft.file?h('p',{class:'hint'},'Archivo seleccionado: '+draft.file.name):null,
+    msg, h('div', { class: 'row' }, btn));
 }
 
 async function doctorStudy() {
@@ -2128,13 +2332,26 @@ async function doctorStudy() {
   if (error || !s) { toast('No encontramos ese estudio.'); return go('paciente', { patientId: state.patientId }); }
   const { data: p } = await sb.from('profiles').select('full_name, birth_date').eq('id', s.patient_id).maybeSingle();
   if (s.status === 'publicado') sb.rpc('log_study_access', { p_study: s.id, p_action: 'visto_por_medico' });
-  const ed = { ...s, glossary: [...(s.glossary || [])], lab_values: [...(s.lab_values || [])] };
-  let dirty = false, previewing = false;
-  const markDirty = () => { dirty = true; status.textContent = 'Cambios sin guardar'; status.className = 'pill warn'; };
+  // Hecho por ChatGPT · 2026-11-02 · Conservar cambios médicos no guardados
+  // sólo en memoria al cambiar de sección; nunca en localStorage.
+  const draftKey='doctor-edit:'+s.id;
+  const previous=studyEditDrafts.get(draftKey);
+  const ed = { ...s, ...(previous||{}),
+    glossary: (previous?.glossary||s.glossary||[]).map(x=>({...x})),
+    lab_values: (previous?.lab_values||s.lab_values||[]).map(x=>({...x})) };
+  let dirty = !!previous, previewing = false;
+  const markDirty = () => {
+    dirty = true;
+    studyEditDrafts.set(draftKey,{title:ed.title,study_date:ed.study_date,
+      report_text:ed.report_text,explanation:ed.explanation,doctor_note:ed.doctor_note,
+      glossary:ed.glossary.map(x=>({...x})),lab_values:ed.lab_values.map(x=>({...x}))});
+    status.textContent = 'Cambios sin guardar'; status.className = 'pill warn';
+  };
   const m = mainEl();
-  const status = h('span', { class: 'pill ' + (s.status === 'publicado' ? 'ok' : 'warn') }, s.status === 'publicado' ? 'Publicado' : 'Borrador');
+  const status = h('span', { class: 'pill ' + (dirty ? 'warn' : s.status === 'publicado' ? 'ok' : 'warn') },
+    dirty ? 'Cambios sin guardar (conservados en esta pestaña)' : s.status === 'publicado' ? 'Publicado' : 'Borrador');
   const back = async () => {
-    if (dirty && !await confirmBox({ title: 'Hay cambios sin guardar', text: 'Si salís ahora, se pierden.', ok: 'Salir sin guardar', danger: true })) return;
+    if(dirty)toast('Tus cambios siguen disponibles al volver a este estudio.');
     go('paciente', { patientId: s.patient_id });
   };
   m.append(h('div', { class: 'row' }, h('button', { class: 'btn quiet sm', onclick: back }, '‹ ' + ((p && p.full_name) || 'Paciente'))));
@@ -2147,13 +2364,16 @@ async function doctorStudy() {
     const { data, error: e } = await sb.from('studies').update(row).eq('id', s.id).select('*').single();
     if (e) { toast(errorText(e)); return false; }
     Object.assign(s, data); Object.assign(ed, data, { glossary: [...(data.glossary || [])], lab_values: [...(data.lab_values || [])] });
-    dirty = false; status.textContent = s.status === 'publicado' ? 'Publicado' : 'Borrador'; status.className = 'pill ' + (s.status === 'publicado' ? 'ok' : 'warn');
+    dirty = false;studyEditDrafts.delete(draftKey);
+    status.textContent = s.status === 'publicado' ? 'Publicado' : 'Borrador'; status.className = 'pill ' + (s.status === 'publicado' ? 'ok' : 'warn');
     return true;
   }
   async function callAI(action, label, btn) {
     btn.disabled = true; const old = btn.textContent;
     btn.replaceChildren(h('span', { class: 'spinner' }), ' ' + label);
-    const { data, error: e } = await sb.functions.invoke('ia', { body: { action, study_id: s.id } });
+    const { data, error: e } = await pendingOnce(
+      action === 'transcribir' ? runningStudyReads : runningStudyExplanations,
+      'doctor:'+s.id, () => sb.functions.invoke('ia', { body: { action, study_id: s.id } }));
     btn.disabled = false; btn.textContent = old;
     if (e) { toast(await fnError(e)); return null; }
     return data;
@@ -2261,7 +2481,8 @@ async function doctorStudy() {
     }
     const { error: e } = await sb.from('studies').delete().eq('id', s.id);
     if (e) return toast(errorText(e));
-    dirty = false; toast('Borrador borrado.'); go('paciente', { patientId: s.patient_id });
+    dirty = false;studyEditDrafts.delete(draftKey);
+    toast('Borrador borrado.'); go('paciente', { patientId: s.patient_id });
   } }, 'Borrar borrador'));
   const FB = { si: 'Respondió que lo entendió.', mas_o_menos: 'Respondió que lo entendió más o menos.', no: 'Respondió que no lo entendió.' };
   m.append(h('div', { class: 'card' }, h('h2', {}, s.status === 'publicado' ? 'Publicado' : 'Publicar'),
