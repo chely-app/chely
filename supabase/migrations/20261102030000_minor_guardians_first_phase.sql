@@ -150,7 +150,9 @@ returns uuid language plpgsql security definer set search_path=''
 as $fn$
 declare v_inv public.minor_invitations;v_email text;v_id uuid;
 begin
-  if auth.uid() is null then raise exception 'Primero iniciá sesión.'; end if;
+  if auth.uid() is null or not exists (
+    select 1 from public.profiles where id=auth.uid() and role='patient' and consent_at is not null
+  ) then raise exception 'Iniciá sesión como paciente y aceptá el consentimiento.'; end if;
   if p_relationship not in ('madre','padre','abuela','abuelo','tutor','otro') then
     raise exception 'Indicá tu relación con el menor.';
   end if;
