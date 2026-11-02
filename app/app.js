@@ -1764,13 +1764,26 @@ async function minorOpenFile(study){
 }
 function minorStudyEditor(host,study){
   const box=h('div',{class:'card'},h('h3',{},'Estudio: '+study.title));
-  const title=h('input',{id:'minor-edit-title',type:'text',maxlength:180,value:study.title});
-  let date=study.study_date;
+  // Hecho por ChatGPT · 2026-11-02 · Revisión del título/fecha sugeridos en archivos pediátricos.
+  const pending=study.title===STUDY_PENDING_TITLE;
+  const title=h('input',{id:'minor-edit-title',type:'text',maxlength:180,
+    placeholder:'Ej.: Ecografía abdominal',value:pending?'':study.title});
+  let date=pending?null:study.study_date;
   const picker=datePicker({id:'minor-edit-date',value:date,onChange:iso=>{date=iso;}});
   const report=h('textarea',{id:'minor-edit-report',class:'report'},study.report_text||'');
   const status=h('div',{role:'status'});
+  const metadataNote=h('p',{class:'hint',role:'status'},
+    pending?'Chely intentará reconocer el nombre y la fecha del informe. Revisalos antes de explicar.':'Podés editar el nombre y la fecha del estudio.');
+  const saveReport=async()=>{
+    const {error}=await sb.from('minor_studies').update({
+      report_text:report.value.trim(),updated_by:state.me.id
+    }).eq('id',study.id);
+    if(error){toast(errorText(error));return false;}
+    study.report_text=report.value.trim();
+    return true;
+  };
   const save=async()=>{
-    if(title.value.trim().length<2||!date||date>todayISO())return toast('Título o fecha inválidos.'),false;
+    if(title.value.trim().length<2||!date||date>todayISO())return toast('Revisá el nombre y la fecha del estudio antes de explicar.'),false;
     const {error}=await sb.from('minor_studies').update({
       title:title.value.trim(),study_date:date,report_text:report.value.trim(),updated_by:state.me.id
     }).eq('id',study.id);
@@ -1784,8 +1797,18 @@ function minorStudyEditor(host,study){
       const {data,error}=await sb.functions.invoke('ia-menores',{body:{action:'transcribir',study_id:study.id}});
       if(error)throw new Error(await fnError(error));
       report.value=data.text||'';
-      if(!await save())throw new Error('No se pudo guardar el texto transcripto.');
-      status.className='alert ok';status.textContent='Texto leído. Revisá que coincida con el informe original.';
+      if(!await saveReport())throw new Error('No se pudo guardar el texto transcripto.');
+      if(study.title===STUDY_PENDING_TITLE){
+        const suggested=metadataFromReport(data.text);
+        if(suggested.title)title.value=suggested.title;
+        if(suggested.date){
+          date=suggested.date;picker.querySelector('input').value=fmtDate(suggested.date);
+        }
+        metadataNote.textContent=suggested.title&&suggested.date
+          ? 'Chely sugirió estos datos. Confirmá que sean correctos.'
+          : 'Falta identificar el título o la fecha: completalos para poder explicar.';
+      }
+      status.className='alert ok';status.textContent='Texto leído. Revisá los datos y el informe antes de explicar.';
     }catch(e){status.className='alert bad';status.textContent=errorText(e);}
     finally{read.disabled=false;}
   }},'Leer archivo con IA');
@@ -1808,8 +1831,9 @@ function minorStudyEditor(host,study){
   }},'Explicar con IA');
   box.append(
     h('div',{class:'grid2'},
-      h('label',{class:'field',for:'minor-edit-title'},'Título',title),
-      h('div',{class:'field'},h('label',{for:'minor-edit-date'},'Fecha'),picker)),
+      h('label',{class:'field',for:'minor-edit-title'},'Nombre del estudio',title),
+      h('div',{class:'field'},h('label',{for:'minor-edit-date'},'Fecha del estudio'),picker)),
+    metadataNote,
     study.file_path?h('div',{class:'row'},h('span',{class:'muted grow'},study.file_name||'Archivo'),
       h('button',{class:'btn quiet sm',type:'button',onclick:()=>minorOpenFile(study)},'Ver original')):null,
     h('label',{class:'field',for:'minor-edit-report'},'Texto del informe',report),
@@ -1837,6 +1861,10 @@ function minorStudyEditor(host,study){
       state.minorStudyId=null;toast('Estudio eliminado.');minorManagement();
     }},'Eliminar estudio')));
   host.append(box);
+  if(state.minorAutoRead===study.id && study.file_path){
+    state.minorAutoRead=null;
+    read.click();
+  }
 }
 
 /* ---------------- médico ---------------- */
