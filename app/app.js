@@ -1219,7 +1219,10 @@ async function patientOwnStudy() {
     if (!task) {
       task = sb.functions.invoke('ia', { body: { action: 'transcribir', study_id: s.id } });
       runningStudyReads.set(s.id, task);
-      task.finally(() => { if (runningStudyReads.get(s.id) === task) runningStudyReads.delete(s.id); });
+      task.then(
+        () => { if (runningStudyReads.get(s.id) === task) runningStudyReads.delete(s.id); },
+        () => { if (runningStudyReads.get(s.id) === task) runningStudyReads.delete(s.id); }
+      );
     }
     const { data, error } = await task;
     done();
