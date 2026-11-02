@@ -301,6 +301,7 @@ const studyEditDrafts = new Map();
 let patientStudiesTab = null;
 const runningStudyReads = new Map(); // Evita transcripciones duplicadas.
 const runningStudyExplanations = new Map(); // Evita análisis duplicados.
+const runningHistoryEvaluations = new Map(); // Evitar pedidos dobles de evaluación.
 // Hecho por ChatGPT · 2026-11-02 · Lecturas en lote: nunca genera explicaciones.
 // El estado se conserva sólo mientras esta pestaña está abierta.
 let batchReadJob = null;
@@ -759,7 +760,7 @@ async function renderPatient() {
 }
 async function loadPatientStudies() {
   const { data, error } = await sb.from('studies')
-    .select('id, title, study_date, status, self_uploaded, report_text, published_at, first_viewed_at, doctor_id, explanation, glossary, lab_values, doctor_note, file_path, file_name, file_type, storage_backend, storage_file_id, feedback, ai_generated_at')
+    .select('id, title, study_date, status, self_uploaded, report_text, published_at, first_viewed_at, doctor_id, explanation, glossary, lab_values, doctor_note, file_path, file_name, file_type, storage_backend, storage_file_id, feedback, ai_generated_at, created_at, updated_at')
     .order('study_date', { ascending: false });
   if (error) throw error;
   return data;
@@ -788,6 +789,69 @@ async function patientStudies() {
   m.append(h('div', { class: 'card' }, h('h2', {}, 'Entendé tu estudio'),
     h('p', {}, 'Subí un análisis o un informe (PDF, foto o texto) y Chely te lo explica en palabras simples.'),
     h('div', { class: 'row' }, h('button', { class: 'btn primary big', onclick: () => go('subir') }, 'Subir un estudio'))));
+  // Hecho por ChatGPT · 2026-11-02 · Evaluación integral a pedido.
+  const ownHistory = studies.filter(st => st.self_uploaded);
+  const unreadHistory = ownHistory.filter(st => !String(st.report_text || '').trim()).length;
+  const { data: overall, error: overallError } = await sb.from('patient_history_summaries')
+    .select('explanation,total_studies,unique_reports,unconfirmed_studies,generated_at,latest_confirmed_date')
+    .eq('patient_id', state.me.id).maybeSingle();
+  if (overallError) console.warn('No se pudo leer la evaluación integral guardada.');
+  const changedHistory = !!overall && (ownHistory.length !== overall.total_studies ||
+    ownHistory.some(st => st.updated_at && new Date(st.updated_at) > new Date(overall.generated_at)));
+  const overviewCard = h('div', { class: 'card' },
+    h('h2', {}, 'Evaluación integral del historial'),
+    h('p', {}, 'Chely puede comparar los estudios escritos y explicar su evolución. No puede conocer el estado actual de salud solamente por informes históricos.'),
+    h('p', { class: 'hint' },
+      ownHistory.length + ' estudios registrados · ' +
+      (ownHistory.length - unreadHistory) + ' con texto guardado. La IA se usa solo si lo solicitás.'));
+  if (overall?.explanation) {
+    overviewCard.append(h('p', { class: 'muted small' },
+      'Última evaluación: ' + fmtDateTime(overall.generated_at) +
+      ' · ' + overall.unique_reports + ' informes diferentes examinados.'));
+    if (changedHistory) overviewCard.append(h('p', { class: 'hint' },
+      'Agregaste o modificaste estudios desde esta evaluación. Podés actualizarla.'));
+    overviewCard.append(h('details', { class: 'stack' },
+      h('summary', {}, 'Leer la evaluación guardada'),
+      renderExplanation(overall.explanation)));
+  }
+  const overviewStatus = h('p', { class: 'hint', role: 'status', 'aria-live': 'polite' });
+  const overviewButton = h('button', { type: 'button', class: 'btn primary' },
+    overall?.explanation ? 'Actualizar evaluación integral' : 'Evaluar todo mi historial');
+  overviewButton.disabled = ownHistory.length === 0 || unreadHistory > 0;
+  if (unreadHistory > 0) overviewStatus.textContent = 'Quedan ' + unreadHistory +
+    ' informes por leer. Preparalos antes de pedir la evaluación integral.';
+  const overviewOwner = state.me.id;
+  overviewButton.addEventListener('click', async () => {
+    if (runningHistoryEvaluations.has(overviewOwner)) return toast('Ya hay una evaluación integral en curso.');
+    const allowed = await confirmBox({
+      title: 'Evaluar todo mi historial',
+      text: 'Chely enviará los informes escritos y los datos de salud declarados para preparar una evaluación cronológica. Esta consulta a la IA puede tener costo. No permite diagnosticar ni conocer con certeza tu estado de salud hoy. Si los datos no cambiaron, reutilizará la última evaluación.',
+      ok: 'Generar evaluación'
+    });
+    if (!allowed || runningHistoryEvaluations.has(overviewOwner)) return;
+    overviewButton.disabled = true;
+    overviewStatus.className = 'alert info';
+    overviewStatus.textContent = 'Chely está revisando los informes. La evaluación se guardará en tu cuenta. Evitá actualizar esta pestaña.';
+    try {
+      const { data, error } = await pendingOnce(runningHistoryEvaluations, overviewOwner,
+        () => sb.functions.invoke('resumen-integral', { body: { action: 'evaluar' } }));
+      if (error) throw new Error(await fnError(error));
+      if (!data?.explanation) throw new Error('No se recibió la evaluación.');
+      overviewStatus.className = 'alert ok';
+      overviewStatus.textContent = data.reused
+        ? 'Se recuperó la evaluación guardada, sin consumir IA.'
+        : 'La evaluación integral quedó guardada en tu cuenta.';
+      if (state.me?.id === overviewOwner && state.page === 'estudios') render();
+      else if (state.me?.id === overviewOwner)
+        toast('La evaluación integral está guardada en Mis estudios.');
+    } catch (error) {
+      overviewStatus.className = 'alert bad';
+      overviewStatus.textContent = errorText(error);
+    } finally { overviewButton.disabled = false; }
+  });
+  overviewCard.append(h('div', { class: 'row' }, overviewButton), overviewStatus);
+  m.append(overviewCard);
+
   // Hecho por ChatGPT · 2026-11-02 · Ultima explicacion consultable sin gastar IA.
   if (latest?.explanation) {
     const origin = studies.find(st => st.id === latest.source_study_id);
