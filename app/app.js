@@ -297,6 +297,7 @@ let sb = null;
 let uploadDraft = null;
 const minorUploadDrafts = new Map();
 const studyEditDrafts = new Map();
+const runningStudyReads = new Map(); // Evita pedir dos veces la misma transcripción.
 let navigationEpoch = 0;
 let restoredRouteUser = null;
 function clearUploadDraft() { uploadDraft = null; }
@@ -1214,7 +1215,13 @@ async function patientOwnStudy() {
   const readFile = async () => {
     status.className = 'alert info'; status.textContent = 'Chely está leyendo tu archivo. Puede tardar un minuto; no cierres esta pantalla.';
     const done = busy(readBtn, 'Leyendo el archivo…');
-    const { data, error } = await sb.functions.invoke('ia', { body: { action: 'transcribir', study_id: s.id } });
+    let task = runningStudyReads.get(s.id);
+    if (!task) {
+      task = sb.functions.invoke('ia', { body: { action: 'transcribir', study_id: s.id } });
+      runningStudyReads.set(s.id, task);
+      task.finally(() => { if (runningStudyReads.get(s.id) === task) runningStudyReads.delete(s.id); });
+    }
+    const { data, error } = await task;
     done();
     if (error) { status.className = 'alert bad'; status.textContent = await fnError(error); return false; }
     report.value = data.text;
