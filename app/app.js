@@ -1436,8 +1436,8 @@ async function patientStudies() {
         matching.length + ' estudios'
       : '';
     moreButton.hidden = matching.length <= visibleLimit;
-    moreButton.textContent = 'Mostrar ' + Math.min(4,matching.length-visibleLimit) +
-      ' estudios más';
+    if (!moreButton.hidden) moreButton.textContent = 'Mostrar ' +
+      Math.min(4,matching.length-visibleLimit) + ' estudios más';
   };
   for (const group of groups) {
     const button = h('button', { type: 'button', class: 'study-filter-tab' },
@@ -1486,8 +1486,10 @@ async function patientStudies() {
     h('summary', {},
       h('span', { class: 'chely-utility-title' }, 'Evaluación del historial'),
       h('span', { class: 'chely-utility-description' },
-        overall?.explanation ? 'Resultado guardado' :
-        jobActive ? 'Evaluación en curso' : 'Ver resultados y seguimiento')));
+        jobActive ? 'Evaluación en curso' :
+        summaryCounts.review > 0 ? summaryCounts.done + ' analizados · ' +
+          summaryCounts.review + ' para revisar' :
+        overall?.explanation ? 'Resultado guardado' : 'Ver evaluación y resultados')));
   m.insertBefore(historyPanel, overviewCard);
   historyPanel.append(overviewCard);
   if (reviewCard) historyPanel.append(reviewCard);
