@@ -1417,7 +1417,7 @@ async function accountView() {
       h('p', { class: 'muted small' }, 'Todos los campos son opcionales. Esta información se guarda en una ficha privada, distinta del perfil público de tu cuenta.'));
     m.append(card);
     const { data: details, error: detailsError } = await sb.from('patient_health_details')
-      .select('document_type,document_number,height_cm,weight_kg,allergies,health_coverage').eq('id', me.id).maybeSingle();
+      .select('document_type,document_number,height_cm,weight_kg,allergies,health_coverage,health_coverages').eq('id', me.id).maybeSingle();
     if (detailsError) {
       card.append(h('div', { class: 'alert bad' }, 'No pudimos cargar tus datos de salud. ', errorText(detailsError)));
     } else {
@@ -1430,9 +1430,7 @@ async function accountView() {
         value: details?.height_cm == null ? '' : String(details.height_cm) });
       const weight = h('input', { id: 'health-weight', type: 'number', min: 1, max: 400, step: '0.1', placeholder: 'Ej.: 70',
         value: details?.weight_kg == null ? '' : String(details.weight_kg) });
-      const coverage = h('input', { id: 'health-coverage', type: 'text', list: 'health-coverage-options', maxlength: 160,
-        autocomplete: 'off', placeholder: 'Buscá o escribí tu obra social / prepaga',
-        value: details?.health_coverage || '' });
+      const coverageEditor = healthCoveragesEditor('health', details?.health_coverages, details?.health_coverage);
       const allergies = Array.isArray(details?.allergies) ? [...details.allergies] : [];
       const allergyInput = h('input', { id: 'health-allergy', type: 'text', maxlength: 120, placeholder: 'Ej.: penicilina' });
       const allergyList = h('div', { class: 'allergy-tags', 'aria-live': 'polite' });
@@ -1466,8 +1464,11 @@ async function accountView() {
         if (cm != null && (!Number.isFinite(cm) || cm < 40 || cm > 250)) return toast('Revisá la altura en centímetros.');
         if (kg != null && (!Number.isFinite(kg) || kg < 1 || kg > 400)) return toast('Revisá el peso en kilogramos.');
         if (allergies.join('|').length > 2500) return toast('La lista de alergias es demasiado larga.');
+        const coverages = coverageEditor.values();
+        if (!coverages) return;
         const payload = { id: me.id, document_type: dt || null, document_number: digits || null,
-          height_cm: cm, weight_kg: kg, allergies, health_coverage: coverage.value.trim() || null,
+          height_cm: cm, weight_kg: kg, allergies,
+          health_coverages: coverages, health_coverage: coverages[0] || null,
           updated_at: new Date().toISOString() };
         saveHealthBtn.disabled = true;
         try {
@@ -1486,9 +1487,7 @@ async function accountView() {
           h('label', { for: 'health-allergy', style: 'font-weight:700' }, 'Alergias'),
           h('div', { class: 'row' }, allergyInput, addBtn), allergyList,
           h('span', { class: 'hint' }, 'Agregá cada alergia por separado. Podés quitarla cuando quieras.')),
-        h('label', { class: 'field', for: 'health-coverage' }, 'Obra social o prepaga', coverage,
-          h('span', { class: 'hint' }, 'Escribí para buscar entre sugerencias o poné el nombre manualmente.')),
-        healthCoverageSuggestions(),
+        coverageEditor.root,
         h('p', { class: 'hint' }, 'Si no encontrás tu cobertura, escribila igual. ',
           h('a', { href: 'https://www.argentina.gob.ar/agentes-del-seguro-rnas', target: '_blank', rel: 'noopener noreferrer' },
             'Consultar el registro oficial de Agentes del Seguro de Salud.')),
@@ -1511,8 +1510,9 @@ async function accountView() {
     } finally { changePass.disabled = false; }
   });
   m.append(h('div', { class: 'card' }, h('h2', {}, 'Cambiar la contraseña'),
-    h('div', { class: 'grid2' },
-      h('label', { class: 'field', for: 'acc-pass' }, 'Contraseña nueva', h('span', { class: 'hint' }, 'Al menos 8 caracteres.'), pass),
+    h('div', { class: 'grid2 password-fields' },
+      h('label', { class: 'field', for: 'acc-pass' }, 'Contraseña nueva', pass,
+        h('span', { class: 'hint' }, 'Al menos 8 caracteres.')),
       h('label', { class: 'field', for: 'acc-pass-confirm' }, 'Confirmar contraseña nueva', passConfirm)),
     h('div', { class: 'row' }, changePass)));
 
