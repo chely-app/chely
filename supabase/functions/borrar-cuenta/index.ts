@@ -12,6 +12,29 @@ Deno.serve(withCors(async (req) => {
   try { body = await req.json(); } catch { /* sin cuerpo */ }
   if (body.confirm !== "BORRAR") return fail("Falta confirmar el borrado.");
 
+  // Hecho por ChatGPT · 2026-11-02 · Eliminar las copias del volumen
+  // cifrado ANTES de borrar la identidad y revocar su JWT.
+  // Si Debian está caído no se declara borrada la cuenta.
+  const clientId = Deno.env.get("CF_ACCESS_CLIENT_ID");
+  const clientSecret = Deno.env.get("CF_ACCESS_CLIENT_SECRET");
+  if (!clientId || !clientSecret) return fail("Acceso al servidor no configurado. La cuenta no fue eliminada.", 503);
+  try {
+    const response = await fetch("https://api.chely.app/sync/patient-all", {
+      method: "DELETE",
+      headers: {
+        Authorization: req.headers.get("authorization") || "",
+        "CF-Access-Client-Id": clientId,
+        "CF-Access-Client-Secret": clientSecret,
+      },
+      signal: AbortSignal.timeout(45000),
+    });
+    if (!response.ok) return fail("Debian no confirmó el borrado de los archivos. Tu cuenta sigue activa; escribinos a info@chely.app.", 503);
+    const acknowledgement = await response.json().catch(() => null);
+    if (acknowledgement?.status !== "deleted")
+      return fail("El servidor no confirmó la eliminación. Tu cuenta sigue activa.", 503);
+  } catch {
+    return fail("Debian no está disponible. No se borró tu cuenta para evitar conservar archivos médicos allí.", 503);
+  }
   const admin = serviceClient();
   // Archivos del paciente: <id>/<estudio>/<archivo>
   const { data: folders } = await admin.storage.from("estudios").list(userId, { limit: 1000 });
