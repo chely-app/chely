@@ -302,6 +302,28 @@ let patientStudiesTab = null;
 const runningStudyReads = new Map(); // Evita transcripciones duplicadas.
 const runningStudyExplanations = new Map(); // Evita análisis duplicados.
 const runningHistoryEvaluations = new Map(); // Evitar pedidos dobles de evaluación.
+// Hecho por ChatGPT · 2026-11-02 · Indicador de actividad real y tiempo transcurrido.
+// Claude devuelve la evaluación cuando termina, sin porcentaje ni avance parcial.
+const historyEvaluationProgress = new Map();
+let historyEvaluationTimer = null;
+let updateHistoryEvaluationDisplay = null;
+function tickHistoryEvaluation() {
+  if (typeof updateHistoryEvaluationDisplay === 'function')
+    updateHistoryEvaluationDisplay();
+}
+function startHistoryEvaluationTimer() {
+  if (historyEvaluationTimer !== null) return;
+  historyEvaluationTimer = setInterval(tickHistoryEvaluation, 1000);
+}
+function stopHistoryEvaluationTimerIfIdle() {
+  if (historyEvaluationProgress.size || historyEvaluationTimer === null) return;
+  clearInterval(historyEvaluationTimer);
+  historyEvaluationTimer = null;
+}
+function formatHistoryElapsed(ms) {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  return Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');
+}
 // Hecho por ChatGPT · 2026-11-02 · Lecturas en lote: nunca genera explicaciones.
 // El estado se conserva sólo mientras esta pestaña está abierta.
 let batchReadJob = null;
@@ -817,10 +839,34 @@ async function patientStudies() {
   const overviewStatus = h('p', { class: 'hint', role: 'status', 'aria-live': 'polite' });
   const overviewButton = h('button', { type: 'button', class: 'btn primary' },
     overall?.explanation ? 'Actualizar evaluación integral' : 'Evaluar todo mi historial');
-  overviewButton.disabled = ownHistory.length === 0 || unreadHistory > 0;
+  const overviewOwner = state.me.id;
+  // No simular un porcentaje: la API no informa pasos internos de Claude.
+  // Mostrar actividad y un reloj que funciona incluso al cambiar de sección.
+  const evalProgress = h('div', { class: 'history-eval-progress', hidden: true },
+    h('div', { class: 'row' },
+      h('span', { class: 'spinner', 'aria-hidden': 'true' }),
+      h('strong', {}, 'Evaluación integral en curso')),
+    h('p', { class: 'history-eval-progress-detail' },
+      'Los informes están siendo procesados.'),
+    h('div', { class: 'history-eval-progress-track', 'aria-hidden': 'true' },
+      h('div', { class: 'history-eval-progress-indeterminate' })),
+    h('p', { class: 'muted small' },
+      'La IA no informa un porcentaje real. La evaluación se guardará al finalizar. No recargues ni cierres esta pestaña.'));
+  const progressDetail = evalProgress.querySelector('.history-eval-progress-detail');
+  const showHistoryProgress = () => {
+    if (!overviewCard.isConnected || state.me?.id !== overviewOwner) return;
+    const job = historyEvaluationProgress.get(overviewOwner);
+    const activeJob = !!job && runningHistoryEvaluations.has(overviewOwner);
+    evalProgress.hidden = !activeJob;
+    overviewButton.disabled = activeJob || ownHistory.length === 0 || unreadHistory > 0;
+    if (!activeJob) return;
+    progressDetail.textContent = job.total + ' informes con texto disponibles · ' +
+      'Tiempo transcurrido: ' + formatHistoryElapsed(Date.now() - job.startedAt) +
+      '. La IA está preparando la evaluación.';
+  };
+  updateHistoryEvaluationDisplay = showHistoryProgress;
   if (unreadHistory > 0) overviewStatus.textContent = 'Quedan ' + unreadHistory +
     ' informes por leer. Preparalos antes de pedir la evaluación integral.';
-  const overviewOwner = state.me.id;
   overviewButton.addEventListener('click', async () => {
     if (runningHistoryEvaluations.has(overviewOwner)) return toast('Ya hay una evaluación integral en curso.');
     const allowed = await confirmBox({
@@ -829,12 +875,20 @@ async function patientStudies() {
       ok: 'Generar evaluación'
     });
     if (!allowed || runningHistoryEvaluations.has(overviewOwner)) return;
-    overviewButton.disabled = true;
+    historyEvaluationProgress.set(overviewOwner, {
+      startedAt: Date.now(), total: ownHistory.length - unreadHistory
+    });
+    startHistoryEvaluationTimer();
     overviewStatus.className = 'alert info';
-    overviewStatus.textContent = 'Chely está revisando los informes. La evaluación se guardará en tu cuenta. Evitá actualizar esta pestaña.';
+    overviewStatus.textContent = 'Solicitud enviada. La evaluación está en curso.';
+    overviewButton.disabled = true;
+    showHistoryProgress();
     try {
-      const { data, error } = await pendingOnce(runningHistoryEvaluations, overviewOwner,
+      const evaluationRequest = pendingOnce(runningHistoryEvaluations, overviewOwner,
         () => sb.functions.invoke('resumen-integral', { body: { action: 'evaluar' } }));
+      // pendingOnce registró la solicitud: mostrar la actividad inmediatamente.
+      showHistoryProgress();
+      const { data, error } = await evaluationRequest;
       if (error) throw new Error(await fnError(error));
       if (!data?.explanation) throw new Error('No se recibió la evaluación.');
       overviewStatus.className = 'alert ok';
@@ -847,10 +901,15 @@ async function patientStudies() {
     } catch (error) {
       overviewStatus.className = 'alert bad';
       overviewStatus.textContent = errorText(error);
-    } finally { overviewButton.disabled = false; }
+    } finally {
+      historyEvaluationProgress.delete(overviewOwner);
+      stopHistoryEvaluationTimerIfIdle();
+      showHistoryProgress();
+    }
   });
-  overviewCard.append(h('div', { class: 'row' }, overviewButton), overviewStatus);
+  overviewCard.append(h('div', { class: 'row' }, overviewButton), overviewStatus, evalProgress);
   m.append(overviewCard);
+  showHistoryProgress();
 
   // Hecho por ChatGPT · 2026-11-02 · Ultima explicacion consultable sin gastar IA.
   if (latest?.explanation) {
