@@ -74,3 +74,10 @@ Este archivo documenta los cambios realizados por distintos colaboradores (human
 - «Mi cuenta» y recuperación de contraseña ahora solicitan confirmación de la nueva contraseña.
 - Campo de cobertura con sugerencias locales, entrada libre y enlace al registro RNAS de la Superintendencia de Servicios de Salud. **No es una base exhaustiva ni sincronizada** de obras sociales.
 - Antes de publicar, migración SQL, comprobación RLS y pruebas de la pantalla. Esta entrega no modifica el contenido de estudios.
+
+## 2026-11-02 — Hecho por ChatGPT (menores a cargo, primera fase)
+**Archivos:** `app/app.js`, `supabase/migrations/20261102030000_minor_guardians_first_phase.sql`, `docs/MENORES_COMPARTIDOS_2026-11-02.md`.
+- Se prepara ficha mínima de menor con vínculos de múltiples adultos y permisos «Responsable» / «Consulta».
+- Se agrega pestaña condicional «Menores a cargo»; alta y aceptación de invitación en «Mi cuenta».
+- Invitaciones por correo específico, token aleatorio de un solo uso, vencimiento de siete días y comprobaciones de seguridad en Supabase.
+- **No se habilitan estudios ni IA pediátricos hasta adaptar todas las capas de autorización.** Revisión de tutela y representación legal pendiente para datos reales.
