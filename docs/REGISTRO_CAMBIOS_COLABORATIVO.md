@@ -150,3 +150,15 @@ Este archivo documenta los cambios realizados por distintos colaboradores (human
 - Los cuatro campos de «Mi cuenta» (nombre/s, apellido/s, correo y nacimiento) se distribuyen en columnas automáticas. Se eliminaron las alturas fijas excesivas entre los rótulos y sus inputs. En datos de salud también se acercaron las etiquetas a cada campo.
 - Los permisos `UPDATE` nuevos son **por columna** exclusivamente sobre given_names y family_names; se conserva la RLS que permite editar solo el perfil propio. Se verificó que no se permiten cambios de rol ni UPDATE anónimo.
 - Las dos migraciones están aplicadas a Supabase. JS validado sintácticamente; pendiente de comprobación visual en navegador y de guardado con sesión real.
+
+## 2026-11-02 — Hecho por ChatGPT (continuidad de navegación y borradores)
+**Archivo:** `app/app.js`.
+- La pestaña actual se conserva al recargar con F5 mediante `history.state`, incluidas las referencias de estudio, paciente o menor, y se restaura únicamente después de verificar que el usuario y su rol coinciden con la sesión actual. Se elimina al cerrar sesión.
+- La app no vuelve automáticamente a «Mis estudios» por un F5, excepto cuando la ruta deja de estar disponible por permisos o porque se eliminó un estudio.
+- Los formularios de carga y edición de pacientes, menores y médicos conservan **en memoria de la pestaña** los textos, fechas, títulos, fotos/PDF seleccionados e importaciones de enlaces al cambiar de sección y regresar.
+- Las operaciones de subida ya iniciadas continúan mientras se navega **dentro de la SPA y sin descargar o recargar el documento HTML**. El botón de subir queda bloqueado mientras esa carga está en curso, y el resultado no cambia automáticamente la pantalla si el usuario ya navegó a otra.
+- Las lecturas y explicaciones por IA comparten una misma solicitud pendiente por estudio/rol para evitar llamadas duplicadas al reentrar en un formulario.
+- Un archivo seleccionado por el usuario no puede reponerse automáticamente tras un refresco real o cierre de pestaña, por limitaciones de seguridad del navegador: en esos casos debe seleccionarse nuevamente. Los **borradores sin guardar tampoco sobreviven a F5**: no se escriben informes médicos sin cifrar en localStorage/sessionStorage.
+- Para estudios que ya tienen una fila guardada en Supabase, F5 recupera la pantalla y los datos confirmados del servidor. Refrescar/cerrar la pestaña DURANTE una subida de red puede interrumpirla: la continuidad en segundo plano se garantiza para navegación interna, no al cerrar el documento.
+- Mantener todos los cambios de autoría identificados como «Hecho por ChatGPT».
+- Pendiente prueba manual de navegación, sesión, F5, formularios y subidas reales en Chrome/Android/iOS.
