@@ -1370,6 +1370,83 @@ async function minorManagement() {
     h('div', { class: 'row' }, invite), result));
 }
 
+
+/* ---------------- ficha clínica privada del menor ---------------- */
+/* Hecho por ChatGPT · 2026-11-02 · El acceso real lo limita Supabase RLS. */
+async function minorHealthPanel(host, minor) {
+  const card=h('div',{class:'card'},h('h2',{},'Datos de salud de '+minor.full_name),
+    h('p',{class:'muted small'},'Datos propios del menor. Los adultos vinculados pueden consultarlos y actualizarlos.'));
+  host.append(card);
+  const {data,error}=await sb.from('minor_health_details')
+    .select('document_type,document_number,height_cm,weight_kg,allergies,health_coverage')
+    .eq('minor_id',minor.id).maybeSingle();
+  if(error)return card.append(h('div',{class:'alert bad'},errorText(error)));
+  const type=h('select',{id:'minor-doc-type'},
+    ...[['','Sin especificar'],['DNI','DNI'],['CUIL','CUIL'],['CUIT','CUIT']]
+      .map(([key,label])=>h('option',{value:key},label)));
+  type.value=data?.document_type||'';
+  const num=h('input',{id:'minor-doc-num',type:'text',inputmode:'numeric',maxlength:16,
+    placeholder:'Solo números',value:data?.document_number||''});
+  const height=h('input',{id:'minor-height',type:'number',min:40,max:250,step:'.1',
+    placeholder:'Ej.: 110',value:data?.height_cm==null?'':String(data.height_cm)});
+  const weight=h('input',{id:'minor-weight',type:'number',min:1,max:400,step:'.1',
+    placeholder:'Ej.: 18',value:data?.weight_kg==null?'':String(data.weight_kg)});
+  const coverage=h('input',{id:'minor-coverage',type:'text',maxlength:160,
+    list:'health-coverage-options',placeholder:'Obra social o prepaga',value:data?.health_coverage||''});
+  const allergyInput=h('input',{id:'minor-allergy',type:'text',maxlength:120,
+    placeholder:'Ej.: penicilina'});
+  const allergies=Array.isArray(data?.allergies)?[...data.allergies]:[];
+  const tags=h('div',{class:'allergy-tags','aria-live':'polite'});
+  const refresh=()=>{
+    tags.replaceChildren();
+    if(!allergies.length)tags.append(h('span',{class:'muted small'},'Sin alergias registradas.'));
+    allergies.forEach((name,index)=>tags.append(h('span',{class:'allergy-tag'},name,
+      h('button',{type:'button',class:'allergy-remove','aria-label':'Quitar '+name,
+        onclick:()=>{allergies.splice(index,1);refresh();}},'×'))));
+  };
+  const addAllergy=()=>{
+    const name=allergyInput.value.trim();if(!name)return;
+    if(allergies.length>=20)return toast('Podés registrar hasta 20 alergias.');
+    if(allergies.some(a=>normalize(a)===normalize(name)))return toast('La alergia ya existe.');
+    allergies.push(name);allergyInput.value='';refresh();
+  };
+  allergyInput.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addAllergy();}});
+  refresh();
+  const save=h('button',{class:'btn primary',type:'button'},'Guardar datos del menor');
+  save.addEventListener('click',async()=>{
+    const dt=type.value,digits=num.value.replace(/[\s.-]/g,'');
+    if((dt&&!digits)||(!dt&&digits))return toast('Completá tipo y número, o dejá ambos vacíos.');
+    if(dt==='DNI'&&!/^\d{7,8}$/.test(digits))return toast('El DNI debe tener 7 u 8 dígitos.');
+    if(['CUIL','CUIT'].includes(dt)&&!/^\d{11}$/.test(digits))
+      return toast('El CUIL/CUIT debe tener 11 dígitos.');
+    const cm=height.value.trim()?Number(height.value):null;
+    const kg=weight.value.trim()?Number(weight.value):null;
+    if(cm!==null&&(!Number.isFinite(cm)||cm<40||cm>250))return toast('Revisá la altura.');
+    if(kg!==null&&(!Number.isFinite(kg)||kg<1||kg>400))return toast('Revisá el peso.');
+    if(allergies.join('|').length>2500)return toast('La lista de alergias es demasiado larga.');
+    save.disabled=true;
+    try{
+      const {error:e}=await sb.from('minor_health_details').upsert({
+        minor_id:minor.id,document_type:dt||null,document_number:digits||null,
+        height_cm:cm,weight_kg:kg,allergies,health_coverage:coverage.value.trim()||null,
+        updated_by:state.me.id,updated_at:new Date().toISOString()
+      },{onConflict:'minor_id'});
+      if(e)toast(errorText(e));else toast('Datos del menor guardados.');
+    }finally{save.disabled=false;}
+  });
+  card.append(
+    h('div',{class:'health-fields'},
+      h('label',{class:'field',for:'minor-doc-type'},'Documento',type),
+      h('label',{class:'field',for:'minor-doc-num'},'Número de documento',num),
+      h('label',{class:'field',for:'minor-height'},'Altura (cm)',height),
+      h('label',{class:'field',for:'minor-weight'},'Peso (kg)',weight)),
+    h('label',{class:'field',for:'minor-allergy'},'Alergias',
+      h('div',{class:'row'},allergyInput,
+        h('button',{class:'btn quiet sm',type:'button',onclick:addAllergy},'Agregar alergia')),tags),
+    h('label',{class:'field',for:'minor-coverage'},'Obra social o prepaga',coverage),
+    healthCoverageSuggestions(),h('div',{class:'row'},save));
+}
+
 /* ---------------- médico ---------------- */
 async function renderDoctor() {
   if (!['pacientes', 'paciente', 'estudio-medico', 'cuenta'].includes(state.page)) state.page = 'pacientes';
