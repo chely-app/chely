@@ -72,6 +72,17 @@ await pp.waitForSelector('text=sin revisión médica');  // se explica solo, sin
 await pp.screenshot({ path: out + '/9-estudio-propio.png', fullPage: true }); step('la IA lo explica con aviso de «sin revisión médica»');
 await pp.click('text=Mi cuenta'); await pp.waitForSelector('text=Quién vio tus estudios');
 await pp.screenshot({ path: out + '/8-paciente-cuenta.png', fullPage: true }); step('ve el registro de accesos');
+// Panel del equipo: ve las cuentas y pasa una a médico.
+await pp.click('text=Salir'); await pp.waitForSelector('#auth-email');
+await p.goto(url); await p.fill('#auth-email', 'equipo@ej.com'); await p.fill('#auth-pass', 'clave1234'); await p.click('button[type=submit]');
+await p.waitForSelector('text=Compromiso del equipo de Chely'); await p.check('#consent-ok'); await p.click('text=Acepto y continúo');
+await p.waitForSelector('.admin-table >> text=Marta Prueba');
+await p.screenshot({ path: out + '/10-panel.png', fullPage: true }); step('el equipo ve el panel con los pacientes');
+await p.click('.admin-table tr:has-text("Marta Prueba") >> text=Pasar a médico'); await p.click('.overlay >> text=Confirmar');
+await p.waitForSelector('text=Listo, se cambió el tipo de cuenta'); await p.click('[role=tab]:has-text("Médicos")');
+await p.waitForSelector('.admin-table >> text=Marta Prueba'); step('el equipo pasa una cuenta a médico');
+await p.click('text=Registro'); await p.waitForSelector('text=cambió el tipo de cuenta de paciente@ej.com'); step('el cambio queda en el registro');
+await pp.goto(url); await pp.waitForSelector('text=Panel de Chely'); await pp.screenshot({ path: out + '/11-panel-celular.png', fullPage: true });  // misma sesión que la otra pestaña
 const overflow = await pp.evaluate(() => document.documentElement.scrollWidth > innerWidth);
 console.log(overflow ? '  FALLA: desborda en celular' : '  OK: sin desborde horizontal en celular');
 console.log(errors.length ? 'ERRORES: ' + errors.join(' | ') : 'SIN ERRORES DE CONSOLA');

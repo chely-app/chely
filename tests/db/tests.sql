@@ -131,6 +131,28 @@ delete from public.studies where self_uploaded;
 select pg_temp.check((select count(*) from public.studies) = 0, 'paciente borra su estudio propio');
 select pg_temp.as_admin();
 
+-- Panel de control: solo el equipo lo usa, y no ve el contenido de los estudios.
+select pg_temp.as_admin();
+insert into auth.users (id, email) values ('00000000-0000-0000-0000-00000000000f', 'equipo@ej.com');
+update public.profiles set role = 'admin' where id = '00000000-0000-0000-0000-00000000000f';
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000a');
+select pg_temp.expect_error($$select * from public.admin_overview()$$, 'paciente abre el panel');
+select pg_temp.expect_error($$select * from public.admin_users()$$, 'paciente lista las cuentas');
+select pg_temp.expect_error($$select public.admin_set_role(auth.uid(), 'doctor')$$, 'paciente se hace médico desde el panel');
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+select pg_temp.expect_error($$select * from public.admin_users()$$, 'médica lista las cuentas');
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000f');
+select pg_temp.check((select pacientes = 2 and medicos = 2 and equipo = 1 from public.admin_overview()), 'el equipo ve el resumen');
+select pg_temp.check((select count(*) from public.admin_users()) = 5, 'el equipo ve todas las cuentas');
+select pg_temp.check((select count(*) from public.studies) = 0, 'el equipo no ve el contenido de los estudios');
+select public.admin_set_role('00000000-0000-0000-0000-00000000000b', 'doctor');
+select pg_temp.check((select role = 'doctor' and consent_at is null from public.admin_users() where id = '00000000-0000-0000-0000-00000000000b'), 'el equipo pasa una cuenta a médico y le vuelve a pedir las condiciones');
+select pg_temp.expect_error($$select public.admin_set_role(auth.uid(), 'patient')$$, 'el equipo cambia su propio rol');
+select pg_temp.expect_error($$select public.admin_set_role('00000000-0000-0000-0000-00000000000a', 'admin')$$, 'el equipo da rol de equipo desde el panel');
+select pg_temp.check((select count(*) from public.admin_recent_log()) = 1, 'el cambio de rol queda registrado');
+select pg_temp.expect_error($$delete from public.admin_log$$, 'el equipo borra el registro');
+select pg_temp.as_admin();
+
 -- Borrar la cuenta del paciente borra sus estudios.
 select pg_temp.as_admin();
 delete from auth.users where id = '00000000-0000-0000-0000-00000000000a';

@@ -8,6 +8,7 @@ const CFG = window.CHELY_CONFIG || {};
 const CONSENT = {
   patient: { version: 'paciente-v2', title: 'Consentimiento para pacientes' },
   doctor: { version: 'medico-v1', title: 'Condiciones para profesionales' },
+  admin: { version: 'equipo-v1', title: 'Compromiso del equipo de Chely' },
 };
 const CONTACT = 'info@chely.app';
 const MAX_UPLOAD = 20 * 1024 * 1024;
@@ -277,7 +278,7 @@ function clearUploadDraft() { uploadDraft = null; }
 
 function shell(nav) {
   const top = $('#top'); top.innerHTML = '';
-  const brand = h('a', { class: 'brand', href: '#', onclick: e => { e.preventDefault(); go(state.me && state.me.role === 'doctor' ? 'pacientes' : 'estudios'); } },
+  const brand = h('a', { class: 'brand', href: '#', onclick: e => { e.preventDefault(); go(state.me && state.me.role === 'doctor' ? 'pacientes' : state.me && state.me.role === 'admin' ? 'panel' : 'estudios'); } },
     h('img', { src: 'icon-192.png', alt: '' }), h('b', {}, 'Chely'));
   const look = h('div', { class: 'look' },
     h('button', { 'aria-label': 'Letra más chica', onclick: () => { prefs.size = Math.max(1, prefs.size - 1); applyPrefs(); } }, 'A−'),
@@ -351,6 +352,7 @@ async function render() {
       if (error) toast(errorText(error)); else toast('Listo: tu médico ya puede enviarte estudios.');
     } else if (invite) clearInvite();
     if (state.me.role === 'doctor') return renderDoctor();
+    if (state.me.role === 'admin') return renderAdmin();
     return renderPatient();
   } finally {
     rendering = false;
@@ -449,6 +451,14 @@ function viewNewPassword() {
 /* ---------------- consentimiento ---------------- */
 function consentBody(role) {
   const ul = items => h('ul', {}, ...items.map(t => h('li', {}, t)));
+  if (role === 'admin') return [
+    h('p', {}, 'Como parte del equipo de Chely vas a ver las cuentas de pacientes y médicos. Te comprometés a:'),
+    ul(['Usar estos datos solo para administrar Chely y ayudar a quien lo pida.',
+      'No copiarlos ni compartirlos fuera del equipo.',
+      'No usar tu acceso para ver estudios de nadie: el panel muestra cuentas y números, no el contenido de los estudios.',
+      'Usar una contraseña larga y única, y no compartir tu cuenta.']),
+    h('p', { class: 'muted small' }, 'Los cambios que hagas desde el panel quedan registrados.'),
+  ];
   if (role === 'doctor') return [
     h('p', {}, 'Chely está en prueba piloto. Al usarla como profesional aceptás:'),
     ul(['Usarla solo con pacientes que atendés y que aceptaron participar.',
@@ -490,8 +500,96 @@ function viewConsent() {
     state.me.consent_version = c.version; render();
   });
   m.append(h('div', { class: 'card' }, h('h1', {}, c.title), h('div', { class: 'consent' }, ...consentBody(state.me.role)),
-    h('label', { class: 'check', for: 'consent-ok' }, ok, state.me.role === 'doctor' ? 'Leí y acepto estas condiciones.' : 'Leí la información y acepto participar del piloto de Chely.'),
+    h('label', { class: 'check', for: 'consent-ok' }, ok, state.me.role !== 'patient' ? 'Leí y acepto estas condiciones.' : 'Leí la información y acepto participar del piloto de Chely.'),
     h('div', { class: 'row' }, btn, h('button', { class: 'btn quiet', onclick: signOut }, 'No acepto'))));
+}
+
+/* ---------------- panel del equipo ---------------- */
+// Precios de Claude Haiku 5.5 por millón de tokens, para estimar el gasto.
+const AI_PRICE = { input: 0.10, output: 0.50 };
+const ROLE_LABEL = { patient: 'Paciente', doctor: 'Médico', admin: 'Equipo' };
+let adminFilter = 'patient', adminSearch = '';
+
+async function renderAdmin() {
+  if (!['panel', 'registro', 'cuenta'].includes(state.page)) state.page = 'panel';
+  shell(navFor([['panel', 'Panel'], ['registro', 'Registro'], ['cuenta', 'Mi cuenta']]));
+  if (state.page === 'registro') return adminLog();
+  if (state.page === 'cuenta') return accountView();
+  return adminPanel();
+}
+
+async function adminPanel() {
+  loading();
+  const [ov, us] = await Promise.all([sb.rpc('admin_overview'), sb.rpc('admin_users')]);
+  if (ov.error || us.error) return showError(ov.error || us.error, adminPanel);
+  const o = ov.data[0], users = us.data;
+  const cost = (o.ia_tokens_entrada_30d * AI_PRICE.input + o.ia_tokens_salida_30d * AI_PRICE.output) / 1e6;
+  const stat = (value, label, hint) => h('div', { class: 'stat' }, h('b', {}, value), h('span', {}, label), hint ? h('span', { class: 'hint' }, hint) : null);
+  const m = mainEl();
+  m.append(h('div', { class: 'card' }, h('h1', {}, 'Panel de Chely'),
+    h('div', { class: 'stats' },
+      stat(fmtNum(o.pacientes), 'Pacientes'),
+      stat(fmtNum(o.medicos), 'Médicos'),
+      stat(fmtNum(o.cuentas_7d), 'Cuentas nuevas', 'últimos 7 días'),
+      stat(fmtNum(o.estudios), 'Estudios', `${fmtNum(o.estudios_explicados)} explicados · ${fmtNum(o.estudios_propios)} subidos por pacientes`),
+      stat(fmtNum(o.estudios_7d), 'Estudios nuevos', 'últimos 7 días'),
+      stat('US$ ' + cost.toFixed(2).replace('.', ','), 'Gasto de IA estimado', `${fmtNum(o.ia_usos_30d)} usos en 30 días`)),
+    o.sin_consentimiento ? h('p', { class: 'muted small' }, `${fmtNum(o.sin_consentimiento)} cuenta(s) todavía no aceptaron el consentimiento.`) : null));
+
+  const counts = { patient: 0, doctor: 0, admin: 0 };
+  for (const u of users) counts[u.role]++;
+  const search = h('input', { type: 'text', inputmode: 'search', id: 'adm-search', placeholder: 'Buscar por nombre o correo', value: adminSearch, autocomplete: 'off' });
+  const list = h('div', { class: 'table-wrap' });
+  const tabs = h('div', { class: 'tabs', role: 'tablist' }, ...[['patient', 'Pacientes'], ['doctor', 'Médicos'], ['admin', 'Equipo'], ['all', 'Todas']].map(([k, label]) =>
+    h('button', { role: 'tab', 'aria-selected': String(adminFilter === k), onclick: () => { adminFilter = k; adminPanel(); } }, `${label} (${k === 'all' ? users.length : counts[k]})`)));
+  const draw = () => {
+    const q = adminSearch.trim().toLowerCase();
+    const rows = users.filter(u => (adminFilter === 'all' || u.role === adminFilter) && (!q || (u.full_name + ' ' + u.email).toLowerCase().includes(q)));
+    if (!rows.length) { list.replaceChildren(h('p', { class: 'muted' }, 'No hay cuentas para mostrar.')); return; }
+    list.replaceChildren(h('table', { class: 'admin-table' },
+      h('thead', {}, h('tr', {}, ...['Cuenta', 'Tipo', 'Alta', 'Último ingreso', 'Estudios', 'IA (30 días)', ''].map(t => h('th', {}, t)))),
+      h('tbody', {}, ...rows.map(u => h('tr', {},
+        h('td', {}, h('strong', {}, u.full_name || 'Sin nombre'), h('div', { class: 'muted small' }, u.email),
+          u.consent_at ? null : h('span', { class: 'pill warn' }, 'Sin consentimiento')),
+        h('td', {}, ROLE_LABEL[u.role] || u.role),
+        h('td', { class: 'nowrap' }, fmtDate(u.created_at.slice(0, 10))),
+        h('td', { class: 'nowrap' }, u.last_sign_in_at ? fmtDateTime(u.last_sign_in_at) : '—'),
+        h('td', {}, `${fmtNum(u.estudios)}${u.estudios ? ` (${fmtNum(u.estudios_explicados)} explicados)` : ''}`),
+        h('td', {}, fmtNum(u.ia_usos_30d)),
+        h('td', {}, roleButton(u)))))));
+  };
+  search.addEventListener('input', () => { adminSearch = search.value; draw(); });
+  draw();
+  m.append(h('div', { class: 'card admin-card' }, h('h2', {}, 'Cuentas'), tabs, h('label', { class: 'field', for: 'adm-search' }, 'Buscar', search), list,
+    h('p', { class: 'muted small' }, 'El panel muestra cuentas y números. Para proteger a los pacientes, no muestra el contenido de los estudios.')));
+}
+
+function roleButton(u) {
+  if (u.role === 'admin' || u.id === state.me.id) return null;
+  const to = u.role === 'doctor' ? 'patient' : 'doctor';
+  return h('button', { class: 'btn quiet sm', onclick: async () => {
+    const who = u.full_name || u.email;
+    const ok = await confirmBox({ title: to === 'doctor' ? 'Pasar a médico' : 'Pasar a paciente',
+      text: to === 'doctor' ? `${who} va a poder invitar pacientes y cargarles estudios. La próxima vez que entre va a tener que aceptar las condiciones para profesionales.`
+        : `${who} deja de ser médico: ya no va a poder invitar pacientes ni cargar estudios. La próxima vez que entre va a tener que aceptar el consentimiento de pacientes.`,
+      ok: 'Confirmar' });
+    if (!ok) return;
+    const { error } = await sb.rpc('admin_set_role', { p_user: u.id, p_role: to });
+    if (error) return toast(errorText(error));
+    toast('Listo, se cambió el tipo de cuenta.'); adminPanel();
+  } }, to === 'doctor' ? 'Pasar a médico' : 'Pasar a paciente');
+}
+
+async function adminLog() {
+  loading();
+  const { data, error } = await sb.rpc('admin_recent_log');
+  if (error) return showError(error, adminLog);
+  const LABEL = { cambiar_rol: 'cambió el tipo de cuenta de' };
+  const RL = s => s.replace(/patient/g, 'paciente').replace(/doctor/g, 'médico');
+  mainEl().append(h('div', { class: 'card' }, h('h1', {}, 'Registro del equipo'), h('p', { class: 'muted' }, 'Últimos 50 cambios hechos desde el panel.'),
+    !data.length ? h('p', { class: 'muted' }, 'Todavía no hay cambios.')
+      : h('div', { class: 'list' }, ...data.map(l => h('div', { class: 'small' }, h('strong', {}, fmtDateTime(l.at)), ' · ', l.admin_email || 'Alguien del equipo', ' ',
+        LABEL[l.action] || l.action, ' ', l.target_email || 'una cuenta borrada', l.detail ? ` (${RL(l.detail)})` : '')))));
 }
 
 /* ---------------- paciente ---------------- */
