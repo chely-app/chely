@@ -576,14 +576,14 @@ a.chely-social-item:hover,a.chely-social-item:focus-visible {
 'use strict';
 // Contacto del equipo: completar antes de compartir (email o WhatsApp).
 const CONTACT = 'info@chely.app';
-// Agregar aquí las URL oficiales cuando se confirmen. Nunca apuntar
-// los botones a cuentas de otras personas ni a la página general del sitio.
+// Redes oficiales compartidas por el equipo de Chely.
+// LinkedIn usa la URL pública canónica (sin el parámetro de vista de administrador).
 const CHELY_SOCIAL_URLS = Object.freeze({
-  instagram: '',
-  facebook: '',
-  tiktok: '',
-  youtube: '',
-  linkedin: ''
+  instagram: 'https://www.instagram.com/chely.app.1/?hl=es',
+  facebook: 'https://www.facebook.com/profile.php?id=61596094913407&locale=es_LA',
+  tiktok: 'https://www.tiktok.com/@chely.app',
+  youtube: 'https://www.youtube.com/channel/UC5VQ0AuiWl4XzDq4UttPyVw',
+  linkedin: 'https://www.linkedin.com/company/chely-app/'
 });
 document.querySelectorAll('[data-social]').forEach(item => {
   const network = item.dataset.social;
