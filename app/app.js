@@ -1326,9 +1326,9 @@ async function patientDoctors() {
 const HEALTH_COVERAGE_SUGGESTIONS = [
   'OSDE', 'Swiss Medical', 'Galeno', 'Sancor Salud', 'Medicus',
   'Accord Salud', 'Prevención Salud', 'Unión Personal', 'OSECAC',
-  'OSDEPYM', 'OSPEDYC', 'OSPAT', 'OSPRERA', 'PAMI', 'IOMA',
-  'INSSSEP', 'Jerárquicos Salud', 'Hospital Italiano', 'Avalian',
-  'Federada Salud', 'OSECAC', 'OSPE', 'OSPEDYC'
+  'OSDEPYM', 'OSPEDYC', 'OSPAT', 'OSPRERA', 'PAMI',
+  'PAMI Veteranos de Guerra', 'INSSSEP', 'IOMA', 'Jerárquicos Salud',
+  'Hospital Italiano', 'Avalian', 'Federada Salud', 'OSPE'
 ];
 function healthCoverageSuggestions() {
   const list = h('datalist', { id: 'health-coverage-options' });
@@ -1337,6 +1337,51 @@ function healthCoverageSuggestions() {
   }
   return list;
 }
+
+/* Hecho por ChatGPT · 2026-11-02 · Múltiples coberturas de salud.
+   Se mantiene la cobertura anterior, y se evita guardar duplicados o perder
+   un texto escrito si el usuario se olvida de tocar «Agregar cobertura». */
+function healthCoveragesEditor(prefix, current, legacy) {
+  const old = Array.isArray(current) && current.length
+    ? current
+    : legacy && String(legacy).trim() ? [String(legacy).trim()] : [];
+  const coverages = [...new Map(old.filter(v => typeof v === 'string' && v.trim())
+    .map(v => [normalize(v.trim()), v.trim()])).values()];
+  const input = h('input', { id: prefix + '-coverage', type: 'text',
+    list: 'health-coverage-options', autocomplete: 'off', maxlength: 160,
+    placeholder: 'Ej.: PAMI Veteranos de Guerra' });
+  const tags = h('div', { class: 'allergy-tags', 'aria-live': 'polite' });
+  const redraw = () => {
+    tags.replaceChildren();
+    if (!coverages.length) tags.append(h('span', { class: 'muted small' }, 'Todavía no agregaste coberturas.'));
+    coverages.forEach((coverage, index) => tags.append(
+      h('span', { class: 'allergy-tag' }, h('span', {}, coverage),
+        h('button', { class: 'allergy-remove', type: 'button',
+          'aria-label': 'Quitar cobertura: ' + coverage, onclick: () => {
+            coverages.splice(index, 1); redraw();
+          } }, '×'))));
+  };
+  const add = () => {
+    const val = input.value.trim();
+    if (!val) return true;
+    if (coverages.some(v => normalize(v) === normalize(val))) {
+      input.value = ''; return true;
+    }
+    if (coverages.length >= 8) { toast('Podés registrar hasta 8 coberturas.'); return false; }
+    coverages.push(val); input.value = ''; redraw(); return true;
+  };
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+  const addBtn = h('button', { class: 'btn quiet sm', type: 'button', onclick: add }, 'Agregar cobertura');
+  redraw();
+  const root = h('div', { class: 'field coverage-field' },
+    h('label', { for: prefix + '-coverage', style: 'font-weight:700' }, 'Obras sociales o prepagas'),
+    h('div', { class: 'row coverage-entry' }, input, addBtn),
+    tags,
+    h('span', { class: 'hint' }, 'Podés agregar varias coberturas y quitarlas cuando quieras.'),
+    healthCoverageSuggestions());
+  return { root, values: () => add() ? [...coverages] : null };
+}
+
 async function accountView() {
   const m = mainEl();
   const me = state.me;
