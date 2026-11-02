@@ -956,8 +956,11 @@ function metadataFromReport(text) {
     ];
     title = types.find(([, re]) => re.test(first))?.[0] || null;
   }
-  const match = first.match(/(?:fecha\s+(?:del?\s+)?(?:estudio|informe|extracci[oó]n|realizaci[oó]n|an[aá]lisis)|realizado\s+el)\s*[:\-]?\s*(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4}|\d{4}-\d{2}-\d{2})/i);
-  const candidate = match?.[1] || '';
+  const explicit = first.match(/(?:fecha\s+(?:del?\s+)?(?:estudio|informe|extracci[oó]n|realizaci[oó]n|an[aá]lisis|toma|emisi[oó]n)|realizado\s+el)\s*[:\-]?\s*(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4}|\d{4}-\d{2}-\d{2})/i);
+  const unlabeled = lines.slice(0, 15).filter(line => !/nacimiento|\bf\.?\s*nac\.?/i.test(line))
+    .map(line => line.match(/^fecha\s*[:\-]\s*(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4}|\d{4}-\d{2}-\d{2})\b/i))
+    .find(Boolean);
+  const candidate = (explicit || unlabeled)?.[1] || '';
   const date = /^\d{4}-\d{2}-\d{2}$/.test(candidate) ? candidate : parseDMY(candidate);
   return { title: title ? title.slice(0, 180) : null,
     date: date && date <= todayISO() && date >= '1910-01-01' ? date : null };
