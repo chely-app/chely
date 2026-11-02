@@ -208,3 +208,11 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); outline
   width: min(21rem, calc(100vw - 40px)); z-index: 30;
   box-shadow: 0 10px 30px rgba(0,0,0,.25); gap: .5rem; max-height: min(75vh, 30rem); overflow-y: auto; }
 @media (max-width: 560px) { .date-picker-popup { width: min(20rem, calc(100vw - 48px)); } }
+
+
+/* Hecho por ChatGPT · 2026-11-02 · Subida y lista de estudios pediátricos adaptables. */
+.minor-upload { display: grid; gap: .8rem; border: 1px solid var(--line); border-radius: .85rem; padding: .85rem; background: var(--bg); }
+.minor-upload > summary { cursor: pointer; font-weight: 800; color: var(--accent-strong); }
+.minor-upload > summary:focus-visible { outline: 3px solid var(--accent); outline-offset: .2rem; }
+.minor-upload[open] { padding-block: 1rem; }
+.minor-upload > .grid2 { margin-top: .5rem; }

@@ -99,3 +99,11 @@ Este archivo documenta los cambios realizados por distintos colaboradores (human
 - Formato de entrada `dd/mm/aaaa`; la base conserva fechas ISO.
 - El mismo componente se utiliza en nacimiento del paciente, nacimiento del menor y fechas de carga/edición de estudios.
 - Cierre con Escape o clic fuera y atributos accesibles para el botón; diseño adaptado a celulares.
+
+## 2026-11-02 — Hecho por ChatGPT (estudios pediátricos)
+**Archivos:** `app/app.js`, `app/styles.css`, `supabase/migrations/20261102040000_minor_health_studies_storage.sql`, `supabase/functions/ia-menores/*`, `docs/MENORES_COMPARTIDOS_2026-11-02.md`.
+- Se incorporan datos de salud del menor (DNI/CUIL/CUIT, altura, peso, alergias, cobertura).
+- Los adultos vinculados pueden añadir, leer, corregir, explicar con IA y eliminar informes pediátricos.
+- Archivo privado independiente en Supabase Storage, con controles RLS por menor y estudio.
+- IA separada, con sesión verificada, edad real del menor y restricciones de acceso al estudio.
+- La explicación por IA no sustituye revisión médica. La representación legal del adulto se declara, pendiente de revisión de documentación en un despliegue amplio.
