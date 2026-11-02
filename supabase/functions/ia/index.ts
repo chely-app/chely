@@ -4,7 +4,6 @@ import { ChelyAIError, explain, MODEL, transcribe, type StudyForAI } from "../_s
 import { cors, fail, withCors, json, serviceClient, userClient } from "../_shared/http.ts";
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
-const MAX_PREVIOUS_CHARS = 40000;
 const anthropic = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY"), timeout: 140_000, maxRetries: 1 });
 
 function ageFrom(birth: string | null): number | null {
@@ -75,69 +74,181 @@ async function loadStudyFile(
   return { bytes: new Uint8Array(await file.arrayBuffer()), type: study.file_type ?? file.type };
 }
 
+// Hecho por ChatGPT · 2026-11-02 · IA a pedido con antecedentes y reutilizacion.
+const MAX_CONTEXT_STUDIES = 150;
+const MAX_CONTEXT_CHARS = 210000;
+function compactPrevious(rawValue: unknown, labValues: unknown): string {
+  const value = String(rawValue || "").trim();
+  if (!value) return "";
+  const short = value.length <= 2400 ? value
+    : value.slice(0, 1500) + "\n[Fragmento del informe omitido para controlar los tokens]\n" + value.slice(-550);
+  const structured = Array.isArray(labValues) ? JSON.stringify(labValues.slice(0, 25)).slice(0, 1500) : "";
+  return short + (structured && value.length > 2400 ? "\nValores estructurados: " + structured : "");
+}
+async function contextHash(value: unknown): Promise<string> {
+  const bytes = new TextEncoder().encode(JSON.stringify(value));
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest)).map(x => x.toString(16).padStart(2, "0")).join("");
+}
 Deno.serve(withCors(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return fail("Método no permitido.", 405);
-  if (!Deno.env.get("ANTHROPIC_API_KEY")) return fail("Falta configurar la clave de la IA. Avisale al equipo de Chely.", 500);
+  if (!Deno.env.get("ANTHROPIC_API_KEY")) return fail("Falta configurar la clave de la IA.", 500);
   const session = await userClient(req);
   if (!session) return fail("Tu sesión venció. Volvé a iniciar sesión.", 401);
   const { supabase, userId } = session;
   const bearer = req.headers.get("authorization") ?? "";
   if (!/^Bearer\s+\S+$/i.test(bearer)) return fail("Sesión inválida.", 401);
-  const { data: isDoctor } = await supabase.rpc("is_doctor", { uid: userId });
+  const { data: isDoctor, error: roleError } = await supabase.rpc("is_doctor", { uid: userId });
+  if (roleError) return fail("No pudimos comprobar tu cuenta.", 503);
 
-  let body: { action?: string; study_id?: string };
+  let body: { action?: string; study_id?: string; force?: boolean };
   try { body = await req.json(); } catch { return fail("Pedido inválido."); }
-  if (body.action !== "transcribir" && body.action !== "explicar") return fail("Acción desconocida.");
-  if (!body.study_id) return fail("Falta el estudio.");
-
-  // Supabase RLS determina si el estudio es visible para este usuario.
+  if (!["transcribir", "explicar"].includes(body.action || "")) return fail("Acción desconocida.");
+  if (!body.study_id || !/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(body.study_id)) return fail("Estudio inválido.");
   const { data: study, error } = await supabase.from("studies")
-    .select("id, patient_id, title, study_date, report_text, file_path, file_type, self_uploaded, storage_backend, storage_file_id")
+    .select("id, patient_id, title, study_date, report_text, file_path, file_type, self_uploaded, status, storage_backend, storage_file_id, explanation, glossary, lab_values, ai_context_sha256")
     .eq("id", body.study_id).maybeSingle();
   if (error || !study) return fail("No encontramos ese estudio.", 404);
   if (!isDoctor && !(study.self_uploaded && study.patient_id === userId)) {
     return fail("Solo podés usar la IA con los estudios que subiste vos.", 403);
   }
-  // Hecho por ChatGPT · 2026-11-02 · Protección de gasto por usuario.
-  // Cada operación de lectura y de explicación cuenta por separado.
   const admin = serviceClient();
-  const limit = isDoctor ? Math.max(1, Number(Deno.env.get("AI_DAILY_LIMIT") || 60))
-    : Math.max(1, Number(Deno.env.get("AI_DAILY_LIMIT_PACIENTE") || 10));
-  const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
-  const { count, error: countError } = await admin.from("ai_usage")
-    .select("id", { count: "exact", head: true }).eq("doctor_id", userId).gte("at", since);
-  if (countError || count === null) return fail("No pudimos verificar el límite de IA. Probá de nuevo.", 503);
-  if (count >= limit) return fail(`Alcanzaste el máximo de ${limit} consultas de IA en 24 horas. Volvé a probar más tarde.`, 429);
-
+  // Un paciente que carga 102 PDF puede leer y explicar 102 archivos en el dia.
+  // Se mantiene un techo elevado en vez de llamadas ilimitadas, incluso si
+  // la configuracion anterior estaba fijada en 10.
+  const configuredLimit = isDoctor
+    ? Math.max(1, Number(Deno.env.get("AI_DAILY_LIMIT") || 60))
+    : Math.max(250, Number(Deno.env.get("AI_DAILY_LIMIT_PACIENTE") || 250));
+  const limit = Number.isFinite(configuredLimit) ? configuredLimit : (isDoctor ? 60 : 250);
+  const checkUsage = async (): Promise<Response | null> => {
+    const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    const { count, error: countError } = await admin.from("ai_usage")
+      .select("id", { count: "exact", head: true }).eq("doctor_id", userId).gte("at", since);
+    if (countError || count === null) return fail("No pudimos comprobar el cupo de IA. Probá de nuevo.", 503);
+    if (count >= limit) return fail("Alcanzaste el máximo de " + limit + " operaciones de IA en 24 horas.", 429);
+    return null;
+  };
   try {
     if (body.action === "transcribir") {
-      if (study.storage_backend !== "debian" && !study.file_path) return fail("Este estudio no tiene archivo. Subí un PDF o una foto.");
+      // Reutilizar transcripcion previa sin pagar otra vez. "force" solo se
+      // usa cuando el paciente solicita expresamente volver a leer el original.
+      if (!body.force && String(study.report_text || "").trim()) return json({ text: study.report_text, reused: true });
+      const denied = await checkUsage();
+      if (denied) return denied;
       const file = await loadStudyFile(supabase, study, bearer);
       const { text, usage } = await transcribe(anthropic, file.bytes, file.type);
-      await admin.from("ai_usage").insert({ doctor_id: userId, kind: "transcribir", input_tokens: usage.input_tokens, output_tokens: usage.output_tokens });
-      return json({ text });
+      const { error: usageError } = await admin.from("ai_usage").insert({
+        doctor_id: userId, kind: "transcribir",
+        input_tokens: usage.input_tokens, output_tokens: usage.output_tokens
+      });
+      if (usageError) console.error("No se pudo registrar el gasto de transcripcion");
+      return json({ text, reused: false });
     }
-    const { data: profile } = await supabase.from("profiles").select("birth_date").eq("id", study.patient_id).maybeSingle();
-    const { data: previous } = await supabase.from("studies")
-      .select("title, study_date, report_text")
-      .eq("patient_id", study.patient_id).eq("status", "publicado").neq("id", study.id)
-      .order("study_date", { ascending: false }).limit(6);
+
+    if (!String(study.report_text || "").trim()) return fail("Primero leé el PDF o pegá el texto del informe.", 400);
+    const { data: profile, error: profileError } = await supabase.from("profiles")
+      .select("birth_date").eq("id", study.patient_id).maybeSingle();
+    if (profileError || !profile) return fail("No pudimos comprobar la fecha de nacimiento.", 503);
+    // Los datos de salud privados solo se consultan con la cuenta del paciente.
+    let salud: {
+      altura_cm: number | null; peso_kg: number | null;
+      alergias: string[]; grupo_sanguineo: string | null;
+    } | undefined;
+    if (userId === study.patient_id) {
+      const { data: health, error: healthError } = await supabase.from("patient_health_details")
+        .select("height_cm,weight_kg,allergies,blood_type").eq("id", study.patient_id).maybeSingle();
+      if (healthError) return fail("No pudimos obtener los datos de salud del paciente.", 503);
+      if (health) salud = {
+        altura_cm: health.height_cm === null ? null : Number(health.height_cm),
+        peso_kg: health.weight_kg === null ? null : Number(health.weight_kg),
+        alergias: Array.isArray(health.allergies) ? health.allergies.slice(0, 20) : [],
+        grupo_sanguineo: health.blood_type || null,
+      };
+    }
+    // Todo antecedente visible para el usuario, no solo seis estudios.
+    // Los estudios sin texto aún requieren lectura del archivo a pedido.
+    const { data: previous, error: previousError } = await supabase.from("studies")
+      .select("title,study_date,report_text,lab_values")
+      .eq("patient_id", study.patient_id).neq("id", study.id)
+      .order("study_date", { ascending: false }).limit(MAX_CONTEXT_STUDIES);
+    if (previousError) return fail("No pudimos cargar los antecedentes autorizados.", 503);
+    const available = (previous || []).filter(s => String(s.report_text || "").trim()).length;
+    const missing = (previous || []).length - available;
     const anteriores: StudyForAI[] = [];
-    let used = 0;
-    for (const s of previous ?? []) {
-      if (used + s.report_text.length > MAX_PREVIOUS_CHARS) break;
-      used += s.report_text.length;
-      anteriores.push({ titulo: s.title, fecha: s.study_date, texto: s.report_text });
+    let chars = 0;
+    for (const prev of previous || []) {
+      const texto = compactPrevious(prev.report_text, prev.lab_values);
+      if (!texto || chars + texto.length > MAX_CONTEXT_CHARS) continue;
+      chars += texto.length;
+      anteriores.push({ titulo: prev.title, fecha: prev.study_date, texto });
     }
-    const { result, usage } = await explain(anthropic, {
+    // La IA compara fechas y no debe interpretar texto recortado como
+    // si fuera un informe completo.
+    const input = {
       estudio: { titulo: study.title, fecha: study.study_date, texto: study.report_text },
       anteriores: anteriores.reverse(),
-      edad: ageFrom(profile?.birth_date ?? null),
+      edad: ageFrom(profile.birth_date || null),
       revisadoPorMedico: !study.self_uploaded,
+      salud,
+    };
+    const signature = await contextHash({ version: "context-20261102-v1", input, model: MODEL });
+    const shouldShareWithPatient = Boolean(study.self_uploaded); // Las explicaciones de medicos deben revisarse antes de exponerse.
+    const existingText = String(study.explanation || "").trim();
+    // Garantiza una sola explicacion vigente por paciente en Supabase.
+    const saveLatest = async (text: string, glossary: unknown, vals: unknown) => {
+      if (!shouldShareWithPatient) return;
+      const { data: previousLatest, error: latestReadErr } = await admin.from("patient_latest_explanations")
+        .select("source_study_id,source_signature").eq("patient_id", study.patient_id).maybeSingle();
+      if (latestReadErr) throw new ChelyAIError("No pudimos consultar la copia vigente.", 503);
+      if (previousLatest?.source_study_id === study.id && previousLatest?.source_signature === signature) return;
+      const now = new Date().toISOString();
+      const { error: latestError } = await admin.from("patient_latest_explanations").upsert({
+        patient_id: study.patient_id, source_study_id: study.id, explanation: text,
+        glossary: glossary || [], lab_values: vals || [], model: MODEL,
+        previous_studies_used: anteriores.length, previous_studies_available: available,
+        source_signature: signature, generated_at: now, updated_at: now,
+        debian_sync_status: "pending", debian_synced_at: null
+      }, { onConflict: "patient_id" });
+      if (latestError) throw new ChelyAIError("La explicacion se guardo en el estudio, pero no en la copia de respaldo.", 503);
+    };
+    if (!body.force && study.ai_context_sha256 === signature && existingText) {
+      await saveLatest(existingText, study.glossary, study.lab_values);
+      return json({
+        explicacion: existingText, aviso_urgente: "", glosario: study.glossary || [],
+        valores: study.lab_values || [], model: MODEL,
+        previous_used: anteriores.length, previous_available: available,
+        previous_unread: missing, reused: true
+      });
+    }
+    const denied = await checkUsage();
+    if (denied) return denied;
+    const { result, usage } = await explain(anthropic, input);
+    const explanation = (result.aviso_urgente
+      ? "## Aviso importante del informe\n" + result.aviso_urgente + "\n\n" : "") + result.explicacion;
+    const now = new Date().toISOString();
+    // Persistir del lado del servidor: si el navegador se cierra, no se pierde
+    // la respuesta ya pagada. Nunca publicar automaticamente un borrador medico.
+    const updateData = study.self_uploaded
+      ? {
+          explanation, glossary: result.glosario, lab_values: result.valores,
+          ai_model: MODEL, ai_generated_at: now, ai_context_sha256: signature,
+          status: "publicado"
+        }
+      : { ai_context_sha256: signature }; // El medico debe guardar y publicar su revision.
+    const { error: updateError } = await admin.from("studies").update(updateData)
+      .eq("id", study.id).eq("patient_id", study.patient_id);
+    if (updateError) throw new ChelyAIError("La IA respondió, pero no pudimos guardar la explicación.", 503);
+    const { error: usageError } = await admin.from("ai_usage").insert({
+      doctor_id: userId, kind: "explicar",
+      input_tokens: usage.input_tokens, output_tokens: usage.output_tokens
     });
-    await admin.from("ai_usage").insert({ doctor_id: userId, kind: "explicar", input_tokens: usage.input_tokens, output_tokens: usage.output_tokens });
-    return json({ ...result, model: MODEL, previous_used: anteriores.length });
+    if (usageError) console.error("No se pudo registrar el gasto de explicacion");
+    await saveLatest(explanation, result.glosario, result.valores);
+    return json({
+      ...result, model: MODEL, previous_used: anteriores.length,
+      previous_available: available, previous_unread: missing, reused: false
+    });
   } catch (e) {
     if (e instanceof ChelyAIError) return fail(e.message, e.status);
     console.error("ia: error inesperado", e instanceof Error ? e.name : typeof e);
