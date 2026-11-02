@@ -65,3 +65,12 @@ Este archivo documenta los cambios realizados por distintos colaboradores (human
 - En la demostración del celular, el logo de Chely también enlaza a la página principal.
 - Dentro de la aplicación `/app/`, el logo y nombre vuelven a `https://chely.app/` en vez de cambiar la pantalla interna del usuario.
 - Se conservan la navegación de secciones y los demás enlaces existentes.
+
+## 2026-11-02 — Hecho por ChatGPT (datos de paciente y auditoría)
+**Pedido:** retirar historial de «Mi cuenta» del paciente y conservarlo sólo para administradores autorizados; confirmar contraseñas; incorporar documento, altura, peso, alergias dinámicas y cobertura.
+**Archivos:** `app/app.js`, `app/styles.css`, `supabase/migrations/20261102020000_patient_health_and_admin_access.sql`.
+- Los registros existentes de `access_log` no se borran. Se retira el widget del paciente y se revoca el `SELECT` directo; un RPC protegido por `is_admin()` ofrece los últimos 100 movimientos en «Equipo → Registro».
+- Tabla privada `patient_health_details`: documento DNI/CUIT, altura, peso, alergias editables y obra social/prepaga. Cada paciente lee y edita únicamente su fila mediante RLS; no se comparte automáticamente con médicos ni administradores.
+- «Mi cuenta» y recuperación de contraseña ahora solicitan confirmación de la nueva contraseña.
+- Campo de cobertura con sugerencias locales, entrada libre y enlace al registro RNAS de la Superintendencia de Servicios de Salud. **No es una base exhaustiva ni sincronizada** de obras sociales.
+- Antes de publicar, migración SQL, comprobación RLS y pruebas de la pantalla. Esta entrega no modifica el contenido de estudios.
