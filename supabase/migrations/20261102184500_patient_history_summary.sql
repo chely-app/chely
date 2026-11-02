@@ -24,13 +24,17 @@ create or replace function public.chely_invalidate_history_summary_on_change()
 returns trigger language plpgsql security definer set search_path=''
 as $$
 begin
-  delete from public.patient_history_summaries where patient_id=coalesce(new.patient_id,old.patient_id);
-  return coalesce(new,old);
-end;$$;
+  if TG_OP = 'DELETE' then
+    delete from public.patient_history_summaries where patient_id=old.patient_id;
+    return old;
+  end if;
+  delete from public.patient_history_summaries where patient_id=new.patient_id;
+  return new;
+end;$;
 revoke all on function public.chely_invalidate_history_summary_on_change()
   from public, anon, authenticated;
 create trigger chely_studies_invalidate_history_summary
- after delete or update of report_text,title,study_date on public.studies
+ after insert or delete or update of report_text,title,study_date on public.studies
  for each row execute function public.chely_invalidate_history_summary_on_change();
 alter table public.ai_usage drop constraint if exists ai_usage_kind_check;
 alter table public.ai_usage add constraint ai_usage_kind_check
