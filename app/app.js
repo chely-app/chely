@@ -1382,6 +1382,18 @@ function healthCoveragesEditor(prefix, current, legacy) {
   return { root, values: () => add() ? [...coverages] : null };
 }
 
+/* Hecho por ChatGPT · 2026-11-02 · Dato sanguíneo opcional en ficha privada.
+   La declaración no sustituye tipificación de laboratorio. */
+function bloodTypeField(id, selected) {
+  const field = h('select', { id });
+  field.append(h('option', { value: '' }, 'No sé / Sin especificar'));
+  for (const type of ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']) {
+    field.append(h('option', { value: type }, type));
+  }
+  field.value = selected || '';
+  return field;
+}
+
 async function accountView() {
   const m = mainEl();
   const me = state.me;
@@ -1409,15 +1421,12 @@ async function accountView() {
         datePicker({ id: 'acc-birth', value: me.birth_date, onChange: iso => { birth = iso; } })) : null),
     h('div', { class: 'row' }, saveBtn)));
 
-  // Hecho por ChatGPT · 2026-11-02 · Acceso rápido para registrar o vincular a un menor.
-  if (me.role === 'patient') appendMinorAccountOptions(m);
-
   if (me.role === 'patient') {
     const card = h('div', { class: 'card' }, h('h2', {}, 'Mis datos de salud'),
       h('p', { class: 'muted small' }, 'Todos los campos son opcionales. Esta información se guarda en una ficha privada, distinta del perfil público de tu cuenta.'));
     m.append(card);
     const { data: details, error: detailsError } = await sb.from('patient_health_details')
-      .select('document_type,document_number,height_cm,weight_kg,allergies,health_coverage,health_coverages').eq('id', me.id).maybeSingle();
+      .select('document_type,document_number,height_cm,weight_kg,allergies,health_coverage,health_coverages,blood_type').eq('id', me.id).maybeSingle();
     if (detailsError) {
       card.append(h('div', { class: 'alert bad' }, 'No pudimos cargar tus datos de salud. ', errorText(detailsError)));
     } else {
@@ -1431,6 +1440,7 @@ async function accountView() {
       const weight = h('input', { id: 'health-weight', type: 'number', min: 1, max: 400, step: '0.1', placeholder: 'Ej.: 70',
         value: details?.weight_kg == null ? '' : String(details.weight_kg) });
       const coverageEditor = healthCoveragesEditor('health', details?.health_coverages, details?.health_coverage);
+      const bloodType = bloodTypeField('health-blood-type', details?.blood_type);
       const allergies = Array.isArray(details?.allergies) ? [...details.allergies] : [];
       const allergyInput = h('input', { id: 'health-allergy', type: 'text', maxlength: 120, placeholder: 'Ej.: penicilina' });
       const allergyList = h('div', { class: 'allergy-tags', 'aria-live': 'polite' });
@@ -1467,7 +1477,7 @@ async function accountView() {
         const coverages = coverageEditor.values();
         if (!coverages) return;
         const payload = { id: me.id, document_type: dt || null, document_number: digits || null,
-          height_cm: cm, weight_kg: kg, allergies,
+          height_cm: cm, weight_kg: kg, allergies, blood_type: bloodType.value || null,
           health_coverages: coverages, health_coverage: coverages[0] || null,
           updated_at: new Date().toISOString() };
         saveHealthBtn.disabled = true;
@@ -1482,7 +1492,10 @@ async function accountView() {
           h('label', { class: 'field', for: 'health-doc-type' }, 'Tipo de documento', docType),
           h('label', { class: 'field', for: 'health-document' }, 'Número de DNI o CUIT', docNumber),
           h('label', { class: 'field', for: 'health-height' }, 'Altura (cm)', height),
-          h('label', { class: 'field', for: 'health-weight' }, 'Peso (kg)', weight)),
+          h('label', { class: 'field', for: 'health-weight' }, 'Peso (kg)', weight),
+          h('label', { class: 'field', for: 'health-blood-type' }, 'Grupo y factor sanguíneo (ABO/Rh)',
+            bloodType)),
+        h('p', { class: 'hint' }, 'Completá el grupo sanguíneo solo si lo conocés por un estudio. Chely no verifica este dato.'),
         h('div', { class: 'field health-allergy-field' },
           h('label', { for: 'health-allergy', style: 'font-weight:700' }, 'Alergias'),
           h('div', { class: 'row' }, allergyInput, addBtn), allergyList,
@@ -1515,6 +1528,10 @@ async function accountView() {
         h('span', { class: 'hint' }, 'Al menos 8 caracteres.')),
       h('label', { class: 'field', for: 'acc-pass-confirm' }, 'Confirmar contraseña nueva', passConfirm)),
     h('div', { class: 'row' }, changePass)));
+
+  // Hecho por ChatGPT · 2026-11-02 · El alta/vínculo de menores es una acción ocasional,
+  // al final de Mi cuenta pero inmediatamente ANTES de eliminar la cuenta.
+  if (me.role === 'patient') appendMinorAccountOptions(m);
 
   m.append(h('div', { class: 'card' }, h('h2', {}, 'Borrar mi cuenta'),
     h('p', {}, me.role === 'patient' ? 'Se borran tu cuenta, tus estudios, sus explicaciones y los archivos originales. No se puede deshacer.' : 'Se borra tu cuenta. Los estudios que publicaste siguen disponibles para tus pacientes.'),
@@ -1570,9 +1587,10 @@ function appendMinorAccountOptions(m) {
       go('menores');
     } finally { accept.disabled = false; }
   });
-  m.append(
-    h('details', { class: 'card' },
-      h('summary', {}, 'Registrar o vincular un menor a cargo'),
+  // Hecho por ChatGPT · 2026-11-02 · Botón visible en lugar de desplegable discreto.
+  // Los formularios internos se muestran sólo cuando el usuario lo solicita.
+  const panel = h('div', { class: 'stack', id: 'minor-account-panel', hidden: true },
+
       h('p', { class: 'hint' }, 'La ficha es privada. Para evitar duplicados, si otro adulto ya registró al menor, pedile una invitación.'),
       h('h3', {}, 'Registrar un menor'),
       h('div', { class: 'grid2' },
@@ -1585,7 +1603,19 @@ function appendMinorAccountOptions(m) {
       h('div', { class: 'grid2' },
         h('label', { class: 'field', for: 'minor-code' }, 'Código', code),
         h('label', { class: 'field', for: 'minor-link-relation' }, 'Tu relación', acceptRelation)),
-      h('div', { class: 'row' }, accept)));
+      h('div', { class: 'row' }, accept));
+  const toggle = h('button', { type: 'button', class: 'btn quiet',
+    'aria-controls': 'minor-account-panel', 'aria-expanded': 'false' }, 'Vincular o registrar un menor');
+  toggle.addEventListener('click', () => {
+    panel.hidden = !panel.hidden;
+    toggle.setAttribute('aria-expanded', String(!panel.hidden));
+    toggle.textContent = panel.hidden ? 'Vincular o registrar un menor' : 'Ocultar formulario';
+    if (!panel.hidden) name.focus();
+  });
+  m.append(h('section', { class: 'card minor-account-card' },
+    h('h2', {}, 'Menores a cargo'),
+    h('p', { class: 'muted small' }, 'Podés vincularte a la ficha de un menor o registrar una nueva.'),
+    h('div', { class: 'row' }, toggle), panel));
 }
 async function minorManagement() {
   const minors = state.linkedMinors || [];
@@ -1675,7 +1705,7 @@ async function minorHealthPanel(host, minor) {
     h('p',{class:'muted small'},'Datos propios del menor. Los adultos vinculados pueden consultarlos y actualizarlos.'));
   host.append(card);
   const {data,error}=await sb.from('minor_health_details')
-    .select('document_type,document_number,height_cm,weight_kg,allergies,health_coverage,health_coverages')
+    .select('document_type,document_number,height_cm,weight_kg,allergies,health_coverage,health_coverages,blood_type')
     .eq('minor_id',minor.id).maybeSingle();
   if(error)return card.append(h('div',{class:'alert bad'},errorText(error)));
   const type=h('select',{id:'minor-doc-type'},
@@ -1689,6 +1719,7 @@ async function minorHealthPanel(host, minor) {
   const weight=h('input',{id:'minor-weight',type:'number',min:1,max:400,step:'.1',
     placeholder:'Ej.: 18',value:data?.weight_kg==null?'':String(data.weight_kg)});
   const coverageEditor=healthCoveragesEditor('minor',data?.health_coverages,data?.health_coverage);
+  const bloodType=bloodTypeField('minor-blood-type',data?.blood_type);
   const allergyInput=h('input',{id:'minor-allergy',type:'text',maxlength:120,
     placeholder:'Ej.: penicilina'});
   const allergies=Array.isArray(data?.allergies)?[...data.allergies]:[];
@@ -1726,7 +1757,7 @@ async function minorHealthPanel(host, minor) {
     try{
       const {error:e}=await sb.from('minor_health_details').upsert({
         minor_id:minor.id,document_type:dt||null,document_number:digits||null,
-        height_cm:cm,weight_kg:kg,allergies,
+        height_cm:cm,weight_kg:kg,allergies,blood_type:bloodType.value||null,
         health_coverages:coverages,health_coverage:coverages[0]||null,
         updated_by:state.me.id,updated_at:new Date().toISOString()
       },{onConflict:'minor_id'});
@@ -1738,7 +1769,9 @@ async function minorHealthPanel(host, minor) {
       h('label',{class:'field',for:'minor-doc-type'},'Documento',type),
       h('label',{class:'field',for:'minor-doc-num'},'Número de documento',num),
       h('label',{class:'field',for:'minor-height'},'Altura (cm)',height),
-      h('label',{class:'field',for:'minor-weight'},'Peso (kg)',weight)),
+      h('label',{class:'field',for:'minor-weight'},'Peso (kg)',weight),
+      h('label',{class:'field',for:'minor-blood-type'},'Grupo y factor sanguíneo (ABO/Rh)',bloodType)),
+    h('p',{class:'hint'},'Registrá este dato únicamente si se conoce por un estudio. Chely no verifica el grupo sanguíneo.'),
     h('div',{class:'field'},h('label',{for:'minor-allergy',style:'font-weight:700'},'Alergias'),
       h('div',{class:'row'},allergyInput,
         h('button',{class:'btn quiet sm',type:'button',onclick:addAllergy},'Agregar alergia')),tags),
