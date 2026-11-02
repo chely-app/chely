@@ -788,6 +788,178 @@ async function archivoDebian(action, studyId, fileId = null, file = null) {
   return data;
 }
 
+
+/* ---------------- cuatro formas simples de subir un estudio ---------------- */
+/* Hecho por ChatGPT · 2026-11-02 · Foto primero, luego PDF, texto o enlace.
+   Los enlaces se importan desde el navegador sin cookies ni credenciales; si
+   el portal requiere sesión o bloquea CORS, se pide descargar el archivo. */
+const STUDY_PENDING_TITLE = 'Estudio por identificar';
+const STUDY_UPLOAD_MODES = [
+  { id: 'foto', icon: '📷', name: 'Sacar una foto', help: 'Fotografiá el informe con el celular.' },
+  { id: 'pdf', icon: '📄', name: 'Subir PDF', help: 'Elegí un PDF que tengas guardado.' },
+  { id: 'texto', icon: '📝', name: 'Pegar texto', help: 'Copiá y pegá el informe escrito.' },
+  { id: 'enlace', icon: '🔗', name: 'Usar un enlace', help: 'Importá un PDF o una imagen desde un vínculo público.' }
+];
+function studyUploadFileValid(file, mode) {
+  if (!file || !file.size || file.size > MAX_UPLOAD || !UPLOAD_TYPES.includes(file.type)) return false;
+  if (mode === 'foto' && !file.type.startsWith('image/')) return false;
+  if (mode === 'pdf' && file.type !== 'application/pdf') return false;
+  return true;
+}
+function urlIsImportable(value) {
+  try {
+    const u = new URL(String(value).trim());
+    const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    if (u.protocol !== 'https:' || u.username || u.password || u.port && u.port !== '443'
+      || host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')
+      || host.endsWith('.internal') || !host.includes('.')
+      || /^(\d{1,3}\.){3}\d{1,3}$/.test(host) || host.includes(':')) return false;
+    return true;
+  } catch { return false; }
+}
+async function fileFromPublicLink(value) {
+  if (!urlIsImportable(value)) throw new Error('Ingresá un enlace HTTPS público válido, sin contraseñas ni direcciones locales.');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+  try {
+    const response = await fetch(String(value).trim(), {
+      credentials: 'omit', mode: 'cors', referrerPolicy: 'no-referrer',
+      redirect: 'follow', signal: controller.signal
+    });
+    if (!response.ok || !urlIsImportable(response.url)) throw new Error('El portal no permitió importar el archivo.');
+    const headerSize = Number(response.headers.get('content-length') || 0);
+    if (headerSize > MAX_UPLOAD) throw new Error('El archivo supera el límite de 20 MB.');
+    if (!response.body) throw new Error('El enlace no contiene un archivo que Chely pueda leer.');
+    let size = 0;
+    const chunks = [], reader = response.body.getReader();
+    try {
+      while (true) {
+        const { done, value: chunk } = await reader.read();
+        if (done) break;
+        size += chunk.byteLength;
+        if (size > MAX_UPLOAD) { await reader.cancel(); throw new Error('El archivo supera el límite de 20 MB.'); }
+        chunks.push(chunk);
+      }
+    } finally { reader.releaseLock(); }
+    const bytes = new Uint8Array(size);
+    let pos = 0; for (const chunk of chunks) { bytes.set(chunk,pos);pos+=chunk.length; }
+    const isPdf = bytes.length > 5 && String.fromCharCode(...bytes.slice(0,5)) === '%PDF-';
+    const isPng = bytes.length > 8 && bytes[0] === 137 && bytes[1] === 80 && bytes[2] === 78 && bytes[3] === 71;
+    const isJpg = bytes.length > 3 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
+    const isWebp = bytes.length > 12 && String.fromCharCode(...bytes.slice(0,4)) === 'RIFF'
+      && String.fromCharCode(...bytes.slice(8,12)) === 'WEBP';
+    const mime = isPdf ? 'application/pdf' : isPng ? 'image/png' : isJpg ? 'image/jpeg' : isWebp ? 'image/webp' : null;
+    if (!mime) throw new Error('El enlace no entrega directamente un PDF o una foto. Abrí el portal, descargá el informe y subilo desde «Subir PDF» o «Sacar una foto».');
+    const ext = { 'application/pdf': 'pdf', 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' }[mime];
+    return new File([bytes], 'informe-importado.' + ext, { type: mime });
+  } catch (error) {
+    if (error.name === 'AbortError') throw new Error('El enlace tardó demasiado en responder. Descargá el archivo desde el portal.');
+    if (error instanceof TypeError) throw new Error('Este portal no permite importar directamente el archivo. Abrilo, descargá el PDF o imagen y subilo a Chely.');
+    throw error;
+  } finally { clearTimeout(timeout); }
+}
+function studySourceChooser(prefix, draft = {}) {
+  let mode = STUDY_UPLOAD_MODES.some(x => x.id === draft.mode) ? draft.mode : 'foto';
+  let imported = null;
+  const options = h('div', { class: 'study-method-grid', role: 'group', 'aria-label': 'Cómo querés subir tu estudio' });
+  const body = h('div', { class: 'study-method-body' });
+  const photo = h('input', { type: 'file', id: prefix + '-photo', accept: 'image/jpeg,image/png,image/webp', capture: 'environment' });
+  const pdf = h('input', { type: 'file', id: prefix + '-pdf', accept: '.pdf,application/pdf' });
+  const report = h('textarea', { id: prefix + '-text', class: 'report', placeholder: 'Pegá acá el texto del informe…' }, draft.text || '');
+  report.addEventListener('input', () => { draft.text = report.value; });
+  const url = h('input', { type: 'url', id: prefix + '-url', placeholder: 'https://portal-medico.com/estudio.pdf', autocomplete: 'off', value: draft.url || '' });
+  url.addEventListener('input', () => { imported = null; draft.url = url.value; });
+  const importInfo = h('div', { class: 'hint', role: 'status', 'aria-live': 'polite' });
+  const importButton = h('button', { type: 'button', class: 'btn primary' }, 'Importar archivo del enlace');
+  importButton.addEventListener('click', async () => {
+    if (!urlIsImportable(url.value)) return toast('Pegá un enlace HTTPS público válido.');
+    importButton.disabled = true;
+    importInfo.textContent = 'Intentando importar el informe…';
+    try {
+      imported = await fileFromPublicLink(url.value);
+      importInfo.textContent = 'Archivo importado: ' + imported.name + '. Ahora podés continuar.';
+    } catch (e) { imported = null; importInfo.textContent = errorText(e); }
+    finally { importButton.disabled = false; }
+  });
+  const open = h('button', { type: 'button', class: 'btn quiet sm',
+    onclick: () => {
+      if (!urlIsImportable(url.value)) return toast('Primero pegá un enlace HTTPS válido.');
+      window.open(url.value.trim(), '_blank', 'noopener,noreferrer');
+    } }, 'Abrir portal para descargar');
+  const buttons = [];
+  const panels = {
+    foto: h('div', { class: 'study-source-panel' },
+      h('p', { class: 'muted' }, 'Usá la cámara para fotografiar el informe o elegí una foto ya guardada. Procurá que se lea todo el texto.'),
+      h('label', { class: 'field', for: prefix + '-photo' }, 'Foto del informe', filePicker(photo))),
+    pdf: h('div', { class: 'study-source-panel' },
+      h('p', { class: 'muted' }, 'Elegí el informe en PDF. Chely intentará leer su título y fecha automáticamente.'),
+      h('label', { class: 'field', for: prefix + '-pdf' }, 'Archivo PDF', filePicker(pdf))),
+    texto: h('div', { class: 'study-source-panel' },
+      h('p', { class: 'muted' }, 'Si pegás solamente el cuerpo del informe, completá el nombre y la fecha debajo.'),
+      h('label', { class: 'field', for: prefix + '-text' }, 'Texto del informe', report)),
+    enlace: h('div', { class: 'study-source-panel' },
+      h('p', { class: 'muted' }, 'Pegá un enlace directo a un PDF o imagen. Si el portal pide usuario o contraseña, abrilo y descargá el archivo desde allí.'),
+      h('label', { class: 'field', for: prefix + '-url' }, 'Enlace del portal médico', url),
+      h('div', { class: 'row' }, importButton, open), importInfo,
+      h('p', { class: 'hint' }, 'Solo se pueden importar enlaces públicos que permitan la descarga. No ingreses contraseñas de portales médicos en Chely.'))
+  };
+  const root = h('div', { class: 'study-source' }, h('h2', {}, '¿Cómo querés enviar tu estudio?'), options, body);
+  const render = () => {
+    buttons.forEach((button, i) => {
+      const active = STUDY_UPLOAD_MODES[i].id === mode;
+      button.setAttribute('aria-pressed', String(active));
+      button.classList.toggle('active', active);
+    });
+    body.replaceChildren(panels[mode]);
+    draft.mode = mode;
+    root.dispatchEvent(new CustomEvent('study-method-change', { detail: { mode } }));
+  };
+  STUDY_UPLOAD_MODES.forEach(item => {
+    const button = h('button', { type: 'button', class: 'study-method',
+      onclick: () => { mode = item.id; imported = null; render(); } },
+      h('span', { class: 'study-method-icon', 'aria-hidden': 'true' }, item.icon),
+      h('strong', {}, item.name),
+      h('span', { class: 'muted small' }, item.help));
+    buttons.push(button); options.append(button);
+  });
+  photo.addEventListener('change', () => { draft.file = photo.files?.[0] || null; });
+  pdf.addEventListener('change', () => { draft.file = pdf.files?.[0] || null; });
+  render();
+  return {
+    root, getMode: () => mode, getText: () => report.value.trim(),
+    getFile: () => mode === 'foto' ? (photo.files?.[0] || draft.file && draft.mode === 'foto' ? draft.file : null)
+      : mode === 'pdf' ? (pdf.files?.[0] || draft.file && draft.mode === 'pdf' ? draft.file : null)
+      : mode === 'enlace' ? imported : null,
+    getLink: () => url.value.trim()
+  };
+}
+/* Hecho por ChatGPT · 2026-11-02 · Metadatos sugeridos tras leer el documento.
+   Se solicita confirmación cuando los datos no aparecen explícitos. */
+function metadataFromReport(text) {
+  const header = String(text || '').slice(0, 5000);
+  const lines = header.split(/\n/).map(x => x.trim()).filter(Boolean).slice(0, 35);
+  const first = lines.join(' \n ');
+  let title = null;
+  const titled = first.match(/(?:tipo de estudio|estudio realizado|pr[aá]ctica|examen|tipo de informe)\s*[:\-]\s*([^\n]{5,90})/i);
+  if (titled) title = titled[1].trim();
+  else {
+    const types = [
+      ['Hemograma',/\bhemograma\b/i], ['Análisis de laboratorio',/\b(laboratorio|bioqu[ií]mica|glucemia|perfil lip[ií]dico|colesterol|hematolog[ií]a)\b/i],
+      ['Ecografía',/\b(ecograf[ií]a|ecogr[aá]fico|ultrasonido)\b/i],
+      ['Radiografía',/\b(radiograf[ií]a|rayos\s*x)\b/i], ['Tomografía',/\b(tomograf[ií]a|tomogr[aá]fico|tac)\b/i],
+      ['Resonancia magnética',/\b(resonancia magn[eé]tica|rmn)\b/i],
+      ['Electrocardiograma',/\b(electrocardiograma|electrocardiogr[aá]fico|ecg)\b/i]
+    ];
+    title = types.find(([, re]) => re.test(first))?.[0] || null;
+  }
+  const match = first.match(/(?:fecha\s+(?:del?\s+)?(?:estudio|informe|extracci[oó]n|realizaci[oó]n|an[aá]lisis)|realizado\s+el)\s*[:\-]?\s*(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4}|\d{4}-\d{2}-\d{2})/i);
+  const candidate = match?.[1] || '';
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(candidate) ? candidate : parseDMY(candidate);
+  return { title: title ? title.slice(0, 180) : null,
+    date: date && date <= todayISO() && date >= '1910-01-01' ? date : null };
+}
+
+
 // El paciente sube un estudio propio.
 // Selector de archivo propio: el del navegador muestra sus textos en el idioma del sistema.
 function filePicker(input) {
