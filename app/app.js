@@ -935,14 +935,25 @@ async function patientStudies() {
   });
   for (const s of studies) {
     const pending = s.self_uploaded && s.status !== 'publicado';
+    // Mostrar la denominación sugerida aunque la fecha siga pendiente.
+    // El texto médico y la fecha real no se modifican sin confirmación.
+    const inferred = s.title === STUDY_PENDING_TITLE
+      ? metadataFromReport(s.report_text || '') : null;
+    const filenameHint = s.title === STUDY_PENDING_TITLE
+      ? pdfFilenameSuggestion(s.file_name || '') : null;
+    const displayedTitle = s.title === STUDY_PENDING_TITLE
+      ? (inferred?.title || filenameHint?.title || s.title) : s.title;
+    const inferredDate = inferred?.date || filenameHint?.date;
     list.append(h('button', { class: 'item', onclick: () => go(pending ? 'mi-estudio' : 'estudio', { studyId: s.id }) },
-      h('div', { class: 'row' }, h('h3', {}, s.title),
+      h('div', { class: 'row' }, h('h3', {}, displayedTitle),
         pending ? h('span', { class: 'pill warn' }, 'Sin explicar') : !s.self_uploaded && !s.first_viewed_at ? h('span', { class: 'pill bad' }, 'Nuevo') : null,
         s.self_uploaded && s.report_text?.trim()
           ? h('span', { class: 'pill' }, 'Leído') :
           s.self_uploaded && (s.file_path || s.storage_file_id)
             ? h('span', { class: 'pill warn' }, 'Sin leer') : null,
-        h('span', { class: 'pill' }, s.title === STUDY_PENDING_TITLE ? 'Fecha por confirmar' : fmtDate(s.study_date))),
+        h('span', { class: 'pill' }, s.title === STUDY_PENDING_TITLE
+          ? (inferredDate ? 'Fecha sugerida: ' + fmtDate(inferredDate) : 'Fecha por confirmar')
+          : fmtDate(s.study_date))),
       h('span', { class: 'muted small' }, s.self_uploaded ? 'Subido por vos' : `Enviado por ${names[s.doctor_id] || 'tu médico'} el ${fmtDate(s.published_at)}`)));
   }
   card.append(list);
@@ -1201,32 +1212,75 @@ function studySourceChooser(prefix, draft = {}) {
 /* Hecho por ChatGPT · 2026-11-02 · Metadatos sugeridos tras leer el documento.
    Se solicita confirmación cuando los datos no aparecen explícitos. */
 function metadataFromReport(text) {
-  const header = String(text || '').slice(0, 5000);
-  const lines = header.split(/\n/).map(x => x.trim()).filter(Boolean).slice(0, 35);
-  const first = lines.join(' \n ');
+  // Hecho por ChatGPT · 2026-11-02 · Reconocer nombre y fecha por separado.
+  // El encabezado puede identificar el órgano y el procedimiento aunque
+  // falte la fecha; NO inferir fecha clínica a partir del día de carga.
+  const header = String(text || '').slice(0, 12000);
+  const lines = header.split(/\r?\n/).map(x => x.trim()).filter(Boolean).slice(0, 100);
+  const top = lines.slice(0, 55).join('\n');
   let title = null;
-  const titled = first.match(/(?:tipo de estudio|estudio realizado|pr[aá]ctica|examen|tipo de informe)\s*[:\-]\s*([^\n]{5,90})/i);
-  if (titled) title = titled[1].trim();
-  else {
+
+  // Las etiquetas pueden aparecer en líneas separadas por el OCR.
+  const labeled = (label, max = 100) => {
+    for (let i = 0; i < Math.min(lines.length, 70); i++) {
+      const match = lines[i].match(label);
+      if (!match) continue;
+      let value = String(match[1] || '').trim();
+      if (!value && i + 1 < lines.length) value = lines[i + 1].trim();
+      if (value && value.length <= max && !/^(?:observaciones|macroscop[ií]a|microscop[ií]a|diagn[oó]stico|fecha)\s*:/i.test(value))
+        return value;
+    }
+    return '';
+  };
+  const explicit = labeled(/^(?:tipo de estudio|estudio realizado|pr[aá]ctica|examen|tipo de informe|estudio solicitado)\s*[:\-]\s*(.*)$/i);
+  if (explicit) title = explicit;
+
+  // Anatomía patológica: "ÓRGANO: CIEGO / PROCEDIMIENTO: BIOPSIA"
+  // no era reconocido por el lector anterior.
+  if (!title) {
+    const organ = labeled(/^(?:[oó]rgano|localizaci[oó]n anat[oó]mica|sitio de biopsia|tejido)\s*[:\-]\s*(.*)$/i, 65);
+    const procedure = labeled(/^(?:procedimiento|tipo de muestra|muestra)\s*[:\-]\s*(.*)$/i, 100);
+    const hasBiopsy = /\bbiopsia\b/i.test(procedure) ||
+      /\bbiopsia\b/i.test(top);
+    const hasPathology = /\b(anatom[ií]a patol[oó]gica|histopatolog[ií]a|anatomopatol[oó]gico)\b/i.test(top);
+    if (hasBiopsy) {
+      let organName = organ.replace(/^(?:de|del)\s+/i, '')
+        .replace(/\s*[,;].*$/, '').trim();
+      if (!/^[\p{L}\s-]{2,55}$/u.test(organName)) organName = '';
+      title = organName ? 'Biopsia de ' + organName.toLocaleLowerCase('es') : 'Biopsia';
+    } else if (hasPathology) title = 'Anatomía patológica';
+  }
+  if (!title) {
     const types = [
-      ['Hemograma',/\bhemograma\b/i], ['Análisis de laboratorio',/\b(laboratorio|bioqu[ií]mica|glucemia|perfil lip[ií]dico|colesterol|hematolog[ií]a)\b/i],
+      ['Hemograma',/\bhemograma\b/i],
+      ['Análisis de laboratorio',/\b(laboratorio|bioqu[ií]mica|glucemia|perfil lip[ií]dico|colesterol|hematolog[ií]a)\b/i],
       ['Ecografía',/\b(ecograf[ií]a|ecogr[aá]fico|ultrasonido)\b/i],
-      ['Radiografía',/\b(radiograf[ií]a|rayos\s*x)\b/i], ['Tomografía',/\b(tomograf[ií]a|tomogr[aá]fico|tac)\b/i],
+      ['Radiografía',/\b(radiograf[ií]a|rayos\s*x)\b/i],
+      ['Tomografía',/\b(tomograf[ií]a|tomogr[aá]fico|tac)\b/i],
       ['Resonancia magnética',/\b(resonancia magn[eé]tica|rmn)\b/i],
       ['Electrocardiograma',/\b(electrocardiograma|electrocardiogr[aá]fico|ecg)\b/i]
     ];
-    title = types.find(([, re]) => re.test(first))?.[0] || null;
+    title = types.find(([, re]) => re.test(top))?.[0] || null;
   }
-  const explicit = first.match(/(?:fecha\s+(?:del?\s+)?(?:estudio|informe|extracci[oó]n|realizaci[oó]n|an[aá]lisis|toma|emisi[oó]n)|realizado\s+el)\s*[:\-]?\s*(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4}|\d{4}-\d{2}-\d{2})/i);
-  const unlabeled = lines.slice(0, 15).filter(line => !/nacimiento|\bf\.?\s*nac\.?/i.test(line))
-    .map(line => line.match(/^fecha\s*[:\-]\s*(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4}|\d{4}-\d{2}-\d{2})\b/i))
-    .find(Boolean);
-  const candidate = (explicit || unlabeled)?.[1] || '';
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(candidate) ? candidate : parseDMY(candidate);
-  return { title: title ? title.slice(0, 180) : null,
-    date: date && date <= todayISO() && date >= '1910-01-01' ? date : null };
+  // Priorizar fechas de estudio/realización/informe, no fecha de nacimiento.
+  let date = null;
+  const pattern = /(?:\bfecha\s*(?:de(?:l)?\s*)?(?:estudio|informe|extracci[oó]n|realizaci[oó]n|an[aá]lisis|toma(?:\s+de\s+muestra)?|emisi[oó]n|procedimiento|muestra|recolecci[oó]n)|\brealizado\s+el|\bfecha\s*[:\-])\s*[:\-]?\s*(\d{1,2}[/.\\-]\d{1,2}[/.\\-]\d{4}|\d{4}-\d{1,2}-\d{1,2})/i;
+  for (const line of lines) {
+    if (/\bnacimiento\b|f\.?\s*nac\.?/i.test(line)) continue;
+    const matched = line.match(pattern);
+    if (!matched) continue;
+    const candidate = matched[1];
+    const iso = candidate.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    const formatted = iso
+      ? iso[3].padStart(2, '0') + '/' + iso[2].padStart(2, '0') + '/' + iso[1]
+      : candidate.replace(/[.-]/g, '/');
+    const parsed = parseDMY(formatted);
+    if (parsed && parsed <= todayISO() && parsed >= '1910-01-01') {
+      date = parsed; break;
+    }
+  }
+  return { title: title ? title.slice(0, 180) : null, date };
 }
-
 
 /* Hecho por ChatGPT · 2026-11-02 · Sugerencias gratuitas desde el PDF.
    Siempre se puede corregir la sugerencia antes de solicitar la IA. */
@@ -1656,13 +1710,19 @@ async function patientOwnStudy() {
   const metaPicker = datePicker({ id: 'own-date', value: selectedDate,
     onChange: iso => { selectedDate = iso; editDraft.date = iso; } });
   const metadataNote = h('p', { class: 'hint', role: 'status' },
-    pending ? 'Chely intentó reconocer los datos del PDF sin gastar IA. Revisá el nombre y la fecha antes de guardar.'
+    pending ? (editDraft.title && !editDraft.date
+      ? 'Chely reconoció el tipo de estudio, pero falta confirmar su fecha. El título ya está propuesto arriba.'
+      : 'Chely intentó reconocer los datos del PDF sin gastar IA. Revisá el nombre y la fecha antes de guardar.')
       : 'Podés corregir el nombre y la fecha antes de explicar el estudio.');
   const saveMetadata = async () => {
     const name = metaTitle.value.trim();
     if (name.length < 2 || !selectedDate || selectedDate > todayISO()) {
       status.className = 'alert bad';
-      status.textContent = 'Revisá el nombre y la fecha del informe. Si Chely no pudo identificarlos, completalos.';
+      status.textContent = name.length < 2
+        ? 'No pudimos identificar el tipo de estudio. Revisá el nombre antes de continuar.'
+        : !selectedDate
+          ? 'El nombre del estudio ya está reconocido. Falta confirmar la fecha del informe.'
+          : 'La fecha del estudio no es válida. Revisala antes de continuar.';
       return false;
     }
     const { error } = await sb.from('studies').update({ title: name, study_date: selectedDate }).eq('id', s.id);
@@ -1684,7 +1744,14 @@ async function patientOwnStudy() {
   saveWithoutAI.addEventListener('click', async () => {
     saveWithoutAI.disabled = true;
     try {
-      if (!await saveText() || !await saveMetadata()) return;
+      if (!await saveText()) return;
+      if (!metaTitle.value.trim() || !selectedDate) {
+        status.className = 'alert warn';
+        status.textContent = 'El texto quedó guardado sin explicar. ' +
+          (!selectedDate ? 'Falta confirmar la fecha del estudio.' : 'Falta confirmar el nombre del estudio.');
+        return;
+      }
+      if (!await saveMetadata()) return;
       status.className = 'alert ok';
       status.textContent = 'Datos y texto guardados sin usar IA. Podés continuar con otro estudio y pedir la explicación cuando quieras.';
     } finally { saveWithoutAI.disabled = false; }
@@ -1713,7 +1780,7 @@ async function patientOwnStudy() {
   };
   readBtn.addEventListener('click', async () => {
     if (!await readFile()) return;
-    status.className = 'alert ok'; status.textContent = 'Listo, Chely leyó el archivo. Revisá que el texto sea igual al del informe y tocá «Explicar mi estudio».';
+    status.className = 'alert ok'; status.textContent = 'Listo, Chely leyó y guardó el texto. Revisá el nombre y la fecha del estudio. Podés pedir la explicación cuando quieras.';
   });
   const explainStudy = async () => {
     const navAtStart = navigationEpoch;
