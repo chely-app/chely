@@ -1142,7 +1142,7 @@ function patientUpload() {
       if (uploadDraft === currentDraft) clearUploadDraft();
       if (state.me?.id === ownerAtStart && state.page === 'subir'
           && navigationEpoch === navAtStart) {
-        go('mi-estudio', { studyId: st.id, autoExplain: !autoMetadata });
+        go('mi-estudio', { studyId: st.id, autoExplain: false });
       } else {
         if (state.me?.id === ownerAtStart)
           toast('El estudio terminó de subirse y está disponible en Mis estudios.');
@@ -1284,12 +1284,9 @@ async function patientOwnStudy() {
     h('div', { class: 'row' }, explainBtn),
     h('p', { class: 'muted small' }, 'La explicación la escribe una inteligencia artificial y no la revisa un médico. Puede tener errores: llevala a tu consulta.'),
     h('div', { class: 'row' }, h('button', { class: 'btn danger sm', onclick: () => deleteOwnStudy(s) }, 'Borrar este estudio'))));
-  // Recién subido: leer el archivo (si hace falta) y explicar, sin más botones.
-  if (autoExplain) {
-    status.scrollIntoView({ block: 'center' });
-    if (s.file_path && !s.report_text && !await readFile()) return;
-    await explainStudy();
-  } else if (s.file_path && !s.report_text) readBtn.click();
+  // Hecho por ChatGPT · 2026-11-02 · Nunca llamar a IA al entrar ni al subir.
+  // La lectura y explicación se inician únicamente por sus botones.
+  if (autoExplain) status.scrollIntoView({ block: 'center' });
 }
 
 /* Hecho por ChatGPT · 2026-11-02 · Compartir un estudio por documento independiente:
@@ -2016,13 +2013,12 @@ async function minorStudiesPanel(host,minor){
           file_type:chosen.type,updated_by:state.me.id
         }).eq('id',created.id);
         if(metaError)throw new Error('Archivo cargado sin confirmar el registro: '+errorText(metaError));
-        state.minorAutoRead=created.id;
       }
       minorUploadDrafts.delete(minor.id);
       if(state.me?.id===ownerAtStart && state.page==='menores'
           && state.minorId===minor.id && navigationEpoch===navAtStart){
         state.minorStudyId=created.id; saveRoute();
-        toast(isFile?'Estudio guardado. Chely intentará leer el documento.':'Texto guardado. Podés pedir la explicación.');
+        toast(isFile?'Estudio guardado. Podés leerlo cuando quieras con el botón de IA.':'Texto guardado. Podés pedir la explicación.');
         minorManagement();
       }else{
         if(state.me?.id===ownerAtStart)toast('El estudio del menor terminó de guardarse.');
@@ -2169,10 +2165,6 @@ function minorStudyEditor(host,study){
       state.minorStudyId=null;saveRoute();toast('Estudio eliminado.');minorManagement();
     }},'Eliminar estudio')));
   host.append(box);
-  if(state.minorAutoRead===study.id && study.file_path){
-    state.minorAutoRead=null;
-    read.click();
-  }
 }
 
 /* ---------------- médico ---------------- */
