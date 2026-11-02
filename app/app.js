@@ -994,6 +994,16 @@ async function patientStudies() {
     overviewCard.append(recent);
   }
   if (overall?.explanation) {
+    // Un informe puede contener una fecha médica clara que la evaluación
+    // anterior ignoró porque aún no se confirmó su metadato.
+    const newerUnconfirmed = datedReports.filter(row =>
+      row.needsConfirmation && row.date &&
+      row.date > String(overall.latest_confirmed_date || '0000-00-00'));
+    if (newerUnconfirmed.length) overviewCard.append(h('div', { class: 'alert warn' },
+      h('strong', {}, 'Esta evaluación histórica puede omitir estudios más recientes'),
+      h('p', {}, 'Chely encontró ' + newerUnconfirmed.length +
+        ' informe(s) con fechas médicas sugeridas posteriores a la última fecha confirmada en la evaluación. ' +
+        'Confirmá sus fechas antes de considerar actualizado el historial. No hace falta generar otra evaluación para consultar sus análisis individuales.')));
     const partial = summaryCounts.review > 0 || summaryCounts.pending > 0;
     overviewCard.append(h('div', { class: 'alert ok', role: 'status' },
       h('strong', {}, partial ? 'Evaluación parcial disponible y guardada' : 'Evaluación guardada disponible'),
