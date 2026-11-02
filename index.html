@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Chely · Tus estudios médicos explicados en criollo</title>
+<title>Chely · Tus estudios, explicados en palabras claras</title>
 <meta name="description" content="Chely explica en palabras simples tus análisis clínicos y estudios médicos. Subís tu estudio y lo leés explicado desde el celular. Prueba piloto gratis.">
 <meta name="robots" content="index, follow, max-image-preview:large">
 <link rel="canonical" href="https://chely.app/">
@@ -16,14 +16,14 @@
 <meta property="og:site_name" content="Chely">
 <meta property="og:locale" content="es_AR">
 <meta property="og:url" content="https://chely.app/">
-<meta property="og:title" content="Chely · Tus estudios, en criollo">
+<meta property="og:title" content="Chely · Tus estudios, explicados en palabras claras">
 <meta property="og:description" content="Chely explica en palabras simples tus análisis clínicos y estudios médicos. Subís tu estudio y lo leés explicado desde el celular. Prueba piloto gratis.">
 <meta property="og:image" content="https://chely.app/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Logo de Chely y el lema: Tus estudios, en criollo.">
+<meta property="og:image:alt" content="Imagen de presentación de Chely.">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Chely · Tus estudios, en criollo">
+<meta name="twitter:title" content="Chely · Tus estudios, explicados en palabras claras">
 <meta name="twitter:description" content="Chely explica en palabras simples tus análisis clínicos y estudios médicos. Subís tu estudio y lo leés explicado desde el celular. Prueba piloto gratis.">
 <meta name="twitter:image" content="https://chely.app/og-image.png">
 <script type="application/ld+json">[{"@context": "https://schema.org", "@type": "Organization", "name": "Chely", "url": "https://chely.app/", "logo": "https://chely.app/icon-512.png", "description": "Chely explica en palabras simples tus análisis clínicos y estudios médicos. Subís tu estudio y lo leés explicado desde el celular. Prueba piloto gratis.", "email": "info@chely.app", "contactPoint": {"@type": "ContactPoint", "email": "info@chely.app", "contactType": "customer support", "availableLanguage": "es"}}, {"@context": "https://schema.org", "@type": "WebSite", "name": "Chely", "url": "https://chely.app/", "inLanguage": "es-AR"}, {"@context": "https://schema.org", "@type": "FAQPage", "inLanguage": "es-AR", "mainEntity": [{"@type": "Question", "name": "¿Qué es Chely?", "acceptedAnswer": {"@type": "Answer", "text": "Chely es una app que explica en palabras simples los informes de análisis clínicos y estudios médicos. Subís el informe y lo leés explicado desde tu celular o computadora."}}, {"@type": "Question", "name": "¿Chely reemplaza al médico?", "acceptedAnswer": {"@type": "Answer", "text": "No. Chely explica lo que dice el informe, pero no diagnostica, no da pronósticos y no indica tratamientos. Durante la prueba piloto la explicación la hace una inteligencia artificial y no la revisa un médico, así que siempre conviene consultarla con el tuyo."}}, {"@type": "Question", "name": "¿Qué estudios puede explicar?", "acceptedAnswer": {"@type": "Answer", "text": "Informes escritos: análisis de sangre y orina, ecografías, radiografías, tomografías y resonancias, entre otros. Chely lee el texto del informe; no interpreta las imágenes de los estudios."}}, {"@type": "Question", "name": "¿Cuánto cuesta?", "acceptedAnswer": {"@type": "Answer", "text": "Durante la prueba piloto es gratis para médicos y pacientes."}}, {"@type": "Question", "name": "¿Cómo se cuidan mis datos?", "acceptedAnswer": {"@type": "Answer", "text": "Los datos de salud son datos sensibles. Cada paciente decide qué médicos ven sus estudios, puede descargarlos y pedir que se borren. Antes de trabajar con datos reales nos vamos a ajustar, con asesoría legal, a la Ley 25.326 de Protección de Datos Personales y a la Ley 26.529 de Derechos del Paciente."}}, {"@type": "Question", "name": "¿Cómo participo de la prueba piloto?", "acceptedAnswer": {"@type": "Answer", "text": "Tocá «Crear mi cuenta gratis», subí un estudio y contanos qué te pareció. Si sos médico, laboratorio o institución, completá el formulario de abajo y te contactamos."}}]}]</script>
@@ -257,6 +257,25 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .join .out { background: var(--tint); border-radius: .7rem; padding: .8rem; font-size: .9rem; display: grid; gap: .5rem; white-space: pre-wrap; }
 footer { padding-block: 2rem 3rem; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 footer .in { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: space-between; color: var(--muted); font-size: .85rem; }
+
+/* Navegación por secciones: una sola sección visible a la vez con JavaScript.
+   Sin JavaScript, los enlaces siguen llevando al contenido completo. */
+.section-picker { background: var(--paper); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding-block: 2rem; scroll-margin-top: 5rem; }
+.section-picker .in { gap: 1rem; }
+.section-picker h2 { font-size: clamp(1.45rem, 3vw, 2rem); }
+.section-picker p { color: var(--muted); max-width: 62ch; }
+.section-links { display: flex; flex-wrap: wrap; gap: .6rem; }
+.section-link { display: inline-flex; align-items: center; justify-content: center; padding: .7rem 1rem; min-height: 2.8rem; border: 1px solid var(--line); border-radius: .85rem; background: var(--bg); color: var(--fg); text-decoration: none; font-weight: 700; font-size: .91rem; transition: background .15s, border-color .15s; }
+.section-link:hover { border-color: var(--teal); background: var(--tint); }
+.section-link[aria-current="location"] { background: var(--teal); border-color: var(--teal); color: var(--teal-ink); }
+body.sectioned section[data-section-panel] { padding-block: 2.6rem 3.2rem; scroll-margin-top: 5rem; }
+.hero h1 em { white-space: normal; }
+@media (max-width: 600px) {
+  .section-picker { padding-block: 1.4rem; }
+  .section-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .section-link { font-size: .86rem; padding: .65rem .45rem; }
+  .section-link:last-child { grid-column: span 2; }
+}
 </style>
 </head>
 <body>
@@ -275,7 +294,7 @@ footer .in { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: space-b
   <div class="in">
     <div class="copy">
       <span class="eyebrow">Prueba piloto · Informes médicos explicados</span>
-      <h1>Tus estudios, <em>en criollo.</em></h1>
+      <h1>Tus estudios, <em>explicados en palabras claras</em></h1>
       <p class="lead">Subí tu análisis o estudio, en PDF o una foto, y Chely te lo explica en palabras simples desde tu celular. Estamos en prueba piloto: es gratis y buscamos pacientes y familiares que nos ayuden a mejorarlo.</p>
       <div class="ctas">
         <a class="btn primary" href="app/#crear">Crear mi cuenta gratis</a>
@@ -294,12 +313,31 @@ footer .in { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: space-b
         <div id="ex-tech"></div>
       </div>
       <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 4v16M5 13l7 7 7-7"/></svg> Lo que lee el paciente</div>
-      <div class="plain"><span class="tag">En criollo</span><p id="ex-plain"></p></div>
+      <div class="plain"><span class="tag">En palabras claras</span><p id="ex-plain"></p></div>
     </div>
   </div>
 </header>
 
-<section class="band alt" id="como">
+<nav class="section-picker band" id="explorar" aria-label="Secciones de Chely">
+  <div class="in">
+    <div style="display:grid;gap:.35rem">
+      <span class="eyebrow">Descubrí Chely</span>
+      <h2>Elegí qué querés conocer</h2>
+      <p>Encontrá la información que buscás sin recorrer toda la página.</p>
+    </div>
+    <div class="section-links">
+      <a class="section-link" data-section="como" href="#como">Cómo funciona</a>
+      <a class="section-link" data-section="demo" href="#demo">Probá el ejemplo</a>
+      <a class="section-link" data-section="funciones" href="#funciones">Herramientas</a>
+      <a class="section-link" data-section="piloto" href="#piloto">Prueba piloto</a>
+      <a class="section-link" data-section="confianza" href="#confianza">Privacidad y plan</a>
+      <a class="section-link" data-section="preguntas" href="#preguntas">Preguntas frecuentes</a>
+      <a class="section-link" data-section="sumate" href="#sumate">Participar</a>
+    </div>
+  </div>
+</nav>
+
+<section class="band alt" id="como" data-section-panel>
   <div class="in">
     <div style="display:grid;gap:.6rem"><span class="eyebrow">Cómo funciona</span><h2>De tu estudio a una explicación clara, en minutos.</h2></div>
     <div class="steps">
@@ -311,7 +349,7 @@ footer .in { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: space-b
   </div>
 </section>
 
-<section class="band" id="demo">
+<section class="band" id="demo" data-section-panel>
   <div class="in">
     <div style="display:grid;gap:.6rem"><span class="eyebrow">Probalo</span><h2>Hacé de médico por un minuto.</h2><p class="lead">Elegí un estudio, generá el borrador, revisalo y mandáselo a la paciente. Después, en el celular, tocá las palabras subrayadas, mirá los valores y la evolución. Los textos y valores son ejemplos ficticios escritos para esta presentación; en la app real los redacta la IA.</p></div>
     <div class="demo">
@@ -340,7 +378,7 @@ footer .in { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: space-b
   </div>
 </section>
 
-<section class="band alt" id="funciones">
+<section class="band alt" id="funciones" data-section-panel>
   <div class="in">
     <div style="display:grid;gap:.6rem"><span class="eyebrow">Lo que ve el paciente</span><h2>Más que un texto: herramientas para entender.</h2><p class="lead">Tomamos lo que mejor funciona en las apps de salud de otros países y lo adaptamos para pacientes de acá.</p></div>
     <div class="features">
@@ -352,7 +390,7 @@ footer .in { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: space-b
   </div>
 </section>
 
-<section class="band" id="piloto">
+<section class="band" id="piloto" data-section-panel>
   <div class="in">
     <div style="display:grid;gap:.6rem"><span class="eyebrow">El piloto</span><h2>Lo que queremos averiguar.</h2><p class="lead">Antes de pensar en crecer, queremos saber si Chely sirve de verdad. El piloto es gratis y en pequeño: unos pocos médicos y sus pacientes.</p></div>
     <div class="aud">
@@ -364,7 +402,7 @@ footer .in { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: space-b
   </div>
 </section>
 
-<section class="band alt" id="confianza">
+<section class="band alt" id="confianza" data-section-panel>
   <div class="in two">
     <div style="display:grid;gap:1rem;align-content:start">
       <span class="eyebrow">Cuidado de los datos</span>
@@ -391,7 +429,7 @@ footer .in { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: space-b
   </div>
 </section>
 
-<section class="band" id="preguntas">
+<section class="band" id="preguntas" data-section-panel>
   <div class="in">
     <div style="display:grid;gap:.6rem"><span class="eyebrow">Preguntas frecuentes</span><h2>Lo que más nos preguntan.</h2></div>
     <div class="faq">
@@ -405,7 +443,7 @@ footer .in { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: space-b
   </div>
 </section>
 
-<section class="band alt" id="sumate">
+<section class="band alt" id="sumate" data-section-panel>
   <div class="in">
     <div class="join">
       <div style="display:grid;gap:1rem;align-content:start">
@@ -428,7 +466,7 @@ footer .in { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: space-b
 </section>
 
 <footer>
-  <div class="in"><span>Chely · Tus estudios, en criollo · Prueba piloto</span><span>Contacto: <span style="user-select:all">info@chely.app</span></span><span>Presentación con ejemplos ficticios. Chely no reemplaza la consulta médica.</span></div>
+  <div class="in"><span>Chely · Tus estudios, explicados en palabras claras · Prueba piloto</span><span>Contacto: <span style="user-select:all">info@chely.app</span></span><span>Presentación con ejemplos ficticios. Chely no reemplaza la consulta médica.</span></div>
 </footer>
 
 <script>
@@ -473,7 +511,7 @@ TSH: 2,1 µUI/mL (VR 0,4 - 4,0)`,
 - El colesterol total dio 228 mg/dL y el LDL 148 mg/dL, los dos por encima de lo deseable.
 - Hemoglobina, creatinina, HDL y TSH están dentro de lo normal.
 
-EN CRIOLLO
+EN PALABRAS CLARAS
 - Glucemia es el azúcar en la sangre sin haber comido. Está un poco alta.
 - LDL es el "colesterol malo"; HDL es el "colesterol bueno", y el tuyo está bien.
 - Creatinina muestra cómo trabajan los riñones: normal. TSH es de la tiroides: normal.
@@ -496,7 +534,7 @@ CONCLUSIÓN: Esteatosis hepática leve.`,
 - No se ve la vesícula porque te la sacaron en una operación.
 - Los riñones están bien y no tienen piedras.
 
-EN CRIOLLO
+EN PALABRAS CLARAS
 - Esteatosis es "hígado graso": hay un poco más de grasa de lo habitual en el hígado. Es leve.
 - "Compatible con" quiere decir que la imagen lo sugiere; tu médico lo junta con los análisis.
 
@@ -671,6 +709,49 @@ $('#join-form').addEventListener('submit', async e => {
   try { await navigator.clipboard.writeText(msg); hint.textContent = 'Mensaje copiado. ' + (CONTACT ? 'Pegalo en un mail o WhatsApp a ' + CONTACT + '.' : 'Pegalo en un mail o WhatsApp al equipo.'); }
   catch { hint.textContent = 'Seleccioná y copiá este mensaje:'; }
 });
+
+/* Presentación compacta: contenido por secciones, con enlaces accesibles y
+   navegación por URL. Sin JS todas las secciones permanecen visibles. */
+(function initSectionNavigation() {
+  const ids = ['como', 'demo', 'funciones', 'piloto', 'confianza', 'preguntas', 'sumate'];
+  const panels = ids.map(id => document.getElementById(id));
+  const links = Array.from(document.querySelectorAll('#explorar .section-link'));
+  const picker = document.getElementById('explorar');
+  if (!picker || panels.some(panel => !panel) || links.length !== ids.length) return;
+  const scrollToPicker = () => picker.scrollIntoView({
+    behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+    block: 'start'
+  });
+  function showSection(id, shouldScroll = false) {
+    if (!ids.includes(id)) return;
+    panels.forEach(panel => { panel.hidden = panel.id !== id; });
+    links.forEach(link => {
+      if (link.dataset.section === id) link.setAttribute('aria-current', 'location');
+      else link.removeAttribute('aria-current');
+    });
+    if (shouldScroll) requestAnimationFrame(scrollToPicker);
+  }
+  document.body.classList.add('sectioned');
+  const initialId = decodeURIComponent(location.hash.slice(1));
+  showSection(ids.includes(initialId) ? initialId : 'como');
+  document.querySelectorAll('a[href^="#"]').forEach(link => {
+    const id = link.getAttribute('href').slice(1);
+    if (!ids.includes(id)) return;
+    link.addEventListener('click', event => {
+      event.preventDefault();
+      if (location.hash !== '#' + id) history.pushState(null, '', '#' + id);
+      showSection(id, true);
+    });
+  });
+  function restoreSectionFromUrl() {
+    const id = decodeURIComponent(location.hash.slice(1));
+    if (ids.includes(id)) showSection(id, true);
+    else if (id === 'inicio') document.getElementById('inicio').scrollIntoView();
+  }
+  window.addEventListener('popstate', restoreSectionFromUrl);
+  window.addEventListener('hashchange', restoreSectionFromUrl);
+  if (ids.includes(initialId)) requestAnimationFrame(scrollToPicker);
+})();
 </script>
 </body>
 </html>
