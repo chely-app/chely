@@ -1312,6 +1312,9 @@ async function minorManagement() {
     h('p', {}, 'Nacimiento: ' + fmtDate(minor.birth_date) + ' · Relación: ' + minor.relationship),
     h('div', { class: 'alert info' }, 'Los adultos vinculados podrán consultar y modificar los estudios del menor cuando esta función se habilite. Por seguridad, todavía no se pueden cargar informes pediátricos: debemos proteger también los archivos y la IA. No los cargues en tu perfil personal.'));
   m.append(card);
+  // Hecho por ChatGPT · 2026-11-02 · Datos y estudios privados por menor.
+  await minorHealthPanel(m, minor);
+  await minorStudiesPanel(m, minor);
   if (minor.access_level !== 'responsable') return;
   const { data: members, error } = await sb.rpc('minor_members', { p_minor: minor.id });
   if (error) return card.append(h('div', { class: 'alert bad' }, errorText(error)));
