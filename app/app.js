@@ -1116,6 +1116,145 @@ async function accountView() {
     } }, 'Borrar mi cuenta'))));
 }
 
+
+/* ---------------- Menores a cargo ---------------- */
+/* Hecho por ChatGPT · 2026-11-02 · Primera fase: perfil y adultos vinculados.
+   Informes, archivos y análisis con IA requieren permisos especializados: no se activan todavía. */
+const MINOR_RELATIONS = [['madre','Madre'], ['padre','Padre'], ['abuela','Abuela'],
+  ['abuelo','Abuelo'], ['tutor','Tutor/a'], ['otro','Otro vínculo']];
+function minorRelationshipField(id, firstOnly = false) {
+  const allowed = firstOnly ? MINOR_RELATIONS.filter(([v]) => ['madre','padre','tutor'].includes(v)) : MINOR_RELATIONS;
+  return h('select', { id }, ...allowed.map(([v,label]) => h('option', { value: v }, label)));
+}
+function appendMinorAccountOptions(m) {
+  const name = h('input', { id: 'minor-new-name', type: 'text', maxlength: 120, autocomplete: 'off', placeholder: 'Nombre y apellido del menor' });
+  let birthday = null;
+  const born = datePicker({ id: 'minor-new-birth', onChange: iso => { birthday = iso; } });
+  const relation = minorRelationshipField('minor-new-relation', true);
+  const create = h('button', { class: 'btn primary', type: 'button' }, 'Registrar menor');
+  create.addEventListener('click', async () => {
+    if (!name.value.trim() || !birthday) return toast('Ingresá el nombre y la fecha de nacimiento.');
+    if (!await confirmBox({ title: 'Confirmá tu responsabilidad',
+      text: 'Confirmás que sos madre, padre o tutor con autoridad para registrar esta ficha. Otras personas sólo podrán acceder si se las invita a su correo.',
+      ok: 'Confirmar' })) return;
+    create.disabled = true;
+    try {
+      const { error } = await sb.rpc('minor_create', { p_name: name.value.trim(),
+        p_birth_date: birthday, p_relationship: relation.value });
+      if (error) return toast(errorText(error));
+      toast('Menor registrado. Ya aparece la pestaña Menores a cargo.');
+      go('menores');
+    } finally { create.disabled = false; }
+  });
+  const code = h('input', { type: 'text', id: 'minor-code', maxlength: 48, autocomplete: 'off',
+    placeholder: 'Código de invitación recibido' });
+  const acceptRelation = minorRelationshipField('minor-link-relation');
+  const accept = h('button', { class: 'btn', type: 'button' }, 'Aceptar invitación');
+  accept.addEventListener('click', async () => {
+    if (!code.value.trim()) return toast('Ingresá el código que recibiste.');
+    accept.disabled = true;
+    try {
+      const { error } = await sb.rpc('minor_accept',
+        { p_code: code.value.trim(), p_relationship: acceptRelation.value });
+      if (error) return toast(errorText(error));
+      toast('Vínculo confirmado. Ya podés ver la ficha del menor.');
+      go('menores');
+    } finally { accept.disabled = false; }
+  });
+  m.append(
+    h('details', { class: 'card' },
+      h('summary', {}, 'Registrar o vincular un menor a cargo'),
+      h('p', { class: 'hint' }, 'La ficha es privada. Para evitar duplicados, si otro adulto ya registró al menor, pedile una invitación.'),
+      h('h3', {}, 'Registrar un menor'),
+      h('div', { class: 'grid2' },
+        h('label', { class: 'field', for: 'minor-new-name' }, 'Nombre y apellido', name),
+        h('div', { class: 'field' }, h('label', { for: 'minor-new-birth' }, 'Fecha de nacimiento'), born),
+        h('label', { class: 'field', for: 'minor-new-relation' }, 'Tu relación', relation)),
+      h('div', { class: 'row' }, create),
+      h('h3', {}, 'Ya tengo una invitación'),
+      h('p', { class: 'hint' }, 'La invitación debe estar dirigida a tu correo verificado. Vence a los siete días.'),
+      h('div', { class: 'grid2' },
+        h('label', { class: 'field', for: 'minor-code' }, 'Código', code),
+        h('label', { class: 'field', for: 'minor-link-relation' }, 'Tu relación', acceptRelation)),
+      h('div', { class: 'row' }, accept)));
+}
+async function minorManagement() {
+  const minors = state.linkedMinors || [];
+  if (!minors.length) return go('cuenta');
+  const m = mainEl();
+  m.append(h('h1', {}, 'Menores a cargo'),
+    h('p', { class: 'muted small' }, 'Cada adulto tiene una cuenta personal. Sólo los vinculados pueden acceder a la ficha.'));
+  const list = h('div', { class: 'list' });
+  m.append(h('div', { class: 'card' }, h('h2', {}, 'Fichas vinculadas'), list));
+  for (const minor of minors) {
+    list.append(h('button', { class: 'item', type: 'button', onclick: () => {
+      state.minorId = minor.id; minorManagement();
+    } }, h('strong', {}, minor.full_name),
+      h('span', { class: 'muted small' }, ' · ' + fmtDate(minor.birth_date) + ' · ' +
+        (minor.access_level === 'responsable' ? 'Responsable' : 'Consulta'))));
+  }
+  const minor = minors.find(item => item.id === state.minorId) || minors[0];
+  state.minorId = minor.id;
+  const card = h('div', { class: 'card' },
+    h('h2', {}, minor.full_name),
+    h('p', {}, 'Nacimiento: ' + fmtDate(minor.birth_date) + ' · Relación: ' + minor.relationship),
+    h('div', { class: 'alert info' }, 'La gestión familiar está preparada. Los estudios médicos del menor todavía no están habilitados: requieren proteger también archivos e IA. No los cargues en tu perfil personal.'));
+  m.append(card);
+  if (minor.access_level !== 'responsable') return;
+  const { data: members, error } = await sb.rpc('minor_members', { p_minor: minor.id });
+  if (error) return card.append(h('div', { class: 'alert bad' }, errorText(error)));
+  const adults = h('div', { class: 'card' },
+    h('h3', {}, 'Personas con acceso'),
+    h('p', { class: 'muted small' }, 'Responsable puede invitar y quitar accesos. Consulta sólo puede ver.'));
+  for (const adult of (members || [])) {
+    const row = h('div', { class: 'row' },
+      h('span', { class: 'grow' }, (adult.full_name || adult.email) + ' · ' +
+        adult.relationship + ' · ' + adult.access_level));
+    if (!adult.is_creator && adult.adult_id !== state.me.id) {
+      row.append(h('button', { class: 'btn danger sm', type: 'button', onclick: async () => {
+        if (!await confirmBox({ title: 'Quitar acceso',
+          text: 'Esta persona ya no podrá ver la ficha del menor.',
+          ok: 'Quitar acceso', danger: true })) return;
+        const { error: e } = await sb.rpc('minor_remove_adult',
+          { p_minor: minor.id, p_adult: adult.adult_id });
+        if (e) return toast(errorText(e));
+        toast('Acceso retirado.'); minorManagement();
+      } }, 'Quitar acceso'));
+    }
+    adults.append(row);
+  }
+  card.append(adults);
+  const email = h('input', { id: 'minor-share-email', type: 'email', autocomplete: 'email', placeholder: 'correo@ejemplo.com' });
+  const role = h('select', { id: 'minor-share-role' },
+    h('option', { value: 'consulta' }, 'Consulta (sólo lectura)'),
+    h('option', { value: 'responsable' }, 'Responsable (puede gestionar accesos)'));
+  const result = h('div', { role: 'status' });
+  const invite = h('button', { type: 'button', class: 'btn primary' }, 'Crear invitación');
+  invite.addEventListener('click', async () => {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim()))
+      return toast('Ingresá un correo válido.');
+    invite.disabled = true;
+    try {
+      const { data, error: e } = await sb.rpc('minor_invite', {
+        p_minor: minor.id, p_email: email.value.trim(), p_access_level: role.value
+      });
+      if (e) return toast(errorText(e));
+      const code = String(data || '');
+      const copy = h('button', { type: 'button', class: 'btn quiet sm',
+        onclick: () => navigator.clipboard.writeText(code).then(
+          () => toast('Código copiado.'), () => toast('Copiá el código manualmente.')) }, 'Copiar código');
+      result.replaceChildren(h('p', { class: 'hint' },
+        'Compartí este código por un canal privado. Sólo funciona con el correo indicado y vence en siete días.'),
+        h('code', {}, code), copy);
+    } finally { invite.disabled = false; }
+  });
+  card.append(h('div', { class: 'card' }, h('h3', {}, 'Invitar a un adulto'),
+    h('div', { class: 'grid2' },
+      h('label', { class: 'field', for: 'minor-share-email' }, 'Correo de la persona', email),
+      h('label', { class: 'field', for: 'minor-share-role' }, 'Permisos', role)),
+    h('div', { class: 'row' }, invite), result));
+}
+
 /* ---------------- médico ---------------- */
 async function renderDoctor() {
   if (!['pacientes', 'paciente', 'estudio-medico', 'cuenta'].includes(state.page)) state.page = 'pacientes';
