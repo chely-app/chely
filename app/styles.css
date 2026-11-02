@@ -135,6 +135,41 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); outline
   color: var(--accent-strong);
 }
 .study-list-empty { padding: .75rem .5rem; }
+/* Hecho por ChatGPT · 2026-11-02 · Evaluación integral: sin porcentaje inventado. */
+.history-eval-progress {
+  display: grid;
+  gap: .65rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  border-radius: .85rem;
+  min-width: 0;
+}
+.history-eval-progress-detail { font-weight: 700; }
+.history-eval-progress-track {
+  width: 100%;
+  height: .45rem;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+.history-eval-progress-indeterminate {
+  width: 34%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  animation: chely-history-progress 1.7s ease-in-out infinite alternate;
+}
+@keyframes chely-history-progress {
+  from { transform: translateX(-95%); }
+  to { transform: translateX(295%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .history-eval-progress-indeterminate {
+    width: 100%;
+    animation: none;
+  }
+}
 .studies-scroll-list {
   max-height: clamp(20rem, 55vh, 27rem);
   overflow-y: auto;
