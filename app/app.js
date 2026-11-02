@@ -1166,16 +1166,26 @@ async function patientOwnStudy() {
   const s = studies.find(x => x.id === state.studyId && x.self_uploaded);
   if (!s) { toast('No encontramos ese estudio.'); return go('estudios'); }
   const m = mainEl();
-  const report = h('textarea', { id: 'own-report', class: 'report' }, s.report_text);
+  // Hecho por ChatGPT · 2026-11-02 · Conservar correcciones no guardadas
+  // cuando se pasa a otra sección, sólo en memoria de la pestaña.
+  const editKey = 'self:' + s.id;
+  const savedDraft = studyEditDrafts.get(editKey);
+  const editDraft = savedDraft || { report: s.report_text || '',
+    title: s.title === STUDY_PENDING_TITLE ? '' : s.title,
+    date: s.title === STUDY_PENDING_TITLE ? null : s.study_date };
+  studyEditDrafts.set(editKey, editDraft);
+  const report = h('textarea', { id: 'own-report', class: 'report' }, editDraft.report);
+  report.addEventListener('input', () => { editDraft.report = report.value; });
   const status = h('div', { role: 'status' });
   // Hecho por ChatGPT · 2026-11-02 · El archivo se lee y propone título y fecha;
   // si no se detectan, se solicitan antes de generar la explicación.
   const pending = s.title === STUDY_PENDING_TITLE;
   const metaTitle = h('input', { type: 'text', id: 'own-title', maxlength: 180,
-    value: pending ? '' : s.title, placeholder: 'Ej.: Ecografía abdominal' });
-  let selectedDate = pending ? null : s.study_date;
+    value: editDraft.title, placeholder: 'Ej.: Ecografía abdominal' });
+  metaTitle.addEventListener('input', () => { editDraft.title = metaTitle.value; });
+  let selectedDate = editDraft.date;
   const metaPicker = datePicker({ id: 'own-date', value: selectedDate,
-    onChange: iso => { selectedDate = iso; } });
+    onChange: iso => { selectedDate = iso; editDraft.date = iso; } });
   const metadataNote = h('p', { class: 'hint', role: 'status' },
     pending ? 'Chely está leyendo el informe para sugerir el nombre y la fecha. Revisalos antes de continuar.'
       : 'Podés corregir el nombre y la fecha antes de explicar el estudio.');
@@ -1189,13 +1199,15 @@ async function patientOwnStudy() {
     const { error } = await sb.from('studies').update({ title: name, study_date: selectedDate }).eq('id', s.id);
     if (error) { status.className = 'alert bad'; status.textContent = errorText(error); return false; }
     s.title = name; s.study_date = selectedDate;
+    editDraft.title = name; editDraft.date = selectedDate;
     return true;
   };
   const busy = (btn, label) => { btn.disabled = true; const old = btn.textContent; btn.replaceChildren(h('span', { class: 'spinner' }), ' ' + label); return () => { btn.disabled = false; btn.textContent = old; }; };
   const saveText = async () => {
     const { error } = await sb.from('studies').update({ report_text: report.value.trim() }).eq('id', s.id);
     if (error) { toast(errorText(error)); return false; }
-    s.report_text = report.value.trim(); return true;
+    s.report_text = report.value.trim();
+    editDraft.report = report.value; return true;
   };
   const readBtn = h('button', { class: 'btn' }, 'Leer el archivo');
   const explainBtn = h('button', { class: 'btn primary big' }, 'Explicar mi estudio');
@@ -1206,11 +1218,12 @@ async function patientOwnStudy() {
     done();
     if (error) { status.className = 'alert bad'; status.textContent = await fnError(error); return false; }
     report.value = data.text;
+    editDraft.report = report.value;
     if (s.title === STUDY_PENDING_TITLE) {
       const suggested = metadataFromReport(data.text);
-      if (suggested.title) metaTitle.value = suggested.title;
+      if (suggested.title) { metaTitle.value = suggested.title; editDraft.title = suggested.title; }
       if (suggested.date) {
-        selectedDate = suggested.date;
+        selectedDate = suggested.date; editDraft.date = selectedDate;
         metaPicker.querySelector('input').value = fmtDate(suggested.date);
       }
       metadataNote.textContent = suggested.title && suggested.date
@@ -1224,6 +1237,7 @@ async function patientOwnStudy() {
     status.className = 'alert ok'; status.textContent = 'Listo, Chely leyó el archivo. Revisá que el texto sea igual al del informe y tocá «Explicar mi estudio».';
   });
   const explainStudy = async () => {
+    const navAtStart = navigationEpoch;
     if (!report.value.trim()) { status.className = 'alert bad'; status.textContent = 'Falta el texto del informe. Tocá «Leer el archivo» o pegalo.'; return; }
     // Con archivo y un texto tan corto, seguramente falta leer el archivo.
     if (s.file_path && report.value.trim().length < 40) { status.className = 'alert bad'; status.textContent = 'El texto es muy corto para ser el informe completo. Tocá «Leer el archivo» y después «Explicar mi estudio».'; return; }
@@ -1237,7 +1251,10 @@ async function patientOwnStudy() {
       ai_model: data.model, ai_generated_at: new Date().toISOString(), status: 'publicado' }).eq('id', s.id);
     done();
     if (e2) { status.className = 'alert bad'; status.textContent = errorText(e2); return; }
-    go('estudio', { studyId: s.id });
+    studyEditDrafts.delete(editKey);
+    if (state.page === 'mi-estudio' && state.studyId === s.id
+      && navigationEpoch === navAtStart) go('estudio', { studyId: s.id });
+    else toast('Chely terminó de explicar el estudio. Ya está en Mis estudios.');
   };
   explainBtn.addEventListener('click', explainStudy);
   m.append(h('div', { class: 'row' }, h('button', { class: 'btn quiet sm', onclick: () => go('estudios') }, '‹ Mis estudios')));
