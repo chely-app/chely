@@ -22,3 +22,14 @@ Este archivo documenta los cambios realizados por distintos colaboradores (human
 **No se modificaron:** `app/`, autenticación, base de datos, API, almacenamiento de informes ni funciones médicas.
 
 **Publicación:** PR #5 sobre la rama `main`, una vez aprobado.
+
+## 2026-11-01 — Hecho por ChatGPT (segunda ronda)
+**Objetivo:** mejorar el diseño en pantallas de PC y realizar auditoría SEO/seguridad/accesibilidad sin tocar los datos médicos.
+
+**Archivos:** `index.html`, `app/index.html`, `_headers`, `sitemap.xml` y `docs/AUDITORIA_SEO_SEGURIDAD_2026-11-01.md`.
+- Contenedor más ancho (máximo 1.280 px), encabezado compacto, márgenes adaptables y menor desplazamiento vertical.
+- Región semántica `main`, enlace de salto de contenido y corrección de etiqueta HTML mal cerrada.
+- Ajuste de metadescripción sin prometer revisión médica inexistente, fuentes preconectadas y sitemap actualizado.
+- Reglas de encabezados HTTP más restrictivas para `/app/*` y controles básicos en la portada.
+- Auditoría de Supabase **solo de lectura**; problemas pendientes documentados, sin alterar RLS, RPC ni Auth.
+- Etiquetas y commits con la convención `Hecho por ChatGPT`.
