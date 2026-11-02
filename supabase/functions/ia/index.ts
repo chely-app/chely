@@ -193,7 +193,7 @@ Deno.serve(withCors(async (req) => {
       salud,
     };
     const signature = await contextHash({ version: "context-20261102-v1", input, model: MODEL });
-    const shouldShareWithPatient = Boolean(study.self_uploaded || study.status === "publicado");
+    const shouldShareWithPatient = Boolean(study.self_uploaded); // Las explicaciones de medicos deben revisarse antes de exponerse.
     const existingText = String(study.explanation || "").trim();
     // Garantiza una sola explicacion vigente por paciente en Supabase.
     const saveLatest = async (text: string, glossary: unknown, vals: unknown) => {
@@ -229,11 +229,15 @@ Deno.serve(withCors(async (req) => {
     const now = new Date().toISOString();
     // Persistir del lado del servidor: si el navegador se cierra, no se pierde
     // la respuesta ya pagada. Nunca publicar automaticamente un borrador medico.
-    const { error: updateError } = await admin.from("studies").update({
-      explanation, glossary: result.glosario, lab_values: result.valores,
-      ai_model: MODEL, ai_generated_at: now, ai_context_sha256: signature,
-      status: study.self_uploaded ? "publicado" : study.status
-    }).eq("id", study.id).eq("patient_id", study.patient_id);
+    const updateData = study.self_uploaded
+      ? {
+          explanation, glossary: result.glosario, lab_values: result.valores,
+          ai_model: MODEL, ai_generated_at: now, ai_context_sha256: signature,
+          status: "publicado"
+        }
+      : { ai_context_sha256: signature }; // El medico debe guardar y publicar su revision.
+    const { error: updateError } = await admin.from("studies").update(updateData)
+      .eq("id", study.id).eq("patient_id", study.patient_id);
     if (updateError) throw new ChelyAIError("La IA respondió, pero no pudimos guardar la explicación.", 503);
     const { error: usageError } = await admin.from("ai_usage").insert({
       doctor_id: userId, kind: "explicar",
