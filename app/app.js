@@ -1310,7 +1310,7 @@ async function minorManagement() {
   const card = h('div', { class: 'card' },
     h('h2', {}, minor.full_name),
     h('p', {}, 'Nacimiento: ' + fmtDate(minor.birth_date) + ' · Relación: ' + minor.relationship),
-    h('div', { class: 'alert info' }, 'Los adultos vinculados podrán consultar y modificar los estudios del menor cuando esta función se habilite. Por seguridad, todavía no se pueden cargar informes pediátricos: debemos proteger también los archivos y la IA. No los cargues en tu perfil personal.'));
+    h('div', { class: 'alert info' }, 'Podés cargar y explicar estudios de este menor con Chely. Sólo los adultos vinculados tienen acceso. La IA puede cometer errores: verificá siempre los resultados con un profesional médico.'));
   m.append(card);
   // Hecho por ChatGPT · 2026-11-02 · Datos y estudios privados por menor.
   await minorHealthPanel(m, minor);
