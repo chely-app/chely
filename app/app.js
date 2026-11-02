@@ -862,10 +862,11 @@ async function patientStudies() {
   if (latestError) console.warn('No se pudo mostrar la ultima explicacion.');
   if (requestedEpoch !== navigationEpoch || state.page !== 'estudios' || requestedUser !== state.me?.id) return;
   const m = mainEl();
-  m.append(h('div', { class: 'row' }, h('h1', { class: 'grow' }, `Hola, ${state.me.full_name.split(' ')[0] || ''}`)));
-  m.append(h('div', { class: 'card' }, h('h2', {}, 'Entendé tu estudio'),
-    h('p', {}, 'Subí un análisis o un informe (PDF, foto o texto) y Chely te lo explica en palabras simples.'),
-    h('div', { class: 'row' }, h('button', { class: 'btn primary big', onclick: () => go('subir') }, 'Subir un estudio'))));
+  // Pantalla simple: un título claro y una acción principal.
+  m.append(h('div', { class: 'chely-studies-header' },
+    h('h1', {}, 'Mis estudios'),
+    h('button', { class: 'btn primary big', type: 'button',
+      onclick: () => go('subir') }, '+ Subir estudio')));
   // Hecho por ChatGPT · 2026-11-02 · Trabajos persistentes en el servidor.
   // No depende de que el navegador permanezca abierto ni de la sección actual.
   const ownHistory = studies.filter(st => st.self_uploaded);
@@ -1205,17 +1206,19 @@ async function patientStudies() {
   showHistoryProgress();
 
   // Hecho por ChatGPT · 2026-11-02 · Ultima explicacion consultable sin gastar IA.
+  let lastExplanationCard = null;
   if (latest?.explanation) {
     const origin = studies.find(st => st.id === latest.source_study_id);
     const content = h('details', { class: 'stack' },
       h('summary', {}, 'Leer la última explicación guardada'),
       renderExplanation(latest.explanation, latest.glossary || []));
-    m.append(h('div', { class: 'card' },
+    lastExplanationCard = h('div', { class: 'card' },
       h('h2', {}, 'Última explicación disponible'),
       h('p', { class: 'muted small' }, (origin ? 'Estudio: ' + origin.title + ' · ' : '') +
         'Generada el ' + fmtDateTime(latest.generated_at) + '. ' +
         'Usó ' + latest.previous_studies_used + ' antecedentes con texto.'),
-      content));
+      content);
+    m.append(lastExplanationCard);
   }
   // Hecho por ChatGPT · 2026-11-02 · Leer todos los estudios pendientes a pedido.
   // No modifica explicaciones, no publica, no llama a la acción «explicar».
@@ -1338,9 +1341,8 @@ async function patientStudies() {
   m.append(readCard);
   showReadJob();
 
-  // Hecho por ChatGPT · 2026-11-02 · Priorización por estado de preparación.
-  // Grupos excluyentes: completar datos > sin explicar > explicados.
-  // Una fecha de carga provisional NO se considera fecha médica confirmada.
+  // Hecho por ChatGPT · 2026-11-02 · Vista simple y accesible para personas mayores.
+  // Lo esencial primero; sin múltiples scrolls ni tarjetas interminables.
   const preparedStudies = studies.map(s => {
     const needsDetails = s.self_uploaded &&
       (s.title === STUDY_PENDING_TITLE || !s.study_date);
@@ -1354,83 +1356,88 @@ async function patientStudies() {
     const suggestedDate = inferred?.date || filenameHint?.date || null;
     return { study: s, needsDetails, group, title, suggestedDate };
   });
-  const completion = preparedStudies.filter(v => v.group === 'completar');
-  const unexplained = preparedStudies.filter(v => v.group === 'sin-explicar');
-  const explained = preparedStudies.filter(v => v.group === 'explicados');
+  const completion = preparedStudies.filter(x => x.group === 'completar');
+  const unexplained = preparedStudies.filter(x => x.group === 'sin-explicar');
+  const explained = preparedStudies.filter(x => x.group === 'explicados');
+  const byRecency = (a,b) =>
+    String(b.study.created_at || '').localeCompare(String(a.study.created_at || ''));
+  // En "Todos", ordenar por incorporación; al elegir "Completar datos"
+  // se conserva la prioridad de los estudios por identificar.
   const groups = [
-    { id: 'completar', name: 'Completar datos', description: 'Prioridad: estudios sin fecha o nombre confirmado.', data: completion },
-    { id: 'sin-explicar', name: 'Sin explicar', description: 'Estudios listos para pedir una explicación cuando quieras.', data: unexplained },
-    { id: 'explicados', name: 'Explicados', description: 'Estudios que ya tienen explicación guardada.', data: explained },
-    { id: 'todos', name: 'Todos', description: 'Todos los estudios, primero los que requieren completar datos.',
-      data: [...completion, ...unexplained, ...explained] }
+    { id: 'completar', name: 'Completar datos', description: 'Elegí un estudio para confirmar su nombre y fecha.',
+      data: completion.slice().sort(byRecency) },
+    { id: 'sin-explicar', name: 'Sin explicar', description: 'Elegí el estudio que quieras entender.',
+      data: unexplained.slice().sort(byRecency) },
+    { id: 'explicados', name: 'Explicados', description: 'Abrí una explicación que ya esté guardada.',
+      data: explained.slice().sort(byRecency) },
+    { id: 'todos', name: 'Todos', description: 'Estos son tus estudios, empezando por los últimos que se cargaron.',
+      data: preparedStudies.slice().sort(byRecency) }
   ];
-  // Primera apertura: empezar por los que necesitan intervención.
-  // Al volver de corregir un estudio, conservar la pestaña mientras haya
-  // elementos; si se vació, avanzar a la próxima que tenga pendientes.
   const preferred = patientStudiesTab && groups.find(g => g.id === patientStudiesTab);
-  let active = preferred && (preferred.data.length || preferred.id === 'todos')
-    ? preferred.id
-    : completion.length ? 'completar' : unexplained.length ? 'sin-explicar'
-      : explained.length ? 'explicados' : 'todos';
+  let active = preferred ? preferred.id :
+    completion.length ? 'completar' : 'todos';
   patientStudiesTab = active;
 
-  const card = h('div', { class: 'card' },
-    h('h2', {}, 'Mis estudios (' + studies.length + ')'));
-  if (!studies.length) card.append(h('p', { class: 'muted' },
-    'Todavía no tenés estudios. Tocá «Subir un estudio» para empezar.'));
+  const card = h('section', { class: 'card chely-simple-studies' },
+    h('h2', {}, 'Estudios guardados (' + studies.length + ')'));
   const filterTabs = h('div', {
-    class: 'study-filter-tabs', role: 'group', 'aria-label': 'Filtrar mis estudios'
+    class: 'study-filter-tabs', role: 'group', 'aria-label': 'Elegir qué estudios ver'
   });
-  const description = h('p', { class: 'muted small', role: 'status', 'aria-live': 'polite' });
-  const list = h('div', {
-    class: 'list studies-scroll-list',
-    role: 'region',
-    'aria-label': 'Mis estudios, lista desplazable',
-    tabindex: '0'
+  const description = h('p', { class: 'muted', role: 'status', 'aria-live': 'polite' });
+  const searchField = h('input', {
+    class: 'chely-study-search', type: 'search',
+    placeholder: 'Buscar por nombre o fecha',
+    'aria-label': 'Buscar estudios por nombre o fecha',
+    autocomplete: 'off'
   });
+  const list = h('div', { class: 'list chely-simple-list', role: 'region',
+    'aria-label': 'Resultados de estudios' });
+  const shownCount = h('p', { class: 'muted small', role: 'status', 'aria-live': 'polite' });
+  const moreButton = h('button', { type: 'button', class: 'btn chely-more-studies' },
+    'Mostrar más estudios');
+  let visibleLimit = 4;
   const drawList = () => {
     const chosen = groups.find(g => g.id === active);
     filterTabs.querySelectorAll('button').forEach(button => {
       button.setAttribute('aria-pressed', String(button.dataset.filter === active));
     });
-    description.textContent = chosen.description +
-      (chosen.data.length > 4 ? ' Deslizá dentro de la lista para ver los demás.' : '');
+    const term = normalize(searchField.value);
+    const matching = chosen.data.filter(item => !term ||
+      normalize([item.title, item.study.file_name, item.study.study_date,
+        item.suggestedDate, item.study.doctor_id ? names[item.study.doctor_id] : '']
+        .join(' ')).includes(term));
+    description.textContent = chosen.description;
     list.replaceChildren();
-    list.scrollTop = 0;
-    if (!chosen.data.length) {
-      list.append(h('p', { class: 'muted study-list-empty' },
-        chosen.id === 'completar'
-          ? '¡Excelente! No hay estudios pendientes de nombre o fecha.'
-          : chosen.id === 'sin-explicar'
-            ? 'No hay estudios pendientes de explicación.'
-            : chosen.id === 'explicados'
-              ? 'Todavía no hay estudios con explicaciones.'
-              : 'Todavía no tenés estudios.'));
-      return;
+    for (const item of matching.slice(0,visibleLimit)) {
+      const st = item.study;
+      const pending = st.self_uploaded && st.status !== 'publicado';
+      const dateText = item.needsDetails
+        ? item.suggestedDate ? 'Fecha sugerida: ' + fmtDate(item.suggestedDate)
+          : 'Falta confirmar la fecha'
+        : fmtDate(st.study_date);
+      const actionText = item.needsDetails ? 'Abrir para completar'
+        : st.self_uploaded && !st.report_text?.trim() ? 'Abrir para leer'
+          : 'Abrir estudio';
+      const button = h('button', { class: 'item chely-study-item', type: 'button',
+          onclick: () => go(pending ? 'mi-estudio' : 'estudio', { studyId: st.id }) },
+        h('span', { class: 'chely-study-item-title' }, item.title),
+        h('span', { class: 'chely-study-item-meta' }, dateText),
+        h('span', { class: 'chely-study-item-action' }, actionText));
+      list.append(button);
     }
-    for (const item of chosen.data) {
-      const s = item.study;
-      const pending = s.self_uploaded && s.status !== 'publicado';
-      const goTo = pending ? 'mi-estudio' : 'estudio';
-      list.append(h('button', { class: 'item', onclick: () => go(goTo, { studyId: s.id }) },
-        h('div', { class: 'row' }, h('h3', {}, item.title),
-          item.needsDetails
-            ? h('span', { class: 'pill warn' }, 'Completar datos')
-            : null,
-          pending ? h('span', { class: 'pill warn' }, 'Sin explicar')
-            : !s.self_uploaded && !s.first_viewed_at
-              ? h('span', { class: 'pill bad' }, 'Nuevo') : null,
-          s.self_uploaded && s.report_text?.trim()
-            ? h('span', { class: 'pill' }, 'Leído')
-            : s.self_uploaded && (s.file_path || s.storage_file_id)
-              ? h('span', { class: 'pill warn' }, 'Sin leer') : null,
-          h('span', { class: 'pill' }, item.needsDetails
-            ? (item.suggestedDate ? 'Fecha sugerida: ' + fmtDate(item.suggestedDate)
-              : 'Fecha por confirmar') : fmtDate(s.study_date))),
-        h('span', { class: 'muted small' }, s.self_uploaded ? 'Subido por vos'
-          : 'Enviado por ' + (names[s.doctor_id] || 'tu médico') +
-            ' el ' + fmtDate(s.published_at))));
+    if (!matching.length) {
+      list.append(h('p', { class: 'muted study-list-empty' }, term
+        ? 'No encontramos estudios con esa búsqueda.'
+        : active === 'completar' ? '¡Listo! No hay estudios con datos pendientes.'
+        : 'No hay estudios en esta sección.'));
     }
+    shownCount.textContent = matching.length
+      ? 'Mostrando ' + Math.min(visibleLimit,matching.length) + ' de ' +
+        matching.length + ' estudios'
+      : '';
+    moreButton.hidden = matching.length <= visibleLimit;
+    moreButton.textContent = 'Mostrar ' + Math.min(4,matching.length-visibleLimit) +
+      ' estudios más';
   };
   for (const group of groups) {
     const button = h('button', { type: 'button', class: 'study-filter-tab' },
@@ -1439,13 +1446,64 @@ async function patientStudies() {
     button.addEventListener('click', () => {
       active = group.id;
       patientStudiesTab = active;
+      visibleLimit = 4;
+      searchField.value = '';
       drawList();
     });
     filterTabs.append(button);
   }
-  card.append(filterTabs, description, list);
+  searchField.addEventListener('input', () => {
+    visibleLimit = 4;
+    drawList();
+  });
+  moreButton.addEventListener('click', () => {
+    visibleLimit += 4;
+    drawList();
+  });
+  const recent = preparedStudies.slice().sort(byRecency)[0];
+  if (recent) {
+    const last = h('div', { class: 'chely-latest-link' },
+      h('span', { class: 'chely-latest-label' }, 'Último estudio cargado'),
+      h('span', { class: 'chely-latest-name' }, recent.title),
+      h('button', { type: 'button', class: 'btn', onclick: () => {
+        const st = recent.study;
+        go(st.self_uploaded && st.status !== 'publicado' ? 'mi-estudio' : 'estudio',
+          { studyId: st.id });
+      } }, 'Abrir'));
+    card.append(last);
+  }
+  card.append(filterTabs, description,
+    h('div', { class: 'chely-search-wrap' }, searchField),
+    list, shownCount, moreButton);
   m.append(card);
   drawList();
+
+  // Mover la lista al principio SIN perder la evaluación existente, los
+  // documentos apartados, las explicaciones ni las herramientas avanzadas.
+  m.insertBefore(card, overviewCard);
+  const historyPanel = h('details', { class: 'chely-utility-section',
+    open: jobActive || !!runningHistoryEvaluations.get(overviewOwner) },
+    h('summary', {},
+      h('span', { class: 'chely-utility-title' }, 'Evaluación del historial'),
+      h('span', { class: 'chely-utility-description' },
+        overall?.explanation ? 'Resultado guardado' :
+        jobActive ? 'Evaluación en curso' : 'Ver resultados y seguimiento')));
+  m.insertBefore(historyPanel, overviewCard);
+  historyPanel.append(overviewCard);
+  if (reviewCard) historyPanel.append(reviewCard);
+  if (lastExplanationCard) historyPanel.append(lastExplanationCard);
+  const advancedPanel = h('details', { class: 'chely-utility-section',
+    open: !!batchReadJob?.running },
+    h('summary', {},
+      h('span', { class: 'chely-utility-title' }, 'Herramientas adicionales'),
+      h('span', { class: 'chely-utility-description' },
+        pendingReads.length ? pendingReads.length + ' archivos sin leer' :
+          'Lectura de documentos y otras opciones')));
+  m.insertBefore(advancedPanel, readCard);
+  advancedPanel.append(readCard);
+  // Todo queda en orden: subir estudio, estudios guardados,
+  // evaluación del historial y opciones avanzadas.
+
   if (!links || !links.length) m.append(redeemCard('¿Tu médico usa Chely? Pedile el código de invitación para que también pueda enviarte estudios revisados por él.'));
 }
 function redeemCard(text) {
