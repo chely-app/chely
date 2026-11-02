@@ -74,3 +74,12 @@ Este archivo documenta los cambios realizados por distintos colaboradores (human
 - «Mi cuenta» y recuperación de contraseña ahora solicitan confirmación de la nueva contraseña.
 - Campo de cobertura con sugerencias locales, entrada libre y enlace al registro RNAS de la Superintendencia de Servicios de Salud. **No es una base exhaustiva ni sincronizada** de obras sociales.
 - Antes de publicar, migración SQL, comprobación RLS y pruebas de la pantalla. Esta entrega no modifica el contenido de estudios.
+
+## 2026-11-02 — Hecho por ChatGPT (correo y copia individual de un estudio)
+**Archivo:** `app/app.js`.
+- «Mi cuenta» muestra el correo de registro leído de la sesión de Supabase, en un campo visible y de solo lectura; el nombre sigue siendo editable.
+- Cada estudio propio visible para el paciente incluye «Compartir este estudio»: abrir una copia imprimible («Guardar como PDF») y, cuando el navegador lo permite, «Enviar copia» por la interfaz de compartir del sistema.
+- El contenido compartido se limita al informe escrito, la explicación y una nota del profesional si existe. No incluye tokens de sesión, enlaces privados, datos de perfil ni acceso a otros estudios.
+- El PDF lo guarda el usuario desde el diálogo de impresión del navegador; la opción de envío puede transferir un archivo de texto a una app elegida por la persona.
+- **Aviso:** una copia enviada fuera de Chely no se puede revocar y no adjunta automáticamente el archivo original.
+- Se mantiene la funcionalidad de abrir/descargar el informe original por separado para el paciente autenticado.
