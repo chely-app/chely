@@ -1738,13 +1738,17 @@ async function fileFromPublicLink(value) {
     throw error;
   } finally { clearTimeout(timeout); }
 }
-function studySourceChooser(prefix, draft = {}) {
+function studySourceChooser(prefix, draft = {}, settings = {}) {
+  const allowMultiple = !!settings.multiplePhotos;
+  const photoPages = allowMultiple && Array.isArray(draft.photoPages)
+    ? draft.photoPages.filter(f => f instanceof File) : [];
   let mode = STUDY_UPLOAD_MODES.some(x => x.id === draft.mode) ? draft.mode : 'foto';
   let imported = draft.imported instanceof File ? draft.imported : null;
   const options = h('div', { class: 'study-method-grid', role: 'group', 'aria-label': 'Cómo querés subir tu estudio' });
   const body = h('div', { class: 'study-method-body' });
   const photo = h('input', { type: 'file', id: prefix + '-photo', accept: 'image/jpeg,image/png,image/webp', capture: 'environment' });
-  const gallery = h('input', { type: 'file', id: prefix + '-gallery', accept: 'image/jpeg,image/png,image/webp' });
+  const gallery = h('input', { type: 'file', id: prefix + '-gallery',
+    accept: 'image/jpeg,image/png,image/webp', multiple: allowMultiple });
   const pdf = h('input', { type: 'file', id: prefix + '-pdf', accept: '.pdf,application/pdf' });
   const report = h('textarea', { id: prefix + '-text', class: 'report', placeholder: 'Pegá acá el texto del informe…' }, draft.text || '');
   report.addEventListener('input', () => { draft.text = report.value; root.dispatchEvent(new CustomEvent('study-report-input', { detail: { text: report.value } })); });
@@ -1770,12 +1774,55 @@ function studySourceChooser(prefix, draft = {}) {
       window.open(url.value.trim(), '_blank', 'noopener,noreferrer');
     } }, 'Abrir portal para descargar');
   const buttons = [];
+  const photoPageList = h('div', { class:'minor-photo-pages', role:'status', 'aria-live':'polite' });
+  const redrawPhotos = () => {
+    photoPageList.replaceChildren();
+    if (!allowMultiple || !photoPages.length) return;
+    photoPageList.append(h('strong', {}, photoPages.length + ' páginas de un mismo estudio'));
+    photoPages.forEach((f,i) => {
+      photoPageList.append(h('div', { class:'minor-photo-page-row' },
+        h('span', { class:'grow' }, (i+1) + '. ' + f.name),
+        h('button', { class:'btn quiet sm', type:'button', disabled:i===0,
+          'aria-label':'Subir página '+(i+1),
+          onclick: () => {
+            [photoPages[i-1],photoPages[i]]=[photoPages[i],photoPages[i-1]];
+            draft.photoPages=photoPages.slice(); redrawPhotos();
+          }}, '↑'),
+        h('button', { class:'btn quiet sm', type:'button', disabled:i===photoPages.length-1,
+          'aria-label':'Bajar página '+(i+1),
+          onclick: () => {
+            [photoPages[i],photoPages[i+1]]=[photoPages[i+1],photoPages[i]];
+            draft.photoPages=photoPages.slice(); redrawPhotos();
+          }}, '↓'),
+        h('button', { class:'btn quiet sm', type:'button',
+          onclick: () => {
+            photoPages.splice(i,1); draft.photoPages=photoPages.slice();
+            draft.file=photoPages[0]||null; redrawPhotos(); updateFileInfo();
+          }}, 'Quitar')));
+    });
+  };
+  const addPhotoPages = files => {
+    const newFiles=Array.from(files||[]);
+    if (!newFiles.length) return;
+    if (photoPages.length+newFiles.length>12)
+      return toast('Podés agregar hasta 12 fotos por estudio.');
+    if (newFiles.some(f => !f.size || f.size>MAX_UPLOAD ||
+      !['image/jpeg','image/png','image/webp'].includes(f.type)))
+      return toast('Usá fotos JPG, PNG o WebP de hasta 20 MB.');
+    photoPages.push(...newFiles);draft.photoPages=photoPages.slice();
+    draft.file=photoPages[0];redrawPhotos();updateFileInfo();
+  };
   const panels = {
     foto: h('div', { class: 'study-source-panel' },
       h('p', { class: 'muted' }, 'Usá la cámara para fotografiar el informe o elegí una foto ya guardada. Procurá que se lea todo el texto.'),
       h('div', { class: 'study-photo-options' },
-        h('label', { class: 'field', for: prefix + '-photo' }, 'Sacar foto con la cámara', filePicker(photo, 'Abrir cámara')),
-        h('label', { class: 'field', for: prefix + '-gallery' }, 'Elegir una foto guardada', filePicker(gallery, 'Elegir foto')))),
+        h('label', { class: 'field', for: prefix + '-photo' },
+          allowMultiple ? 'Sacar foto y agregar otra página' : 'Sacar foto con la cámara',
+          filePicker(photo, 'Abrir cámara')),
+        h('label', { class: 'field', for: prefix + '-gallery' },
+          allowMultiple ? 'Elegir varias fotos de la galería' : 'Elegir una foto guardada',
+          filePicker(gallery, allowMultiple ? 'Elegir varias fotos' : 'Elegir foto'))),
+      allowMultiple ? photoPageList : null),
     pdf: h('div', { class: 'study-source-panel' },
       h('p', { class: 'muted' }, 'Elegí el informe en PDF. Chely intentará leer su título y fecha automáticamente.'),
       h('label', { class: 'field', for: prefix + '-pdf' }, 'Archivo PDF', filePicker(pdf, 'Elegir PDF'))),
@@ -1791,6 +1838,10 @@ function studySourceChooser(prefix, draft = {}) {
   const selectedInfo = h('p', { class: 'hint', role: 'status', 'aria-live': 'polite' });
   const root = h('div', { class: 'study-source' }, h('h2', {}, '¿Cómo querés enviar tu estudio?'), options, body, selectedInfo);
   const updateFileInfo = () => {
+    if (allowMultiple && mode==='foto' && photoPages.length) {
+      selectedInfo.textContent=photoPages.length + ' foto(s) seleccionada(s) como páginas de un estudio.';
+      return;
+    }
     const selected = mode === 'enlace' ? imported
       : mode === 'foto' ? photo.files?.[0] || gallery.files?.[0] || draft.file
       : mode === 'pdf' ? pdf.files?.[0] || draft.file : null;
@@ -1823,18 +1874,26 @@ function studySourceChooser(prefix, draft = {}) {
     buttons.push(button); options.append(button);
   });
   photo.addEventListener('change', () => {
-    if (photo.files?.length) gallery.value = '';
-    draft.file = photo.files?.[0] || null; updateFileInfo();
+    if (allowMultiple) { addPhotoPages(photo.files); photo.value=''; }
+    else {
+      if (photo.files?.length) gallery.value = '';
+      draft.file = photo.files?.[0] || null; updateFileInfo();
+    }
   });
   gallery.addEventListener('change', () => {
-    if (gallery.files?.length) photo.value = '';
-    draft.file = gallery.files?.[0] || null; updateFileInfo();
+    if (allowMultiple) { addPhotoPages(gallery.files); gallery.value=''; }
+    else {
+      if (gallery.files?.length) photo.value = '';
+      draft.file = gallery.files?.[0] || null; updateFileInfo();
+    }
   });
   pdf.addEventListener('change', () => { draft.file = pdf.files?.[0] || null; updateFileInfo(); });
-  render();
+  render(); redrawPhotos();
   return {
     root, getMode: () => mode, getText: () => report.value.trim(),
-    getFile: () => mode === 'foto' ? (photo.files?.[0] || gallery.files?.[0] || draft.file || null)
+    getPhotos: () => allowMultiple && mode==='foto' ? photoPages.slice() : [],
+    getFile: () => mode === 'foto'
+      ? (allowMultiple ? photoPages[0]||null : photo.files?.[0] || gallery.files?.[0] || draft.file || null)
       : mode === 'pdf' ? (pdf.files?.[0] || draft.file || null)
       : mode === 'enlace' ? imported : null,
     getLink: () => url.value.trim()
@@ -2964,35 +3023,86 @@ function appendMinorAccountOptions(m) {
     h('p', { class: 'muted small' }, 'Podés vincularte a la ficha de un menor o registrar una nueva.'),
     h('div', { class: 'row' }, toggle), panel));
 }
+// Hecho por ChatGPT · 2026-11-03 · Una vista por vez, sin repetir datos ni
+// obligar a desplazarse por salud, accesos y todos los estudios juntos.
+const minorActiveSection = new Map();
 async function minorManagement() {
   const minors = state.linkedMinors || [];
   if (!minors.length) return go('cuenta');
-  const m = mainEl();
-  m.append(h('h1', {}, 'Menores a cargo'),
-    h('p', { class: 'muted small' }, 'Cada adulto tiene una cuenta personal. Sólo los vinculados pueden acceder a la ficha.'));
-  const list = h('div', { class: 'list' });
-  m.append(h('div', { class: 'card' }, h('h2', {}, 'Fichas vinculadas'), list));
-  for (const minor of minors) {
-    list.append(h('button', { class: 'item', type: 'button', onclick: () => {
-      state.minorId = minor.id; state.minorStudyId = null; saveRoute(); minorManagement();
-    } }, h('strong', {}, minor.full_name),
-      h('span', { class: 'muted small' }, ' · ' + fmtDate(minor.birth_date) + ' · ' +
-        (minor.access_level === 'responsable' ? 'Responsable' : 'Adulto autorizado'))));
-  }
   const minor = minors.find(item => item.id === state.minorId) || minors[0];
   state.minorId = minor.id;
   saveRoute();
-  const card = h('div', { class: 'card' },
+  const m = mainEl();
+  const screen = h('section', { class: 'minor-screen' });
+  m.append(screen);
+  screen.append(h('h1', {}, 'Menores a cargo'),
+    h('p', { class: 'muted small' },
+      'Los estudios y los datos de salud de cada menor son privados para los adultos autorizados.'));
+
+  if (minors.length > 1) {
+    const switcher = h('div', { class: 'card minor-switcher' },
+      h('h2', {}, 'Elegir menor'));
+    for (const item of minors) {
+      const button = h('button', { class:'btn' +
+        (item.id === minor.id ? ' primary' : ''), type:'button',
+        onclick:() => {
+          state.minorId=item.id;state.minorStudyId=null;saveRoute();minorManagement();
+        } }, item.full_name);
+      switcher.append(button);
+    }
+    screen.append(switcher);
+  }
+  screen.append(h('div', { class:'minor-profile-summary' },
     h('h2', {}, minor.full_name),
-    h('p', {}, 'Nacimiento: ' + fmtDate(minor.birth_date) + ' · Relación: ' + minor.relationship),
-    h('div', { class: 'alert info' }, 'Podés cargar y explicar estudios de este menor con Chely. Sólo los adultos vinculados tienen acceso. La IA puede cometer errores: verificá siempre los resultados con un profesional médico.'));
-  m.append(card);
-  // Hecho por ChatGPT · 2026-11-02 · Datos y estudios privados por menor.
-  await minorHealthPanel(m, minor);
-  await minorStudiesPanel(m, minor);
+    h('p', { class:'muted small' }, 'Nacimiento: '+fmtDate(minor.birth_date) +
+      ' · '+(minor.access_level === 'responsable' ? 'Responsable' : 'Adulto autorizado'))));
+
+  const categories = [
+    ['estudios','Estudios'],
+    ['salud','Datos de salud'],
+    ...(minor.access_level === 'responsable' ? [['acceso','Personas con acceso']] : [])
+  ];
+  const tabs = h('div', { class:'minor-main-tabs', role:'group',
+    'aria-label':'Secciones de la ficha del menor' });
+  const host = h('div', { class:'minor-main-panel' });
+  const panels = new Map();
+  const buttons = new Map();
+  const initialized = new Set();
+  let active = minorActiveSection.get(minor.id) || 'estudios';
+  if (!categories.some(([key]) => key === active)) active = 'estudios';
+  for (const [key, name] of categories) {
+    const panel = h('section', { class:'minor-section', hidden:true });
+    const button = h('button', { class:'btn minor-tab', type:'button',
+      'aria-pressed':'false', onclick:() => { void selectTab(key); } }, name);
+    tabs.append(button);
+    host.append(panel);
+    buttons.set(key,button);
+    panels.set(key,panel);
+  }
+  screen.append(tabs,host);
+  async function selectTab(key) {
+    if (!panels.has(key)) return;
+    active=key;
+    minorActiveSection.set(minor.id,key);
+    for (const [tab,panel] of panels) {
+      panel.hidden=tab!==key;
+      buttons.get(tab).setAttribute('aria-pressed',String(tab===key));
+    }
+    if (initialized.has(key)) return;
+    initialized.add(key);
+    const panel=panels.get(key);
+    panel.append(h('p', { class:'muted' }, 'Cargando…'));
+    panel.replaceChildren();
+    if (key==='estudios') await minorStudiesPanel(panel,minor);
+    else if(key==='salud') await minorHealthPanel(panel,minor);
+    else if(key==='acceso') await minorAccessPanel(panel,minor);
+  }
+  await selectTab(active);
+}
+async function minorAccessPanel(host,minor) {
   if (minor.access_level !== 'responsable') return;
   const { data: members, error } = await sb.rpc('minor_members', { p_minor: minor.id });
-  if (error) return card.append(h('div', { class: 'alert bad' }, errorText(error)));
+  if (error) return host.append(h('div', { class: 'alert bad' }, errorText(error)));
   const adults = h('div', { class: 'card' },
     h('h3', {}, 'Personas con acceso'),
     h('p', { class: 'muted small' }, 'Los adultos vinculados podrán consultar y modificar estudios. Sólo los responsables pueden invitar y quitar personas.'));
@@ -3013,7 +3123,7 @@ async function minorManagement() {
     }
     adults.append(row);
   }
-  card.append(adults);
+  host.append(adults);
   const email = h('input', { id: 'minor-share-email', type: 'email', autocomplete: 'email', placeholder: 'correo@ejemplo.com' });
   const role = h('select', { id: 'minor-share-role' },
     h('option', { value: 'colaborador' }, 'Adulto autorizado (consulta y modifica estudios)'),
@@ -3038,7 +3148,7 @@ async function minorManagement() {
         h('code', {}, code), copy);
     } finally { invite.disabled = false; }
   });
-  card.append(h('div', { class: 'card' }, h('h3', {}, 'Invitar a un adulto'),
+  host.append(h('div', { class: 'card minor-invite-card' }, h('h3', {}, 'Invitar a un adulto'),
     h('div', { class: 'grid2' },
       h('label', { class: 'field', for: 'minor-share-email' }, 'Correo de la persona', email),
       h('label', { class: 'field', for: 'minor-share-role' }, 'Permisos', role)),
@@ -3135,14 +3245,14 @@ async function minorStudiesPanel(host,minor){
     h('p',{class:'muted small'},'Los adultos vinculados pueden subir, ver y modificar estos estudios. Los archivos se guardan en un espacio privado de Chely.'));
   host.append(card);
   const {data:studies,error}=await sb.from('minor_studies').select('*')
-    .eq('minor_id',minor.id).order('study_date',{ascending:false});
+    .eq('minor_id',minor.id).order('created_at',{ascending:false});
   if(error)return card.append(h('div',{class:'alert bad'},errorText(error)));
   const upload=h('details',{class:'minor-upload'},
     h('summary',{},'Agregar un estudio'));
   // Hecho por ChatGPT · 2026-11-02 · Misma carga accesible de adultos: foto, PDF, texto o enlace.
   let draft=minorUploadDrafts.get(minor.id);
   if(!draft){ draft={mode:'foto',text:'',file:null,imported:null,url:'',title:'',date:null}; minorUploadDrafts.set(minor.id,draft); }
-  const source=studySourceChooser('minor-study',draft);
+  const source=studySourceChooser('minor-study',draft,{multiplePhotos:true});
   const title=h('input',{type:'text',id:'minor-study-title',maxlength:180,
     placeholder:'Ej.: Análisis de sangre',value:draft.title||''});
   title.addEventListener('input',()=>{draft.title=title.value;});
@@ -3165,19 +3275,31 @@ async function minorStudiesPanel(host,minor){
   save.disabled=!!draft.pending;
   save.addEventListener('click',async()=>{
     if(draft.pending)return toast('Este estudio ya se está cargando.');
-    const mode=source.getMode(), chosen=source.getFile(), pasted=source.getText();
+    const mode=source.getMode(), photoPages=source.getPhotos();
+    let chosen=source.getFile();
+    const pasted=source.getText();
     if(mode==='texto'){
       if(!pasted)return toast('Pegá el texto del informe.');
       if(title.value.trim().length<2||!date||date>todayISO())return toast('Completá el nombre y la fecha.');
     }else{
       if(!chosen)return toast(mode==='enlace'?'Primero importá el documento del enlace.':'Elegí una foto o PDF.');
       if(!studyUploadFileValid(chosen,mode))return toast('Archivo no admitido o mayor a 20 MB.');
+      if(mode==='foto' && photoPages.length>12)
+        return toast('Seleccioná hasta 12 fotos para este estudio.');
     }
     draft.pending=true;
     const navAtStart=navigationEpoch, ownerAtStart=state.me.id;
     save.disabled=true;status.className='alert info';status.textContent='Guardando el estudio…';
     try{
       const isFile=mode!=='texto';
+      // Un PDF de varias páginas se genera ANTES de crear el registro.
+      // Una falla de conversión no deja estudios vacíos en Supabase.
+      if(mode==='foto' && photoPages.length>1) {
+        status.textContent='Preparando '+photoPages.length+' páginas en un solo PDF…';
+        if(!window.ChelyPhotosPDF)throw new Error('No se pudo iniciar el convertidor de fotos. Actualizá Chely y probá nuevamente.');
+        chosen=await window.ChelyPhotosPDF.toFile(photoPages);
+        if(!studyUploadFileValid(chosen,'pdf'))throw new Error('El archivo PDF final supera 20 MB.');
+      }
       const {data:created,error:e}=await sb.from('minor_studies').insert({
         minor_id:minor.id,created_by:state.me.id,
         title:isFile?STUDY_PENDING_TITLE:title.value.trim(),
@@ -3214,16 +3336,59 @@ async function minorStudiesPanel(host,minor){
     }
   });
   upload.append(source.root,meta,
-    h('p',{class:'hint'},'Con foto, PDF o enlace importado, Chely intentará completar título y fecha después de leer el documento.'),
+    h('p',{class:'hint'},'Si tu informe tiene varias hojas, seleccioná hasta 12 fotos. Chely las unirá en un solo PDF, en el orden que elijas. Después podrás leerlo con IA una sola vez y pedir la explicación. Una foto sola se guarda normalmente.'),
     status,h('div',{class:'row'},save));
   card.append(upload);
-  if(!(studies||[]).length)card.append(h('p',{class:'muted'},'Este menor todavía no tiene estudios registrados.'));
-  for(const study of studies||[])card.append(h('button',{class:'item',type:'button',onclick:()=>{
-    state.minorStudyId=study.id;saveRoute();minorManagement();
-  }},h('span',{class:'grow'},study.title),h('span',{class:'pill'},study.title===STUDY_PENDING_TITLE?'Fecha por confirmar':fmtDate(study.study_date)),
-    h('span',{class:'pill '+(study.explanation?'ok':'warn')},study.explanation?'Explicado':'Pendiente')));
-  const selected=(studies||[]).find(x=>x.id===state.minorStudyId);
-  if(selected)minorStudyEditor(host,selected);
+  if (!(studies || []).length) {
+    card.append(h('p', { class:'muted' },
+      'Todavía no hay estudios. Tocá «Agregar un estudio» para subir uno.'));
+    return;
+  }
+  const selected=(studies||[]).find(x => x.id===state.minorStudyId);
+  // El editor va ANTES de la lista, no después de todos los informes.
+  if(selected) {
+    card.append(h('div', { class:'minor-selected-heading' },
+      h('h3', {}, 'Estudio seleccionado'),
+      h('button', { type:'button', class:'btn quiet sm', onclick:() => {
+        state.minorStudyId=null;saveRoute();minorManagement();
+      } }, 'Cerrar estudio')));
+    minorStudyEditor(card,selected);
+  }
+  const listTitle=h('h3',{},'Estudios guardados ('+(studies||[]).length+')');
+  const rows=h('div',{class:'minor-studies-rows'});
+  const count=h('p',{class:'muted small'});
+  const more=h('button',{type:'button',class:'btn minor-show-more'},'Mostrar más estudios');
+  let visible=4;
+  const paint=()=>{
+    rows.replaceChildren();
+    for (const st of (studies||[]).slice(0,visible)) {
+      const name=st.title===STUDY_PENDING_TITLE ? 'Estudio por identificar' : st.title;
+      const hasText=!!String(st.report_text||'').trim();
+      const status=st.explanation ? 'Explicación disponible'
+        : !hasText && st.file_path ? 'Sin leer: tocá para interpretar'
+        : st.title===STUDY_PENDING_TITLE ? 'Completar datos antes de explicar'
+        : hasText ? 'Listo para pedir explicación' : 'Sin texto';
+      rows.append(h('button',{type:'button',
+        class:'minor-study-row'+(state.minorStudyId===st.id?' selected':''),
+        onclick:async()=>{
+          state.minorStudyId=st.id;saveRoute();
+          await minorManagement();
+          document.querySelector('.minor-selected-heading')?.scrollIntoView({
+            behavior:'smooth',block:'start'
+          });
+        }},
+        h('strong',{},name),
+        h('span',{class:'muted small'},st.title===STUDY_PENDING_TITLE
+          ? 'Fecha médica por confirmar' : 'Fecha: '+fmtDate(st.study_date)),
+        h('span',{class:'minor-study-status'},status),
+        h('span',{class:'minor-study-open'},'Abrir estudio')));
+    }
+    count.textContent='Mostrando '+Math.min(visible,studies.length)+' de '+studies.length;
+    more.hidden=visible>=studies.length;
+  };
+  more.addEventListener('click',()=>{visible+=4;paint();});
+  card.append(listTitle,rows,count,more);
+  paint();
 }
 async function minorOpenFile(study){
   const {data,error}=await sb.storage.from('estudios-menores').createSignedUrl(study.file_path,120);
@@ -3231,7 +3396,11 @@ async function minorOpenFile(study){
   window.open(data.signedUrl,'_blank','noopener,noreferrer');
 }
 function minorStudyEditor(host,study){
-  const box=h('div',{class:'card'},h('h3',{},'Estudio: '+study.title));
+  const box=h('div',{class:'card minor-study-editor'},
+    h('h3',{},study.title===STUDY_PENDING_TITLE ?
+      'Preparar y explicar este estudio' : study.title),
+    h('p',{class:'muted small'},
+      'Seguí estos dos pasos. La lectura y la explicación con IA se realizan solo si tocás sus botones.'));
   // Hecho por ChatGPT · 2026-11-02 · Conservar edición de menores en RAM
   // mientras se cambia de sección, sin guardar textos en el navegador.
   const draftKey='minor:'+study.id;
@@ -3271,6 +3440,11 @@ function minorStudyEditor(host,study){
     return true;
   };
   const read=h('button',{class:'btn',type:'button',onclick:async()=>{
+    if(report.value.trim() && !await confirmBox({
+      title:'¿Volver a leer el archivo con IA?',
+      text:'Ya existe texto guardado. Volver a leer puede generar un costo de IA.',
+      ok:'Volver a leer'
+    }))return;
     read.disabled=true;status.className='alert info';status.textContent='Chely está leyendo el archivo…';
     try{
       const {data,error}=await pendingOnce(runningStudyReads,'minor:'+study.id,
@@ -3291,10 +3465,15 @@ function minorStudyEditor(host,study){
       status.className='alert ok';status.textContent='Texto leído. Revisá los datos y el informe antes de explicar.';
     }catch(e){status.className='alert bad';status.textContent=errorText(e);}
     finally{read.disabled=false;}
-  }},'Leer archivo con IA');
+  }},'1. Leer páginas con IA');
   const explain=h('button',{class:'btn primary',type:'button',onclick:async()=>{
+    if(study.explanation && !await confirmBox({
+      title:'¿Generar otra explicación?',
+      text:'Ya existe una explicación guardada. La nueva consulta usa créditos de IA y reemplazará la anterior.',
+      ok:'Generar nuevamente'
+    }))return;
     const navAtStart=navigationEpoch;
-    if(!report.value.trim())return toast('Primero pegá el texto o leé el archivo.');
+    if(!report.value.trim())return toast('Primero tocá «1. Leer páginas con IA». Después podrás solicitar la explicación.');
     if(!await save())return;
     explain.disabled=true;status.className='alert info';status.textContent='Chely está preparando la explicación…';
     try{
@@ -3312,19 +3491,33 @@ function minorStudyEditor(host,study){
       if(state.page==='menores' && state.minorStudyId===study.id && navigationEpoch===navAtStart)minorManagement();
     }catch(e){status.className='alert bad';status.textContent=errorText(e);}
     finally{explain.disabled=false;}
-  }},'Explicar con IA');
+  }},'2. Explicar en palabras sencillas');
+  const steps=h('div',{class:'minor-study-steps'},
+    h('h4',{},'¿Cómo obtener la explicación?'),
+    h('p',{class:'muted small'},
+      'Paso 1: Chely lee todas las páginas del informe. Paso 2: revisás nombre y fecha y pedís la explicación. Son consultas de IA que pueden consumir créditos.'),
+    status,
+    h('div',{class:'row minor-study-action-buttons'},
+      study.file_path ? read : null,explain));
+  const reportSection=h('details',{class:'minor-report-details'},
+    h('summary',{},'Ver o corregir el texto del informe'),
+    h('label',{class:'field',for:'minor-edit-report'},'Texto leído',report),
+    h('div',{class:'row'},
+      h('button',{class:'btn',type:'button',
+        onclick:async()=>{if(await save())toast('Cambios guardados.');}},'Guardar texto y datos')));
   box.append(
+    steps,
     h('div',{class:'grid2'},
       h('label',{class:'field',for:'minor-edit-title'},'Nombre del estudio',title),
       h('div',{class:'field'},h('label',{for:'minor-edit-date'},'Fecha del estudio'),picker)),
     metadataNote,
-    study.file_path?h('div',{class:'row'},h('span',{class:'muted grow'},study.file_name||'Archivo'),
-      h('button',{class:'btn quiet sm',type:'button',onclick:()=>minorOpenFile(study)},'Ver original')):null,
-    h('label',{class:'field',for:'minor-edit-report'},'Texto del informe',report),
-    status,h('div',{class:'row'},
-      h('button',{class:'btn',type:'button',onclick:async()=>{if(await save())toast('Cambios guardados.');}},'Guardar cambios'),
-      study.file_path?read:null,explain),
-    h('p',{class:'muted small'},'Explicación generada por inteligencia artificial sin revisión médica. Consultá con un profesional.'));
+    study.file_path?h('div',{class:'row minor-original-link'},
+      h('span',{class:'muted grow'},study.file_name||'Archivo original'),
+      h('button',{class:'btn quiet sm',type:'button',
+        onclick:()=>minorOpenFile(study)},'Ver original')):null,
+    reportSection,
+    h('p',{class:'muted small'},
+      'La IA puede cometer errores y no reemplaza la consulta médica. La explicación requiere verificar el nombre y fecha del estudio.'));
   if(study.explanation){
     box.append(h('h3',{},'Explicación en palabras claras'),renderExplanation(study.explanation,study.glossary||[]));
     const vals=renderValues(study.lab_values||[]);if(vals)box.append(vals);
