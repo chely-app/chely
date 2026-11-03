@@ -2693,12 +2693,12 @@ function studyView(s, doctorName, allStudies, preview) {
   }
   // Hecho por ChatGPT · 2026-11-02 · El paciente entrega sólo este estudio, nunca acceso a su perfil.
   if (!preview) parts.push(h('div', { class: 'card' },
-    h('h2', {}, 'Compartir este estudio'),
+    h('h2', {}, 'Compartir el estudio completo'),
     h('p', { class: 'muted small' }, 'Podés mandar una copia de este estudio sin darle acceso a tu cuenta ni al resto de tus informes.'),
     h('div', { class: 'row' },
       h('button', { class: 'btn', type: 'button', onclick: () => printStudyCopy(s) }, 'Guardar como PDF'),
       typeof navigator.share === 'function' ? h('button', { class: 'btn quiet', type: 'button',
-        onclick: () => shareStudyCopy(s) }, 'Enviar copia') : null),
+        onclick: () => shareStudyCopy(s) }, 'Enviar copia completa') : null),
     h('p', { class: 'hint' }, 'La copia incluye el informe escrito y la explicación, pero no adjunta automáticamente el archivo original. Para enviar el original usá el botón de abajo.')));
   const vals = renderValues(s.lab_values); if (vals) parts.push(vals);
   const evo = renderEvolution(allStudies.filter(x => x.lab_values && x.lab_values.length)); if (evo) parts.push(evo);
