@@ -3390,7 +3390,11 @@ async function minorOpenFile(study){
   window.open(data.signedUrl,'_blank','noopener,noreferrer');
 }
 function minorStudyEditor(host,study){
-  const box=h('div',{class:'card'},h('h3',{},'Estudio: '+study.title));
+  const box=h('div',{class:'card minor-study-editor'},
+    h('h3',{},study.title===STUDY_PENDING_TITLE ?
+      'Preparar y explicar este estudio' : study.title),
+    h('p',{class:'muted small'},
+      'Seguí estos dos pasos. La lectura y la explicación con IA se realizan solo si tocás sus botones.'));
   // Hecho por ChatGPT · 2026-11-02 · Conservar edición de menores en RAM
   // mientras se cambia de sección, sin guardar textos en el navegador.
   const draftKey='minor:'+study.id;
@@ -3430,6 +3434,11 @@ function minorStudyEditor(host,study){
     return true;
   };
   const read=h('button',{class:'btn',type:'button',onclick:async()=>{
+    if(report.value.trim() && !await confirmBox({
+      title:'¿Volver a leer el archivo con IA?',
+      text:'Ya existe texto guardado. Volver a leer puede generar un costo de IA.',
+      ok:'Volver a leer'
+    }))return;
     read.disabled=true;status.className='alert info';status.textContent='Chely está leyendo el archivo…';
     try{
       const {data,error}=await pendingOnce(runningStudyReads,'minor:'+study.id,
@@ -3450,10 +3459,15 @@ function minorStudyEditor(host,study){
       status.className='alert ok';status.textContent='Texto leído. Revisá los datos y el informe antes de explicar.';
     }catch(e){status.className='alert bad';status.textContent=errorText(e);}
     finally{read.disabled=false;}
-  }},'Leer archivo con IA');
+  }},'1. Leer páginas con IA');
   const explain=h('button',{class:'btn primary',type:'button',onclick:async()=>{
+    if(study.explanation && !await confirmBox({
+      title:'¿Generar otra explicación?',
+      text:'Ya existe una explicación guardada. La nueva consulta usa créditos de IA y reemplazará la anterior.',
+      ok:'Generar nuevamente'
+    }))return;
     const navAtStart=navigationEpoch;
-    if(!report.value.trim())return toast('Primero pegá el texto o leé el archivo.');
+    if(!report.value.trim())return toast('Primero tocá «1. Leer páginas con IA». Después podrás solicitar la explicación.');
     if(!await save())return;
     explain.disabled=true;status.className='alert info';status.textContent='Chely está preparando la explicación…';
     try{
@@ -3471,19 +3485,33 @@ function minorStudyEditor(host,study){
       if(state.page==='menores' && state.minorStudyId===study.id && navigationEpoch===navAtStart)minorManagement();
     }catch(e){status.className='alert bad';status.textContent=errorText(e);}
     finally{explain.disabled=false;}
-  }},'Explicar con IA');
+  }},'2. Explicar en palabras sencillas');
+  const steps=h('div',{class:'minor-study-steps'},
+    h('h4',{},'¿Cómo obtener la explicación?'),
+    h('p',{class:'muted small'},
+      'Paso 1: Chely lee todas las páginas del informe. Paso 2: revisás nombre y fecha y pedís la explicación. Son consultas de IA que pueden consumir créditos.'),
+    status,
+    h('div',{class:'row minor-study-action-buttons'},
+      study.file_path ? read : null,explain));
+  const reportSection=h('details',{class:'minor-report-details'},
+    h('summary',{},'Ver o corregir el texto del informe'),
+    h('label',{class:'field',for:'minor-edit-report'},'Texto leído',report),
+    h('div',{class:'row'},
+      h('button',{class:'btn',type:'button',
+        onclick:async()=>{if(await save())toast('Cambios guardados.');}},'Guardar texto y datos')));
   box.append(
+    steps,
     h('div',{class:'grid2'},
       h('label',{class:'field',for:'minor-edit-title'},'Nombre del estudio',title),
       h('div',{class:'field'},h('label',{for:'minor-edit-date'},'Fecha del estudio'),picker)),
     metadataNote,
-    study.file_path?h('div',{class:'row'},h('span',{class:'muted grow'},study.file_name||'Archivo'),
-      h('button',{class:'btn quiet sm',type:'button',onclick:()=>minorOpenFile(study)},'Ver original')):null,
-    h('label',{class:'field',for:'minor-edit-report'},'Texto del informe',report),
-    status,h('div',{class:'row'},
-      h('button',{class:'btn',type:'button',onclick:async()=>{if(await save())toast('Cambios guardados.');}},'Guardar cambios'),
-      study.file_path?read:null,explain),
-    h('p',{class:'muted small'},'Explicación generada por inteligencia artificial sin revisión médica. Consultá con un profesional.'));
+    study.file_path?h('div',{class:'row minor-original-link'},
+      h('span',{class:'muted grow'},study.file_name||'Archivo original'),
+      h('button',{class:'btn quiet sm',type:'button',
+        onclick:()=>minorOpenFile(study)},'Ver original')):null,
+    reportSection,
+    h('p',{class:'muted small'},
+      'La IA puede cometer errores y no reemplaza la consulta médica. La explicación requiere verificar el nombre y fecha del estudio.'));
   if(study.explanation){
     box.append(h('h3',{},'Explicación en palabras claras'),renderExplanation(study.explanation,study.glossary||[]));
     const vals=renderValues(study.lab_values||[]);if(vals)box.append(vals);
