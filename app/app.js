@@ -3336,7 +3336,7 @@ async function minorStudiesPanel(host,minor){
     }
   });
   upload.append(source.root,meta,
-    h('p',{class:'hint'},'Podés seleccionar cinco fotos (o hasta doce) como páginas de UN solo estudio. Se guardarán juntas en un PDF y Chely las leerá con una sola solicitud cuando toques «Leer archivo con IA». El orden se puede corregir antes de guardar.'),
+    h('p',{class:'hint'},'Si tu informe tiene varias hojas, seleccioná hasta 12 fotos. Chely las unirá en un solo PDF, en el orden que elijas. Después podrás leerlo con IA una sola vez y pedir la explicación. Una foto sola se guarda normalmente.'),
     status,h('div',{class:'row'},save));
   card.append(upload);
   if (!(studies || []).length) {
@@ -3370,7 +3370,13 @@ async function minorStudiesPanel(host,minor){
         : hasText ? 'Listo para pedir explicación' : 'Sin texto';
       rows.append(h('button',{type:'button',
         class:'minor-study-row'+(state.minorStudyId===st.id?' selected':''),
-        onclick:()=>{state.minorStudyId=st.id;saveRoute();minorManagement();}},
+        onclick:async()=>{
+          state.minorStudyId=st.id;saveRoute();
+          await minorManagement();
+          document.querySelector('.minor-selected-heading')?.scrollIntoView({
+            behavior:'smooth',block:'start'
+          });
+        }},
         h('strong',{},name),
         h('span',{class:'muted small'},st.title===STUDY_PENDING_TITLE
           ? 'Fecha médica por confirmar' : 'Fecha: '+fmtDate(st.study_date)),
