@@ -13,13 +13,23 @@
   async function jpegPage(file) {
     if (!file || !accepted.has(file.type) || !file.size || file.size > MAX_BYTES)
       throw new Error('Revisá las fotos: deben ser JPG, PNG o WebP y pesar hasta 20 MB cada una.');
-    let image;
+    let image, imageURL = null;
     try {
-      image = await createImageBitmap(file, { imageOrientation: 'from-image' });
-    } catch {
-      throw new Error('No se pudo abrir una foto. Elegí imágenes JPG, PNG o WebP legibles.');
-    }
-    try {
+      if (typeof createImageBitmap === 'function') {
+        try { image = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+        catch { /* Algunos navegadores móviles necesitan HTMLImageElement. */ }
+      }
+      if (!image) {
+        imageURL = URL.createObjectURL(file);
+        image = await new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = () => reject(new Error('No se pudo abrir la foto. Revisá su formato.'));
+          img.src = imageURL;
+        });
+      }
+      if (!image.width || !image.height)
+        throw new Error('Una de las fotos no tiene dimensiones válidas.');
       const limit = 2000;
       const factor = Math.min(1, limit / Math.max(image.width, image.height));
       const width = Math.max(1, Math.round(image.width * factor));
@@ -34,7 +44,10 @@
       canvas.width = 0; canvas.height = 0;
       if (!jpeg || jpeg.type !== 'image/jpeg') throw new Error('No se pudo convertir una de las fotos.');
       return { width, height, bytes: new Uint8Array(await jpeg.arrayBuffer()) };
-    } finally { image.close(); }
+    } finally {
+      if (image && typeof image.close === 'function') image.close();
+      if (imageURL) URL.revokeObjectURL(imageURL);
+    }
   }
 
   async function toFile(files) {
