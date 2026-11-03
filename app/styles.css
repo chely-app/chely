@@ -719,3 +719,16 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); outline
   .minor-merge-existing {padding:.75rem;}
   .minor-merge-photo-row .grow {flex-basis:calc(100% - 2rem);}
 }
+
+/* Compartir solo la explicación del estudio, con vista previa legible. */
+.chely-explanation-share { min-width:0; }
+.chely-share-preview { margin:.5rem 0; }
+.chely-share-preview summary { cursor:pointer; font-weight:800; }
+.chely-share-message {
+  margin:.75rem 0 0; padding:1rem; max-height:20rem; overflow:auto;
+  white-space:pre-wrap; overflow-wrap:anywhere;
+  background:var(--surface-2); color:var(--fg);
+  border:1px solid var(--line); border-radius:.75rem;
+  font:inherit; line-height:1.55;
+}
+.chely-explanation-share .row { flex-wrap:wrap; }
