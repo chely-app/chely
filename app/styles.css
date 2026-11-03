@@ -562,3 +562,86 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); outline
   .chely-history-easy { padding:.85rem; }
   .chely-history-easy-list { gap:.75rem; }
 }
+
+/* Hecho por ChatGPT · 2026-11-03 · Menores: una sección por vez. */
+.minor-screen { display:grid; gap:1rem; max-width:66rem; margin-inline:auto; }
+.minor-screen [hidden] { display:none !important; }
+.minor-profile-summary {
+  display:grid;gap:.3rem;padding:.9rem 1rem;
+  border:1px solid var(--line); border-radius:.9rem;
+  background:var(--surface-2);
+}
+.minor-profile-summary h2 {font-size:1.25rem;margin:0;}
+.minor-main-tabs {
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:.65rem;
+}
+.minor-main-tabs .minor-tab {
+  min-height:3.55rem; width:100%; padding:.6rem;
+  border:2px solid var(--line);border-radius:.85rem;
+  font-weight:800;font-size:1rem;white-space:normal;
+}
+.minor-main-tabs .minor-tab[aria-pressed="true"]{
+  background:var(--accent);color:var(--accent-ink);
+  border-color:var(--accent);
+}
+.minor-main-panel,.minor-section {min-width:0;}
+.minor-section {display:grid;gap:1rem;}
+.minor-section>.card {gap:1rem;}
+.minor-switcher {display:flex;flex-wrap:wrap;gap:.6rem;}
+.minor-switcher h2 {width:100%;}
+.minor-photo-pages {
+  display:grid;gap:.65rem;min-width:0;
+  padding:.8rem;border-radius:.8rem;
+  background:var(--surface-2);border:1px solid var(--line);
+}
+.minor-photo-pages:empty { display:none; }
+.minor-photo-page-row {
+  display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;
+  padding:.45rem .35rem;border-bottom:1px solid var(--line);
+}
+.minor-photo-page-row span {overflow-wrap:anywhere;min-width:8rem;}
+.minor-photo-page-row .btn {min-height:2.65rem;}
+.minor-selected-heading {
+  display:flex;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;gap:.65rem;
+  border-top:1px solid var(--line);padding-top:.8rem;
+}
+.minor-selected-heading h3 {margin:0;}
+.minor-studies-rows {display:grid;gap:.7rem;}
+.minor-study-row {
+  display:grid;gap:.25rem;width:100%;min-height:5rem;
+  padding:.85rem 1rem;text-align:left;
+  border:1px solid var(--line);border-radius:.85rem;
+  background:var(--bg);color:var(--fg);cursor:pointer;
+}
+.minor-study-row.selected{border:2px solid var(--accent);}
+.minor-study-row strong{font-size:1.05rem;overflow-wrap:anywhere;}
+.minor-study-status{color:var(--muted);font-size:.92rem;}
+.minor-study-open{font-weight:800;color:var(--accent-strong);}
+.minor-show-more{min-height:3.2rem;width:100%;}
+.minor-study-editor {background:var(--surface-2);gap:1rem;}
+.minor-study-steps {
+  display:grid;gap:.7rem;padding:.85rem;
+  border:1px solid var(--line);border-radius:.85rem;
+  background:var(--bg);
+}
+.minor-study-steps h4{font-size:1.08rem;margin:0;}
+.minor-study-action-buttons .btn{min-height:3.3rem;white-space:normal;}
+.minor-report-details {
+  border:1px solid var(--line);border-radius:.85rem;
+  background:var(--bg);padding:.8rem;
+}
+.minor-report-details>summary{
+  cursor:pointer;font-weight:800;color:var(--accent-strong);
+  padding:.3rem 0;min-height:2.5rem;
+}
+.minor-report-details .field{margin-top:.7rem;}
+.minor-invite-card{margin-top:.6rem;}
+@media(max-width:650px){
+  .minor-main-tabs {grid-template-columns:1fr 1fr;}
+  .minor-main-tabs .minor-tab {min-height:3.2rem;}
+  .minor-study-action-buttons{display:grid;grid-template-columns:1fr;}
+  .minor-study-action-buttons .btn{width:100%;}
+  .minor-photo-page-row .btn{flex:0 0 auto;}
+}
