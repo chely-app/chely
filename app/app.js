@@ -3535,10 +3535,15 @@ function minorMergePhotosPanel(minor,candidates) {
       // Solo eliminar el registro PDF NUEVO si la operación no se completó.
       // Los estudios originales NUNCA se borran ni se desmarcan aquí.
       if(parentId&&!merged){
-        if(parentPath) await sb.storage.from('estudios-menores')
-          .remove([parentPath]).catch(()=>{});
-        await sb.from('minor_studies').delete()
-          .eq('id',parentId).eq('minor_id',minor.id).catch(()=>{});
+        try {
+          if(parentPath) await sb.storage.from('estudios-menores')
+            .remove([parentPath]);
+          await sb.from('minor_studies').delete()
+            .eq('id',parentId).eq('minor_id',minor.id);
+        } catch {
+          // Si la limpieza falla, conservar el PDF para recuperarlo;
+          // nunca tocar ni borrar fotos originales.
+        }
       }
       status.className='alert bad';
       status.textContent='No se pudieron unir las fotos: '+errorText(e)+
