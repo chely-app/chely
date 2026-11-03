@@ -3023,35 +3023,86 @@ function appendMinorAccountOptions(m) {
     h('p', { class: 'muted small' }, 'Podés vincularte a la ficha de un menor o registrar una nueva.'),
     h('div', { class: 'row' }, toggle), panel));
 }
+// Hecho por ChatGPT · 2026-11-03 · Una vista por vez, sin repetir datos ni
+// obligar a desplazarse por salud, accesos y todos los estudios juntos.
+const minorActiveSection = new Map();
 async function minorManagement() {
   const minors = state.linkedMinors || [];
   if (!minors.length) return go('cuenta');
-  const m = mainEl();
-  m.append(h('h1', {}, 'Menores a cargo'),
-    h('p', { class: 'muted small' }, 'Cada adulto tiene una cuenta personal. Sólo los vinculados pueden acceder a la ficha.'));
-  const list = h('div', { class: 'list' });
-  m.append(h('div', { class: 'card' }, h('h2', {}, 'Fichas vinculadas'), list));
-  for (const minor of minors) {
-    list.append(h('button', { class: 'item', type: 'button', onclick: () => {
-      state.minorId = minor.id; state.minorStudyId = null; saveRoute(); minorManagement();
-    } }, h('strong', {}, minor.full_name),
-      h('span', { class: 'muted small' }, ' · ' + fmtDate(minor.birth_date) + ' · ' +
-        (minor.access_level === 'responsable' ? 'Responsable' : 'Adulto autorizado'))));
-  }
   const minor = minors.find(item => item.id === state.minorId) || minors[0];
   state.minorId = minor.id;
   saveRoute();
-  const card = h('div', { class: 'card' },
+  const m = mainEl();
+  const screen = h('section', { class: 'minor-screen' });
+  m.append(screen);
+  screen.append(h('h1', {}, 'Menores a cargo'),
+    h('p', { class: 'muted small' },
+      'Los estudios y los datos de salud de cada menor son privados para los adultos autorizados.'));
+
+  if (minors.length > 1) {
+    const switcher = h('div', { class: 'card minor-switcher' },
+      h('h2', {}, 'Elegir menor'));
+    for (const item of minors) {
+      const button = h('button', { class:'btn' +
+        (item.id === minor.id ? ' primary' : ''), type:'button',
+        onclick:() => {
+          state.minorId=item.id;state.minorStudyId=null;saveRoute();minorManagement();
+        } }, item.full_name);
+      switcher.append(button);
+    }
+    screen.append(switcher);
+  }
+  screen.append(h('div', { class:'minor-profile-summary' },
     h('h2', {}, minor.full_name),
-    h('p', {}, 'Nacimiento: ' + fmtDate(minor.birth_date) + ' · Relación: ' + minor.relationship),
-    h('div', { class: 'alert info' }, 'Podés cargar y explicar estudios de este menor con Chely. Sólo los adultos vinculados tienen acceso. La IA puede cometer errores: verificá siempre los resultados con un profesional médico.'));
-  m.append(card);
-  // Hecho por ChatGPT · 2026-11-02 · Datos y estudios privados por menor.
-  await minorHealthPanel(m, minor);
-  await minorStudiesPanel(m, minor);
+    h('p', { class:'muted small' }, 'Nacimiento: '+fmtDate(minor.birth_date) +
+      ' · '+(minor.access_level === 'responsable' ? 'Responsable' : 'Adulto autorizado'))));
+
+  const categories = [
+    ['estudios','Estudios'],
+    ['salud','Datos de salud'],
+    ...(minor.access_level === 'responsable' ? [['acceso','Personas con acceso']] : [])
+  ];
+  const tabs = h('div', { class:'minor-main-tabs', role:'group',
+    'aria-label':'Secciones de la ficha del menor' });
+  const host = h('div', { class:'minor-main-panel' });
+  const panels = new Map();
+  const buttons = new Map();
+  const initialized = new Set();
+  let active = minorActiveSection.get(minor.id) || 'estudios';
+  if (!categories.some(([key]) => key === active)) active = 'estudios';
+  for (const [key, name] of categories) {
+    const panel = h('section', { class:'minor-section', hidden:true });
+    const button = h('button', { class:'btn minor-tab', type:'button',
+      'aria-pressed':'false', onclick:() => { void selectTab(key); } }, name);
+    tabs.append(button);
+    host.append(panel);
+    buttons.set(key,button);
+    panels.set(key,panel);
+  }
+  screen.append(tabs,host);
+  async function selectTab(key) {
+    if (!panels.has(key)) return;
+    active=key;
+    minorActiveSection.set(minor.id,key);
+    for (const [tab,panel] of panels) {
+      panel.hidden=tab!==key;
+      buttons.get(tab).setAttribute('aria-pressed',String(tab===key));
+    }
+    if (initialized.has(key)) return;
+    initialized.add(key);
+    const panel=panels.get(key);
+    panel.append(h('p', { class:'muted' }, 'Cargando…'));
+    panel.replaceChildren();
+    if (key==='estudios') await minorStudiesPanel(panel,minor);
+    else if(key==='salud') await minorHealthPanel(panel,minor);
+    else if(key==='acceso') await minorAccessPanel(panel,minor);
+  }
+  await selectTab(active);
+}
+async function minorAccessPanel(host,minor) {
   if (minor.access_level !== 'responsable') return;
   const { data: members, error } = await sb.rpc('minor_members', { p_minor: minor.id });
-  if (error) return card.append(h('div', { class: 'alert bad' }, errorText(error)));
+  if (error) return host.append(h('div', { class: 'alert bad' }, errorText(error)));
   const adults = h('div', { class: 'card' },
     h('h3', {}, 'Personas con acceso'),
     h('p', { class: 'muted small' }, 'Los adultos vinculados podrán consultar y modificar estudios. Sólo los responsables pueden invitar y quitar personas.'));
@@ -3072,7 +3123,7 @@ async function minorManagement() {
     }
     adults.append(row);
   }
-  card.append(adults);
+  host.append(adults);
   const email = h('input', { id: 'minor-share-email', type: 'email', autocomplete: 'email', placeholder: 'correo@ejemplo.com' });
   const role = h('select', { id: 'minor-share-role' },
     h('option', { value: 'colaborador' }, 'Adulto autorizado (consulta y modifica estudios)'),
@@ -3097,7 +3148,7 @@ async function minorManagement() {
         h('code', {}, code), copy);
     } finally { invite.disabled = false; }
   });
-  card.append(h('div', { class: 'card' }, h('h3', {}, 'Invitar a un adulto'),
+  host.append(h('div', { class: 'card minor-invite-card' }, h('h3', {}, 'Invitar a un adulto'),
     h('div', { class: 'grid2' },
       h('label', { class: 'field', for: 'minor-share-email' }, 'Correo de la persona', email),
       h('label', { class: 'field', for: 'minor-share-role' }, 'Permisos', role)),
