@@ -1738,13 +1738,17 @@ async function fileFromPublicLink(value) {
     throw error;
   } finally { clearTimeout(timeout); }
 }
-function studySourceChooser(prefix, draft = {}) {
+function studySourceChooser(prefix, draft = {}, settings = {}) {
+  const allowMultiple = !!settings.multiplePhotos;
+  const photoPages = allowMultiple && Array.isArray(draft.photoPages)
+    ? draft.photoPages.filter(f => f instanceof File) : [];
   let mode = STUDY_UPLOAD_MODES.some(x => x.id === draft.mode) ? draft.mode : 'foto';
   let imported = draft.imported instanceof File ? draft.imported : null;
   const options = h('div', { class: 'study-method-grid', role: 'group', 'aria-label': 'Cómo querés subir tu estudio' });
   const body = h('div', { class: 'study-method-body' });
   const photo = h('input', { type: 'file', id: prefix + '-photo', accept: 'image/jpeg,image/png,image/webp', capture: 'environment' });
-  const gallery = h('input', { type: 'file', id: prefix + '-gallery', accept: 'image/jpeg,image/png,image/webp' });
+  const gallery = h('input', { type: 'file', id: prefix + '-gallery',
+    accept: 'image/jpeg,image/png,image/webp', multiple: allowMultiple });
   const pdf = h('input', { type: 'file', id: prefix + '-pdf', accept: '.pdf,application/pdf' });
   const report = h('textarea', { id: prefix + '-text', class: 'report', placeholder: 'Pegá acá el texto del informe…' }, draft.text || '');
   report.addEventListener('input', () => { draft.text = report.value; root.dispatchEvent(new CustomEvent('study-report-input', { detail: { text: report.value } })); });
@@ -1770,12 +1774,55 @@ function studySourceChooser(prefix, draft = {}) {
       window.open(url.value.trim(), '_blank', 'noopener,noreferrer');
     } }, 'Abrir portal para descargar');
   const buttons = [];
+  const photoPageList = h('div', { class:'minor-photo-pages', role:'status', 'aria-live':'polite' });
+  const redrawPhotos = () => {
+    photoPageList.replaceChildren();
+    if (!allowMultiple || !photoPages.length) return;
+    photoPageList.append(h('strong', {}, photoPages.length + ' páginas de un mismo estudio'));
+    photoPages.forEach((f,i) => {
+      photoPageList.append(h('div', { class:'minor-photo-page-row' },
+        h('span', { class:'grow' }, (i+1) + '. ' + f.name),
+        h('button', { class:'btn quiet sm', type:'button', disabled:i===0,
+          'aria-label':'Subir página '+(i+1),
+          onclick: () => {
+            [photoPages[i-1],photoPages[i]]=[photoPages[i],photoPages[i-1]];
+            draft.photoPages=photoPages.slice(); redrawPhotos();
+          }}, '↑'),
+        h('button', { class:'btn quiet sm', type:'button', disabled:i===photoPages.length-1,
+          'aria-label':'Bajar página '+(i+1),
+          onclick: () => {
+            [photoPages[i],photoPages[i+1]]=[photoPages[i+1],photoPages[i]];
+            draft.photoPages=photoPages.slice(); redrawPhotos();
+          }}, '↓'),
+        h('button', { class:'btn quiet sm', type:'button',
+          onclick: () => {
+            photoPages.splice(i,1); draft.photoPages=photoPages.slice();
+            draft.file=photoPages[0]||null; redrawPhotos(); updateFileInfo();
+          }}, 'Quitar')));
+    });
+  };
+  const addPhotoPages = files => {
+    const newFiles=Array.from(files||[]);
+    if (!newFiles.length) return;
+    if (photoPages.length+newFiles.length>12)
+      return toast('Podés agregar hasta 12 fotos por estudio.');
+    if (newFiles.some(f => !f.size || f.size>MAX_UPLOAD ||
+      !['image/jpeg','image/png','image/webp'].includes(f.type)))
+      return toast('Usá fotos JPG, PNG o WebP de hasta 20 MB.');
+    photoPages.push(...newFiles);draft.photoPages=photoPages.slice();
+    draft.file=photoPages[0];redrawPhotos();updateFileInfo();
+  };
   const panels = {
     foto: h('div', { class: 'study-source-panel' },
       h('p', { class: 'muted' }, 'Usá la cámara para fotografiar el informe o elegí una foto ya guardada. Procurá que se lea todo el texto.'),
       h('div', { class: 'study-photo-options' },
-        h('label', { class: 'field', for: prefix + '-photo' }, 'Sacar foto con la cámara', filePicker(photo, 'Abrir cámara')),
-        h('label', { class: 'field', for: prefix + '-gallery' }, 'Elegir una foto guardada', filePicker(gallery, 'Elegir foto')))),
+        h('label', { class: 'field', for: prefix + '-photo' },
+          allowMultiple ? 'Sacar foto y agregar otra página' : 'Sacar foto con la cámara',
+          filePicker(photo, 'Abrir cámara')),
+        h('label', { class: 'field', for: prefix + '-gallery' },
+          allowMultiple ? 'Elegir varias fotos de la galería' : 'Elegir una foto guardada',
+          filePicker(gallery, allowMultiple ? 'Elegir varias fotos' : 'Elegir foto'))),
+      allowMultiple ? photoPageList : null),
     pdf: h('div', { class: 'study-source-panel' },
       h('p', { class: 'muted' }, 'Elegí el informe en PDF. Chely intentará leer su título y fecha automáticamente.'),
       h('label', { class: 'field', for: prefix + '-pdf' }, 'Archivo PDF', filePicker(pdf, 'Elegir PDF'))),
@@ -1791,6 +1838,10 @@ function studySourceChooser(prefix, draft = {}) {
   const selectedInfo = h('p', { class: 'hint', role: 'status', 'aria-live': 'polite' });
   const root = h('div', { class: 'study-source' }, h('h2', {}, '¿Cómo querés enviar tu estudio?'), options, body, selectedInfo);
   const updateFileInfo = () => {
+    if (allowMultiple && mode==='foto' && photoPages.length) {
+      selectedInfo.textContent=photoPages.length + ' foto(s) seleccionada(s) como páginas de un estudio.';
+      return;
+    }
     const selected = mode === 'enlace' ? imported
       : mode === 'foto' ? photo.files?.[0] || gallery.files?.[0] || draft.file
       : mode === 'pdf' ? pdf.files?.[0] || draft.file : null;
@@ -1823,18 +1874,26 @@ function studySourceChooser(prefix, draft = {}) {
     buttons.push(button); options.append(button);
   });
   photo.addEventListener('change', () => {
-    if (photo.files?.length) gallery.value = '';
-    draft.file = photo.files?.[0] || null; updateFileInfo();
+    if (allowMultiple) { addPhotoPages(photo.files); photo.value=''; }
+    else {
+      if (photo.files?.length) gallery.value = '';
+      draft.file = photo.files?.[0] || null; updateFileInfo();
+    }
   });
   gallery.addEventListener('change', () => {
-    if (gallery.files?.length) photo.value = '';
-    draft.file = gallery.files?.[0] || null; updateFileInfo();
+    if (allowMultiple) { addPhotoPages(gallery.files); gallery.value=''; }
+    else {
+      if (gallery.files?.length) photo.value = '';
+      draft.file = gallery.files?.[0] || null; updateFileInfo();
+    }
   });
   pdf.addEventListener('change', () => { draft.file = pdf.files?.[0] || null; updateFileInfo(); });
-  render();
+  render(); redrawPhotos();
   return {
     root, getMode: () => mode, getText: () => report.value.trim(),
-    getFile: () => mode === 'foto' ? (photo.files?.[0] || gallery.files?.[0] || draft.file || null)
+    getPhotos: () => allowMultiple && mode==='foto' ? photoPages.slice() : [],
+    getFile: () => mode === 'foto'
+      ? (allowMultiple ? photoPages[0]||null : photo.files?.[0] || gallery.files?.[0] || draft.file || null)
       : mode === 'pdf' ? (pdf.files?.[0] || draft.file || null)
       : mode === 'enlace' ? imported : null,
     getLink: () => url.value.trim()
