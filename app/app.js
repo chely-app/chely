@@ -2565,7 +2565,9 @@ function explanationShareText(patient, study) {
     'EXPLICACIÓN EN PALABRAS CLARAS',
     cleanExplanation,
     '',
-    'Esta explicación fue preparada con inteligencia artificial y puede contener errores. No reemplaza la consulta con un profesional de salud.'
+    'Esta explicación fue preparada con inteligencia artificial y puede contener errores. No reemplaza la consulta con un profesional de salud.',
+    '',
+    'Conocé Chely y sumate: https://www.chely.app'
   ].join('\n');
 }
 function explanationShareCard(patient, study) {
