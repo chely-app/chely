@@ -3416,6 +3416,137 @@ async function minorStudiesPanel(host,minor){
   card.append(listTitle,rows,count,more);
   paint();
 }
+// Hecho por ChatGPT · 2026-11-03 · Agrupar fotos que ya estaban cargadas.
+// Nunca borra los originales: quedan como páginas vinculadas al nuevo PDF.
+// La única operación sobre el historial existente es la RPC atómica tras
+// descargar y verificar TODAS las imágenes y guardar el PDF.
+function minorMergePhotosPanel(minor,candidates) {
+  const sorted=candidates.slice().sort((a,b)=>
+    String(a.file_name||'').localeCompare(String(b.file_name||''),'es',{numeric:true}));
+  const entries=sorted.map(st=>({study:st,selected:true}));
+  const panel=h('details',{class:'minor-merge-existing'},
+    h('summary',{},'Unir '+candidates.length+' fotos ya cargadas en un estudio'));
+  const hint=h('p',{class:'muted small'},
+    'Seleccioná las páginas que pertenecen al mismo informe y revisá su orden. '+
+    'Las fotos originales se conservarán y podrás abrirlas después. '+
+    'No se consulta a la IA para hacer esta unión.');
+  const rows=h('div',{class:'minor-merge-photo-list'});
+  const status=h('p',{role:'status','aria-live':'polite',class:'muted'});
+  const join=h('button',{type:'button',class:'btn primary'},
+    'Unir fotos seleccionadas');
+  let busy=false;
+  const draw=()=>{
+    rows.replaceChildren();
+    entries.forEach((entry,index)=>{
+      const check=h('input',{type:'checkbox',checked:entry.selected,
+        'aria-label':'Incluir '+(entry.study.file_name||'foto '+(index+1))});
+      check.checked=entry.selected;
+      check.addEventListener('change',()=>{entry.selected=check.checked;});
+      rows.append(h('div',{class:'minor-merge-photo-row'},
+        check,
+        h('span',{class:'grow'},
+          'Página '+(index+1)+' · '+(entry.study.file_name||'Foto')),
+        h('button',{type:'button',class:'btn quiet sm',disabled:index===0,
+          'aria-label':'Subir la página '+(index+1),
+          onclick:()=>{
+            [entries[index-1],entries[index]]=[entries[index],entries[index-1]];
+            draw();
+          }},'↑'),
+        h('button',{type:'button',class:'btn quiet sm',
+          disabled:index===entries.length-1,
+          'aria-label':'Bajar la página '+(index+1),
+          onclick:()=>{
+            [entries[index+1],entries[index]]=[entries[index],entries[index+1]];
+            draw();
+          }},'↓')));
+    });
+  };
+  join.addEventListener('click',async()=>{
+    if(busy)return;
+    const selected=entries.filter(x=>x.selected).map(x=>x.study);
+    if(selected.length<2||selected.length>12)
+      return toast('Elegí entre 2 y 12 páginas del mismo informe.');
+    if(!window.ChelyPhotosPDF)
+      return toast('No se pudo iniciar el convertidor de fotos. Actualizá Chely y probá de nuevo.');
+    if(!await confirmBox({
+      title:'Unir '+selected.length+' fotos en un estudio',
+      text:'Chely reunirá estas fotos en un único PDF. No se borrarán '+
+        'los archivos originales y no se gastarán créditos de IA. '+
+        'Confirmá que todas las fotos pertenecen al mismo estudio y están ordenadas.',
+      ok:'Sí, unir las fotos'
+    }))return;
+    busy=true;join.disabled=true;
+    let parentId=null,parentPath=null,merged=false;
+    const myUser=state.me?.id;
+    try{
+      if(!myUser)throw new Error('Tu sesión terminó. Ingresá nuevamente.');
+      const photos=[];
+      for(let i=0;i<selected.length;i++){
+        const st=selected[i];
+        if(!String(st.file_path||'').startsWith(minor.id+'/'+st.id+'/'))
+          throw new Error('Una foto tiene una ruta incorrecta. No se modificó ningún estudio.');
+        status.textContent='Recuperando foto '+(i+1)+' de '+selected.length+'…';
+        const {data:blob,error}=await sb.storage.from('estudios-menores')
+          .download(st.file_path);
+        if(error||!blob||!blob.size||blob.size>MAX_UPLOAD)
+          throw new Error('No se pudo abrir '+(st.file_name||'una foto')+
+            '. Ningún estudio se modificó.');
+        photos.push(new File([blob],st.file_name||('pagina-'+(i+1)+'.jpg'),
+          {type:st.file_type}));
+      }
+      status.textContent='Uniendo '+selected.length+' páginas en un solo PDF…';
+      const pdf=await window.ChelyPhotosPDF.toFile(photos);
+      if(!studyUploadFileValid(pdf,'pdf'))
+        throw new Error('El PDF final supera los 20 MB. Probá con menos páginas.');
+      parentId=crypto.randomUUID();
+      parentPath=minor.id+'/'+parentId+'/'+crypto.randomUUID();
+      const {error:dbError}=await sb.from('minor_studies').insert({
+        id:parentId,minor_id:minor.id,created_by:myUser,
+        title:STUDY_PENDING_TITLE,study_date:todayISO(),
+        report_text:'',file_path:parentPath,file_name:pdf.name,
+        file_type:'application/pdf',updated_by:myUser
+      });
+      if(dbError)throw dbError;
+      status.textContent='Guardando PDF…';
+      const {error:uploadError}=await sb.storage.from('estudios-menores')
+        .upload(parentPath,pdf,{
+          contentType:'application/pdf',upsert:false,cacheControl:'0'
+        });
+      if(uploadError)throw uploadError;
+      status.textContent='Agrupando los registros, sin borrar las fotos…';
+      const {data:unified,error:groupError}=await sb.rpc(
+        'minor_merge_photo_studies',{
+          p_minor:minor.id,p_parent:parentId,
+          p_parts:selected.map(st=>st.id)
+        });
+      if(groupError)throw groupError;
+      if(Number(unified)!==selected.length)
+        throw new Error('No se confirmó la unión de todas las páginas.');
+      merged=true;
+      state.minorStudyId=parentId;
+      saveRoute();
+      toast('Se unieron '+selected.length+
+        ' fotos en un solo estudio. Ahora podés leerlo y pedir la explicación.');
+      if(state.me?.id===myUser && state.page==='menores' &&
+         state.minorId===minor.id) await minorManagement();
+    }catch(e){
+      // Solo eliminar el registro PDF NUEVO si la operación no se completó.
+      // Los estudios originales NUNCA se borran ni se desmarcan aquí.
+      if(parentId&&!merged){
+        if(parentPath) await sb.storage.from('estudios-menores')
+          .remove([parentPath]).catch(()=>{});
+        await sb.from('minor_studies').delete()
+          .eq('id',parentId).eq('minor_id',minor.id).catch(()=>{});
+      }
+      status.className='alert bad';
+      status.textContent='No se pudieron unir las fotos: '+errorText(e)+
+        ' Las fotos originales se conservan.';
+    }finally{busy=false;join.disabled=false;}
+  });
+  draw();
+  panel.append(hint,rows,status,h('div',{class:'row'},join));
+  return panel;
+}
 async function minorOpenFile(study){
   const {data,error}=await sb.storage.from('estudios-menores').createSignedUrl(study.file_path,120);
   if(error||!data?.signedUrl)return toast('No pudimos acceder al archivo.');
