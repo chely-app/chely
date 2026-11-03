@@ -2552,9 +2552,9 @@ function studyCopyText(study) {
 function explanationShareText(patient, study) {
   const age = patient?.birth_date ? ageFrom(patient.birth_date) : null;
   const cleanExplanation = String(study.explanation || '')
-    .replace(/^#{1,6}\\s*/gm, '')
-    .replace(/\\*\\*(.*?)\\*\\*/g, '$1')
-    .replace(/^[-*]\\s+/gm, '• ');
+    .replace(/^#{1,6}\s*/gm, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/^[-*]\s+/gm, '• ');
   return [
     'CHELY — EXPLICACIÓN DE ESTUDIO MÉDICO',
     'Paciente: ' + (patient?.full_name || 'Nombre no indicado'),
@@ -2566,12 +2566,12 @@ function explanationShareText(patient, study) {
     cleanExplanation,
     '',
     'Esta explicación fue preparada con inteligencia artificial y puede contener errores. No reemplaza la consulta con un profesional de salud.'
-  ].join('\\n');
+  ].join('\n');
 }
 function explanationShareCard(patient, study) {
   if (!String(study?.explanation || '').trim()) return null;
   const message = explanationShareText(patient, study);
-  const card = h('div', { class: 'card chely-explanation-share' },
+  return h('div', { class: 'card chely-explanation-share' },
     h('h2', {}, 'Compartir explicación'),
     h('p', { class: 'muted small' },
       'El mensaje incluirá nombre y edad del paciente, nombre y fecha del estudio y la explicación. No incluirá el informe original ni otros estudios.'),
@@ -2585,7 +2585,6 @@ function explanationShareCard(patient, study) {
         onclick: () => shareExplanationVia(study, patient, 'email') }, 'Correo electrónico')),
     h('p', { class: 'hint' },
       'Chely prepara el mensaje; no se envía hasta que elijas el destinatario y confirmes el envío en WhatsApp o en tu correo. Una vez enviado, no se puede recuperar desde Chely.'));
-  return card;
 }
 async function shareExplanationVia(study, patient, channel) {
   const message = explanationShareText(patient, study);
