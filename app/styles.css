@@ -608,6 +608,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); outline
   border-top:1px solid var(--line);padding-top:.8rem;
 }
 .minor-selected-heading h3 {margin:0;}
+.minor-selected-heading {scroll-margin-top:6rem;}
 .minor-studies-rows {display:grid;gap:.7rem;}
 .minor-study-row {
   display:grid;gap:.25rem;width:100%;min-height:5rem;
