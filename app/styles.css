@@ -646,3 +646,76 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); outline
   .minor-study-action-buttons .btn{width:100%;}
   .minor-photo-page-row .btn{flex:0 0 auto;}
 }
+
+/* Hecho por ChatGPT · 2026-11-03 · Leer y unir fotos existentes claramente. */
+.minor-study-row {
+  display:grid;
+  gap:.4rem;
+}
+.minor-study-direct-action {
+  justify-self:start; margin-top:.3rem;
+  min-height:3.15rem;
+}
+.minor-merge-existing {
+  display:grid;
+  min-width:0;
+  padding:.9rem 1rem;
+  border:2px solid var(--accent);
+  border-radius:1rem;
+  background:var(--surface-2);
+}
+.minor-merge-existing>summary {
+  cursor:pointer;
+  min-height:3rem;
+  color:var(--accent-strong);
+  font-weight:900;
+  font-size:1.08rem;
+}
+.minor-merge-existing[open] {
+  gap:.75rem;
+}
+.minor-merge-photo-list {
+  display:grid;gap:.6rem;min-width:0;
+}
+.minor-merge-photo-row {
+  display:flex;
+  flex-wrap:wrap;
+  gap:.5rem;
+  align-items:center;
+  min-width:0;
+  padding:.6rem;
+  background:var(--bg);
+  border:1px solid var(--line);
+  border-radius:.7rem;
+}
+.minor-merge-photo-row input[type="checkbox"] {
+  width:1.3rem;height:1.3rem;flex:0 0 auto;
+}
+.minor-merge-photo-row span {
+  overflow-wrap:anywhere;
+  min-width:9rem;
+}
+.minor-merge-photo-row .btn {
+  min-height:2.8rem;
+}
+.minor-merged-originals {
+  border:1px solid var(--line);
+  border-radius:.85rem;
+  padding:.7rem .9rem;
+}
+.minor-merged-originals>summary {
+  cursor:pointer; min-height:2.5rem;
+  font-weight:800;color:var(--accent-strong);
+}
+.minor-original-photo-row {
+  display:flex;align-items:center;gap:.6rem;
+  flex-wrap:wrap;justify-content:space-between;
+  padding:.5rem 0;
+  border-bottom:1px solid var(--line);
+}
+.minor-original-photo-row span {overflow-wrap:anywhere;}
+@media(max-width:600px) {
+  .minor-study-direct-action {width:100%;justify-self:stretch;}
+  .minor-merge-existing {padding:.75rem;}
+  .minor-merge-photo-row .grow {flex-basis:calc(100% - 2rem);}
+}
