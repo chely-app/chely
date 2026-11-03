@@ -3424,8 +3424,8 @@ function minorMergePhotosPanel(minor,candidates) {
   const sorted=candidates.slice().sort((a,b)=>
     String(a.file_name||'').localeCompare(String(b.file_name||''),'es',{numeric:true}));
   const entries=sorted.map(st=>({study:st,selected:true}));
-  const panel=h('details',{class:'minor-merge-existing'},
-    h('summary',{},'Unir '+candidates.length+' fotos ya cargadas en un estudio'));
+  const panel=h('details',{class:'minor-merge-existing',open:true},
+    h('summary',{},'Unir '+candidates.length+' fotos ya cargadas en un solo estudio'));
   const hint=h('p',{class:'muted small'},
     'Seleccioná las páginas que pertenecen al mismo informe y revisá su orden. '+
     'Las fotos originales se conservarán y podrás abrirlas después. '+
@@ -3520,9 +3520,11 @@ function minorMergePhotosPanel(minor,candidates) {
           p_parts:selected.map(st=>st.id)
         });
       if(groupError)throw groupError;
-      if(Number(unified)!==selected.length)
-        throw new Error('No se confirmó la unión de todas las páginas.');
+      // La RPC es atómica: si respondió sin error, nunca eliminar el nuevo
+      // PDF aunque hubiera un problema mostrando la cantidad en el cliente.
       merged=true;
+      if(Number(unified)!==selected.length)
+        throw new Error('La unión se completó, pero hubo un problema al verificar la cantidad. Actualizá la página.');
       state.minorStudyId=parentId;
       saveRoute();
       toast('Se unieron '+selected.length+
