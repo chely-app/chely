@@ -3247,6 +3247,12 @@ async function minorStudiesPanel(host,minor){
   const {data:studies,error}=await sb.from('minor_studies').select('*')
     .eq('minor_id',minor.id).order('created_at',{ascending:false});
   if(error)return card.append(h('div',{class:'alert bad'},errorText(error)));
+  const visibleStudies=(studies||[]).filter(st=>!st.merged_into);
+  const photoCandidates=visibleStudies.filter(st=>
+    ['image/jpeg','image/png','image/webp'].includes(st.file_type) &&
+    st.file_path && !String(st.report_text||'').trim() &&
+    !String(st.explanation||'').trim());
+  const photoParts=(studies||[]).filter(st=>!!st.merged_into);
   const upload=h('details',{class:'minor-upload'},
     h('summary',{},'Agregar un estudio'));
   // Hecho por ChatGPT · 2026-11-02 · Misma carga accesible de adultos: foto, PDF, texto o enlace.
@@ -3339,12 +3345,13 @@ async function minorStudiesPanel(host,minor){
     h('p',{class:'hint'},'Si tu informe tiene varias hojas, seleccioná hasta 12 fotos. Chely las unirá en un solo PDF, en el orden que elijas. Después podrás leerlo con IA una sola vez y pedir la explicación. Una foto sola se guarda normalmente.'),
     status,h('div',{class:'row'},save));
   card.append(upload);
-  if (!(studies || []).length) {
+  if (photoCandidates.length>=2) card.append(minorMergePhotosPanel(minor,photoCandidates));
+  if (!visibleStudies.length) {
     card.append(h('p', { class:'muted' },
       'Todavía no hay estudios. Tocá «Agregar un estudio» para subir uno.'));
     return;
   }
-  const selected=(studies||[]).find(x => x.id===state.minorStudyId);
+  const selected=visibleStudies.find(x => x.id===state.minorStudyId);
   // El editor va ANTES de la lista, no después de todos los informes.
   if(selected) {
     card.append(h('div', { class:'minor-selected-heading' },
@@ -3353,38 +3360,57 @@ async function minorStudiesPanel(host,minor){
         state.minorStudyId=null;saveRoute();minorManagement();
       } }, 'Cerrar estudio')));
     minorStudyEditor(card,selected);
+    const savedPhotos=photoParts.filter(x=>x.merged_into===selected.id)
+      .sort((a,b)=>String(a.file_name||'').localeCompare(String(b.file_name||''),'es',{numeric:true}));
+    if(savedPhotos.length){
+      const originals=h('details',{class:'minor-merged-originals'},
+        h('summary',{},'Ver las '+savedPhotos.length+' fotos originales conservadas'));
+      savedPhotos.forEach((piece,n)=>{
+        originals.append(h('div',{class:'minor-original-photo-row'},
+          h('span',{},'Página '+(n+1)+' · '+(piece.file_name||'Foto')),
+          h('button',{class:'btn quiet sm',type:'button',
+            onclick:()=>minorOpenFile(piece)},'Ver foto')));
+      });
+      card.append(originals);
+    }
   }
-  const listTitle=h('h3',{},'Estudios guardados ('+(studies||[]).length+')');
+  const listTitle=h('h3',{},'Estudios guardados ('+visibleStudies.length+')');
   const rows=h('div',{class:'minor-studies-rows'});
   const count=h('p',{class:'muted small'});
   const more=h('button',{type:'button',class:'btn minor-show-more'},'Mostrar más estudios');
   let visible=4;
+  const openStudy=async id=>{
+    state.minorStudyId=id;saveRoute();
+    await minorManagement();
+    document.querySelector('.minor-selected-heading')?.scrollIntoView({
+      behavior:'smooth',block:'start'
+    });
+  };
   const paint=()=>{
     rows.replaceChildren();
-    for (const st of (studies||[]).slice(0,visible)) {
-      const name=st.title===STUDY_PENDING_TITLE ? 'Estudio por identificar' : st.title;
+    for(const st of visibleStudies.slice(0,visible)){
+      const pending=st.title===STUDY_PENDING_TITLE;
       const hasText=!!String(st.report_text||'').trim();
-      const status=st.explanation ? 'Explicación disponible'
-        : !hasText && st.file_path ? 'Sin leer: tocá para interpretar'
-        : st.title===STUDY_PENDING_TITLE ? 'Completar datos antes de explicar'
-        : hasText ? 'Listo para pedir explicación' : 'Sin texto';
-      rows.append(h('button',{type:'button',
-        class:'minor-study-row'+(state.minorStudyId===st.id?' selected':''),
-        onclick:async()=>{
-          state.minorStudyId=st.id;saveRoute();
-          await minorManagement();
-          document.querySelector('.minor-selected-heading')?.scrollIntoView({
-            behavior:'smooth',block:'start'
-          });
-        }},
+      const name=pending?'Estudio por identificar':st.title;
+      const info=st.explanation?'Explicación ya guardada'
+        :!hasText&&st.file_path?'El archivo todavía no se leyó'
+        :hasText?'Texto leído, explicación pendiente'
+        :'Sin texto de informe';
+      const row=h('div',{class:'minor-study-row'+
+          (state.minorStudyId===st.id?' selected':'')},
         h('strong',{},name),
-        h('span',{class:'muted small'},st.title===STUDY_PENDING_TITLE
-          ? 'Fecha médica por confirmar' : 'Fecha: '+fmtDate(st.study_date)),
-        h('span',{class:'minor-study-status'},status),
-        h('span',{class:'minor-study-open'},'Abrir estudio')));
+        h('span',{class:'muted small'},pending?'Fecha por confirmar':
+          'Fecha: '+fmtDate(st.study_date)),
+        h('span',{class:'minor-study-status'},info),
+        h('button',{type:'button',class:'btn primary minor-study-direct-action',
+          onclick:()=>{void openStudy(st.id);}},
+          st.explanation?'Ver explicación':!hasText&&st.file_path?
+            'Leer y explicar':'Abrir para explicar'));
+      rows.append(row);
     }
-    count.textContent='Mostrando '+Math.min(visible,studies.length)+' de '+studies.length;
-    more.hidden=visible>=studies.length;
+    count.textContent='Mostrando '+Math.min(visible,visibleStudies.length)+
+      ' de '+visibleStudies.length+' estudios';
+    more.hidden=visible>=visibleStudies.length;
   };
   more.addEventListener('click',()=>{visible+=4;paint();});
   card.append(listTitle,rows,count,more);
