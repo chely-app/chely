@@ -3201,7 +3201,7 @@ async function minorStudiesPanel(host,minor){
   // Hecho por ChatGPT · 2026-11-02 · Misma carga accesible de adultos: foto, PDF, texto o enlace.
   let draft=minorUploadDrafts.get(minor.id);
   if(!draft){ draft={mode:'foto',text:'',file:null,imported:null,url:'',title:'',date:null}; minorUploadDrafts.set(minor.id,draft); }
-  const source=studySourceChooser('minor-study',draft);
+  const source=studySourceChooser('minor-study',draft,{multiplePhotos:true});
   const title=h('input',{type:'text',id:'minor-study-title',maxlength:180,
     placeholder:'Ej.: Análisis de sangre',value:draft.title||''});
   title.addEventListener('input',()=>{draft.title=title.value;});
@@ -3224,19 +3224,31 @@ async function minorStudiesPanel(host,minor){
   save.disabled=!!draft.pending;
   save.addEventListener('click',async()=>{
     if(draft.pending)return toast('Este estudio ya se está cargando.');
-    const mode=source.getMode(), chosen=source.getFile(), pasted=source.getText();
+    const mode=source.getMode(), photoPages=source.getPhotos();
+    let chosen=source.getFile();
+    const pasted=source.getText();
     if(mode==='texto'){
       if(!pasted)return toast('Pegá el texto del informe.');
       if(title.value.trim().length<2||!date||date>todayISO())return toast('Completá el nombre y la fecha.');
     }else{
       if(!chosen)return toast(mode==='enlace'?'Primero importá el documento del enlace.':'Elegí una foto o PDF.');
       if(!studyUploadFileValid(chosen,mode))return toast('Archivo no admitido o mayor a 20 MB.');
+      if(mode==='foto' && photoPages.length>12)
+        return toast('Seleccioná hasta 12 fotos para este estudio.');
     }
     draft.pending=true;
     const navAtStart=navigationEpoch, ownerAtStart=state.me.id;
     save.disabled=true;status.className='alert info';status.textContent='Guardando el estudio…';
     try{
       const isFile=mode!=='texto';
+      // Un PDF de varias páginas se genera ANTES de crear el registro.
+      // Una falla de conversión no deja estudios vacíos en Supabase.
+      if(mode==='foto' && photoPages.length>1) {
+        status.textContent='Preparando '+photoPages.length+' páginas en un solo PDF…';
+        if(!window.ChelyPhotosPDF)throw new Error('No se pudo iniciar el convertidor de fotos. Actualizá Chely y probá nuevamente.');
+        chosen=await window.ChelyPhotosPDF.toFile(photoPages);
+        if(!studyUploadFileValid(chosen,'pdf'))throw new Error('El archivo PDF final supera 20 MB.');
+      }
       const {data:created,error:e}=await sb.from('minor_studies').insert({
         minor_id:minor.id,created_by:state.me.id,
         title:isFile?STUDY_PENDING_TITLE:title.value.trim(),
@@ -3273,7 +3285,7 @@ async function minorStudiesPanel(host,minor){
     }
   });
   upload.append(source.root,meta,
-    h('p',{class:'hint'},'Con foto, PDF o enlace importado, Chely intentará completar título y fecha después de leer el documento.'),
+    h('p',{class:'hint'},'Podés seleccionar cinco fotos (o hasta doce) como páginas de UN solo estudio. Se guardarán juntas en un PDF y Chely las leerá con una sola solicitud cuando toques «Leer archivo con IA». El orden se puede corregir antes de guardar.'),
     status,h('div',{class:'row'},save));
   card.append(upload);
   if(!(studies||[]).length)card.append(h('p',{class:'muted'},'Este menor todavía no tiene estudios registrados.'));
