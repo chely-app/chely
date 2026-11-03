@@ -2549,6 +2549,60 @@ function studyCopyText(study) {
     'Las explicaciones por inteligencia artificial pueden contener errores y no sustituyen la consulta médica.'
   ].join('\n');
 }
+function explanationShareText(patient, study) {
+  const age = patient?.birth_date ? ageFrom(patient.birth_date) : null;
+  const cleanExplanation = String(study.explanation || '')
+    .replace(/^#{1,6}\s*/gm, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/^[-*]\s+/gm, '• ');
+  return [
+    'CHELY — EXPLICACIÓN DE ESTUDIO MÉDICO',
+    'Paciente: ' + (patient?.full_name || 'Nombre no indicado'),
+    'Edad: ' + (age == null ? 'No indicada' : age + ' años'),
+    'Estudio: ' + (study.title || 'Sin título'),
+    'Fecha del estudio: ' + (study.study_date ? fmtDate(study.study_date) : 'Sin fecha'),
+    '',
+    'EXPLICACIÓN EN PALABRAS CLARAS',
+    cleanExplanation,
+    '',
+    'Esta explicación fue preparada con inteligencia artificial y puede contener errores. No reemplaza la consulta con un profesional de salud.'
+  ].join('\n');
+}
+function explanationShareCard(patient, study) {
+  if (!String(study?.explanation || '').trim()) return null;
+  const message = explanationShareText(patient, study);
+  return h('div', { class: 'card chely-explanation-share' },
+    h('h2', {}, 'Compartir explicación'),
+    h('p', { class: 'muted small' },
+      'El mensaje incluirá nombre y edad del paciente, nombre y fecha del estudio y la explicación. No incluirá el informe original ni otros estudios.'),
+    h('details', { class: 'chely-share-preview' },
+      h('summary', {}, 'Revisar el mensaje'),
+      h('pre', { class: 'chely-share-message' }, message)),
+    h('div', { class: 'row' },
+      h('button', { class: 'btn primary', type: 'button',
+        onclick: () => shareExplanationVia(study, patient, 'whatsapp') }, 'WhatsApp'),
+      h('button', { class: 'btn quiet', type: 'button',
+        onclick: () => shareExplanationVia(study, patient, 'email') }, 'Correo electrónico')),
+    h('p', { class: 'hint' },
+      'Chely prepara el mensaje; no se envía hasta que elijas el destinatario y confirmes el envío en WhatsApp o en tu correo. Una vez enviado, no se puede recuperar desde Chely.'));
+}
+async function shareExplanationVia(study, patient, channel) {
+  const message = explanationShareText(patient, study);
+  const channelName = channel === 'whatsapp' ? 'WhatsApp' : 'el correo electrónico';
+  const approved = await confirmBox({
+    title: 'Compartir explicación por ' + channelName,
+    text: 'Se abrirá ' + channelName + ' con el nombre y la edad del paciente, el nombre y la fecha del estudio, y la explicación médica. Revisá el destinatario y el mensaje antes de enviarlo. Esta información sensible saldrá de Chely y, una vez enviada, no se puede revocar.',
+    ok: 'Abrir ' + channelName
+  });
+  if (!approved) return;
+  if (channel === 'whatsapp') {
+    window.open('https://wa.me/?text=' + encodeURIComponent(message), '_blank', 'noopener,noreferrer');
+  } else {
+    const subject = 'Explicación de estudio médico — Chely';
+    window.location.href = 'mailto:?subject=' + encodeURIComponent(subject) +
+      '&body=' + encodeURIComponent(message);
+  }
+}
 async function shareStudyCopy(study) {
   if (!navigator.share) return toast('Tu navegador no permite enviar archivos. Usá «Guardar como PDF» para compartirlo.');
   if (!await confirmBox({ title: 'Compartir una copia del estudio',
@@ -2633,14 +2687,18 @@ function studyView(s, doctorName, allStudies, preview) {
     head.append(fb);
   }
   parts.push(head);
+  if (!preview) {
+    const shareExplanation = explanationShareCard(state.me, s);
+    if (shareExplanation) parts.push(shareExplanation);
+  }
   // Hecho por ChatGPT · 2026-11-02 · El paciente entrega sólo este estudio, nunca acceso a su perfil.
   if (!preview) parts.push(h('div', { class: 'card' },
-    h('h2', {}, 'Compartir este estudio'),
+    h('h2', {}, 'Compartir el estudio completo'),
     h('p', { class: 'muted small' }, 'Podés mandar una copia de este estudio sin darle acceso a tu cuenta ni al resto de tus informes.'),
     h('div', { class: 'row' },
       h('button', { class: 'btn', type: 'button', onclick: () => printStudyCopy(s) }, 'Guardar como PDF'),
       typeof navigator.share === 'function' ? h('button', { class: 'btn quiet', type: 'button',
-        onclick: () => shareStudyCopy(s) }, 'Enviar copia') : null),
+        onclick: () => shareStudyCopy(s) }, 'Enviar copia completa') : null),
     h('p', { class: 'hint' }, 'La copia incluye el informe escrito y la explicación, pero no adjunta automáticamente el archivo original. Para enviar el original usá el botón de abajo.')));
   const vals = renderValues(s.lab_values); if (vals) parts.push(vals);
   const evo = renderEvolution(allStudies.filter(x => x.lab_values && x.lab_values.length)); if (evo) parts.push(evo);
@@ -3359,7 +3417,7 @@ async function minorStudiesPanel(host,minor){
       h('button', { type:'button', class:'btn quiet sm', onclick:() => {
         state.minorStudyId=null;saveRoute();minorManagement();
       } }, 'Cerrar estudio')));
-    minorStudyEditor(card,selected);
+    minorStudyEditor(card,selected,minor);
     const savedPhotos=photoParts.filter(x=>x.merged_into===selected.id)
       .sort((a,b)=>String(a.file_name||'').localeCompare(String(b.file_name||''),'es',{numeric:true}));
     if(savedPhotos.length){
@@ -3559,7 +3617,7 @@ async function minorOpenFile(study){
   if(error||!data?.signedUrl)return toast('No pudimos acceder al archivo.');
   window.open(data.signedUrl,'_blank','noopener,noreferrer');
 }
-function minorStudyEditor(host,study){
+function minorStudyEditor(host,study,minor){
   const box=h('div',{class:'card minor-study-editor'},
     h('h3',{},study.title===STUDY_PENDING_TITLE ?
       'Preparar y explicar este estudio' : study.title),
@@ -3685,6 +3743,8 @@ function minorStudyEditor(host,study){
   if(study.explanation){
     box.append(h('h3',{},'Explicación en palabras claras'),renderExplanation(study.explanation,study.glossary||[]));
     const vals=renderValues(study.lab_values||[]);if(vals)box.append(vals);
+    const shareExplanation=explanationShareCard(minor,study);
+    if(shareExplanation)box.append(shareExplanation);
   }
   box.append(h('div',{class:'row'},
     h('button',{class:'btn quiet',type:'button',onclick:()=>printStudyCopy(study)},'Guardar copia en PDF'),
