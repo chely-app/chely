@@ -164,7 +164,7 @@ Este archivo documenta los cambios realizados por distintos colaboradores (human
 - Pendiente prueba manual de navegación, sesión, F5, formularios y subidas reales en Chrome/Android/iOS.
 
 ## 2026-11-04 — Hecho por ChatGPT (auditoría de accesibilidad y publicación)
-**Archivos:** `app/app.js`, `app/site.webmanifest`, `README.md`, `INSTRUCCIONES.md`.
+**Archivos:** `app/app.js`, `app/styles.css`, `app/site.webmanifest`, `README.md`, `INSTRUCCIONES.md`.
 - Los diálogos de confirmación ahora tienen título y descripción accesibles, mantienen el foco dentro del diálogo, se cancelan con Escape, devuelven el foco al control que los abrió y requieren usar botones explícitos para cerrar.
 - La app instalada inicia en `/app/` y limita su alcance a esa ruta.
 - Las etiquetas de estado (`.pill`) tienen un mínimo legible de 16 px y permiten ajuste de línea en pantallas estrechas.
