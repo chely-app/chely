@@ -162,3 +162,11 @@ Este archivo documenta los cambios realizados por distintos colaboradores (human
 - Para estudios que ya tienen una fila guardada en Supabase, F5 recupera la pantalla y los datos confirmados del servidor. Refrescar/cerrar la pestaña DURANTE una subida de red puede interrumpirla: la continuidad en segundo plano se garantiza para navegación interna, no al cerrar el documento.
 - Mantener todos los cambios de autoría identificados como «Hecho por ChatGPT».
 - Pendiente prueba manual de navegación, sesión, F5, formularios y subidas reales en Chrome/Android/iOS.
+
+## 2026-11-04 — Hecho por ChatGPT (auditoría de accesibilidad y publicación)
+**Archivos:** `app/app.js`, `app/styles.css`, `app/site.webmanifest`, `README.md`, `INSTRUCCIONES.md`.
+- Los diálogos de confirmación ahora tienen título y descripción accesibles, mantienen el foco dentro del diálogo, se cancelan con Escape, devuelven el foco al control que los abrió y requieren usar botones explícitos para cerrar.
+- La app instalada inicia en `/app/` y limita su alcance a esa ruta.
+- Las etiquetas de estado (`.pill`) tienen un mínimo legible de 16 px y permiten ajuste de línea en pantallas estrechas.
+- La guía antigua de despliegue quedó marcada como histórica; README aclara que `_headers` usa formato Cloudflare y no aplica encabezados HTTP en GitHub Pages.
+- No se tocaron cuentas, datos médicos, Supabase ni la configuración del hosting. Pendiente revisar los encabezados HTTP y la experiencia visual en producción.

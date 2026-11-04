@@ -73,18 +73,55 @@ function toast(msg) {
   host.append(h('div', { class: 'toast', role: 'status' }, msg));
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { host.innerHTML = ''; }, 5000);
 }
+// Hecho por ChatGPT · 2026-11-04 · Diálogo accesible: foco contenido, Escape y retorno del foco.
+let confirmDialogCounter = 0;
 function confirmBox({ title, text, ok, danger, typed }) {
   return new Promise(resolve => {
     const host = $('#overlay');
-    const close = v => { host.innerHTML = ''; resolve(v); };
-    const input = typed ? h('input', { type: 'text', id: 'confirm-typed', autocomplete: 'off', placeholder: typed }) : null;
-    const okBtn = h('button', { class: 'btn ' + (danger ? 'danger' : 'primary'), disabled: !!typed, onclick: () => close(true) }, ok);
-    if (input) input.addEventListener('input', () => { okBtn.disabled = input.value.trim().toUpperCase() !== typed; });
-    host.append(h('div', { class: 'overlay', onclick: e => { if (e.target.classList.contains('overlay')) close(false); } },
-      h('div', { class: 'card', role: 'dialog', 'aria-modal': 'true' }, h('h2', {}, title), h('p', {}, text),
-        input ? h('label', { class: 'field', for: 'confirm-typed' }, `Escribí ${typed} para confirmar`, input) : null,
-        h('div', { class: 'row' }, h('button', { class: 'btn quiet', onclick: () => close(false) }, 'Cancelar'), okBtn))));
-    (input || okBtn).focus();
+    const previousFocus = document.activeElement;
+    const id = ++confirmDialogCounter;
+    const titleId = `confirm-title-${id}`;
+    const textId = `confirm-text-${id}`;
+    let settled = false;
+    const input = typed ? h('input', { type: 'text', id: `confirm-typed-${id}`, autocomplete: 'off', placeholder: typed }) : null;
+    const cancelBtn = h('button', { class: 'btn quiet', type: 'button', onclick: () => close(false) }, 'Cancelar');
+    const okBtn = h('button', { class: 'btn ' + (danger ? 'danger' : 'primary'), type: 'button',
+      disabled: !!typed, onclick: () => close(true) }, ok);
+    const dialog = h('div', { class: 'card', role: 'dialog', 'aria-modal': 'true',
+      'aria-labelledby': titleId, 'aria-describedby': textId },
+      h('h2', { id: titleId }, title), h('p', { id: textId }, text),
+      input ? h('label', { class: 'field', for: input.id }, `Escribí ${typed} para confirmar`, input) : null,
+      h('div', { class: 'row' }, cancelBtn, okBtn));
+    const close = value => {
+      if (settled) return;
+      settled = true;
+      dialog.removeEventListener('keydown', onDialogKeydown);
+      host.replaceChildren();
+      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus({ preventScroll: true });
+      resolve(value);
+    };
+    const onDialogKeydown = e => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        close(false);
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const focusable = [...dialog.querySelectorAll('button:not(:disabled), input:not(:disabled)')];
+      if (!focusable.length) { e.preventDefault(); return; }
+      const first = focusable[0], last = focusable[focusable.length - 1];
+      if (e.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+        e.preventDefault(); last.focus();
+      } else if (!e.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
+        e.preventDefault(); first.focus();
+      }
+    };
+    if (input) input.addEventListener('input', () => {
+      okBtn.disabled = input.value.trim().toUpperCase() !== typed;
+    });
+    dialog.addEventListener('keydown', onDialogKeydown);
+    host.append(h('div', { class: 'overlay' }, dialog));
+    (input || cancelBtn).focus();
   });
 }
 function errorText(error) {
