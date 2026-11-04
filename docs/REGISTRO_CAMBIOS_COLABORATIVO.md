@@ -167,5 +167,6 @@ Este archivo documenta los cambios realizados por distintos colaboradores (human
 **Archivos:** `app/app.js`, `app/site.webmanifest`, `README.md`, `INSTRUCCIONES.md`.
 - Los diálogos de confirmación ahora tienen título y descripción accesibles, mantienen el foco dentro del diálogo, se cancelan con Escape, devuelven el foco al control que los abrió y requieren usar botones explícitos para cerrar.
 - La app instalada inicia en `/app/` y limita su alcance a esa ruta.
+- Las etiquetas de estado (`.pill`) tienen un mínimo legible de 16 px y permiten ajuste de línea en pantallas estrechas.
 - La guía antigua de despliegue quedó marcada como histórica; README aclara que `_headers` usa formato Cloudflare y no aplica encabezados HTTP en GitHub Pages.
 - No se tocaron cuentas, datos médicos, Supabase ni la configuración del hosting. Pendiente revisar los encabezados HTTP y la experiencia visual en producción.
