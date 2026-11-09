@@ -8,6 +8,7 @@
 - Las secciones «Inicio», «Cómo funciona», «Ejemplo», «Herramientas», «Beta», «Privacidad», «Preguntas» y «Participar» se eligen desde la barra superior; en móviles, las pestañas se desplazan horizontalmente.
 - Se conserva el contenido existente de esas secciones y se mantiene la navegación por enlaces `#seccion`.
 - La sección inicial pasa a ser «Inicio».
+- El encabezado incorpora el ícono de perfil compartido por Guido junto al nombre Chely.
 
 **No se modificaron:** la aplicación, las cuentas, Supabase ni los datos médicos.
 
