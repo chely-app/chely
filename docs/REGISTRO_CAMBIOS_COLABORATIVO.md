@@ -1,5 +1,16 @@
 # Registro colaborativo de cambios — Chely
 
+## 2026-11-09 — Hecho por ChatGPT (portada de beta abierta)
+**Pedido:** simplificar la primera vista y llevar el resto del contenido a pestañas superiores.
+
+**Archivo:** `index.html`
+- La portada ahora muestra la invitación a ser de los primeros en probar la beta abierta, una frase breve y el botón «Ingresar».
+- Las secciones «Inicio», «Cómo funciona», «Ejemplo», «Herramientas», «Beta», «Privacidad», «Preguntas» y «Participar» se eligen desde la barra superior; en móviles, las pestañas se desplazan horizontalmente.
+- Se conserva el contenido existente de esas secciones y se mantiene la navegación por enlaces `#seccion`.
+- La sección inicial pasa a ser «Inicio».
+
+**No se modificaron:** la aplicación, las cuentas, Supabase ni los datos médicos.
+
 Este archivo documenta los cambios realizados por distintos colaboradores (humanos o asistentes) para facilitar las revisiones y evitar sobrescribir trabajo ajeno.
 
 ## Convención
