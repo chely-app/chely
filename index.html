@@ -97,6 +97,28 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .nav a.l:hover { color: var(--teal-deep); }
 @media (max-width: 700px) { .nav a.l { display: none; } }
 
+/* Hecho por ChatGPT · 2026-11-09 · Pestañas superiores para acceder a todo el contenido. */
+.nav-in { flex-wrap: nowrap; gap: .65rem; }
+.logo { margin-right: 0; flex: 0 0 auto; }
+.nav-tabs { display:flex; align-items:center; gap:.25rem; flex:1 1 auto; min-width:0; overflow-x:auto; scrollbar-width:none; }
+.nav-tabs::-webkit-scrollbar { display:none; }
+.nav-tab { display:inline-flex; align-items:center; justify-content:center; min-height:2.65rem; padding:.4rem .62rem; border:1px solid transparent; border-radius:999px; color:var(--muted); text-decoration:none; font-size:.86rem; font-weight:700; white-space:nowrap; }
+.nav-tab:hover { color:var(--fg); background:var(--tint); }
+.nav-tab[aria-current="page"] { color:var(--teal-deep); background:var(--tint); border-color:var(--teal); }
+.hero { min-height:calc(100svh - 4rem); display:grid; align-items:center; padding-block:clamp(3rem, 10vh, 7rem); }
+.hero .in { display:flex; justify-content:center; }
+.hero .copy { width:min(100%, 760px); justify-items:center; text-align:center; gap:1rem; }
+.hero h1 { max-width:17ch; font-size:clamp(2.3rem, 6vw, 4.3rem); }
+.hero .lead { max-width:44ch; font-size:clamp(1.05rem, 2vw, 1.25rem); }
+.hero .btn { min-width:10rem; }
+@media (max-width:700px) {
+  .nav-in { gap:.5rem; }
+  .logo img { width:2rem; height:2rem; }
+  .logo b { font-size:1.2rem; }
+  .nav-tab { min-height:2.45rem; padding-inline:.55rem; font-size:.82rem; }
+  .hero { min-height:calc(100svh - 3.5rem); }
+}
+
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; border-radius: .9rem; padding: .8rem 1.3rem; font-weight: 700; cursor: pointer; border: 2px solid var(--teal); background: var(--paper); color: var(--teal-deep); text-decoration: none; min-height: 3rem; }
 .btn.primary { background: var(--teal); color: var(--teal-ink); }
 .btn.sm { padding: .45rem .9rem; min-height: 2.4rem; font-size: .9rem; }
@@ -363,40 +385,28 @@ a.chely-social-item:hover,a.chely-social-item:focus-visible {
   <div class="nav-in">
     <!-- Hecho por ChatGPT · 2026-11-01 · Logo y nombre siempre llevan a https://chely.app/ -->
     <a class="logo" href="https://chely.app/" aria-label="Chely, ir a la página principal"><img alt="" src="data:image/webp;base64,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"><b>Chely</b></a>
-    <a class="l" href="#como">Cómo funciona</a>
-    <a class="l" href="#demo">Ver ejemplo</a>
-    
-    <a class="btn primary sm" href="app/">Entrar</a>
-  </div>
-</nav>
+    <div class="nav-tabs" aria-label="Secciones de Chely">
+      <a class="nav-tab" data-section="inicio" href="#inicio">Inicio</a>
+      <a class="nav-tab" data-section="como" href="#como">Cómo funciona</a>
+      <a class="nav-tab" data-section="demo" href="#demo">Ejemplo</a>
+      <a class="nav-tab" data-section="funciones" href="#funciones">Herramientas</a>
+      <a class="nav-tab" data-section="piloto" href="#piloto">Beta</a>
+      <a class="nav-tab" data-section="confianza" href="#confianza">Privacidad</a>
+      <a class="nav-tab" data-section="preguntas" href="#preguntas">Preguntas</a>
+      <a class="nav-tab" data-section="sumate" href="#sumate">Participar</a>
+    </div>
+
 
 <!-- Hecho por ChatGPT · 2026-11-01 · Región principal accesible y diseño responsivo. -->
 <main id="contenido-principal">
-<header class="band hero" id="inicio">
+<!-- Hecho por ChatGPT · 2026-11-09 · Portada simple para invitar a la beta abierta. -->
+<header class="band hero" id="inicio" data-section-panel>
   <div class="in">
     <div class="copy">
-      <span class="eyebrow">Chely · Tus estudios, más fáciles de entender</span>
-      <!-- Hecho por ChatGPT · 2026-11-01 · Lema actualizado por solicitud del equipo. -->
-      <h1>Tus estudios médicos, <em>en palabras sencillas</em></h1>
-      <p class="lead">Subí tu estudio médico y entendé sus resultados en palabras sencillas. Chely te ayuda a preparar preguntas para tu médico.</p>
-      <div class="ctas">
-        <a class="btn primary" href="app/#crear">Empezar gratis</a>
-        <a class="btn" href="#demo">Ver un ejemplo</a>
-      </div>
-      <p class="small muted">Chely utiliza IA para explicar, no para diagnosticar. Consultá siempre con tu médico.</p>
-    </div>
-    <div class="translate" aria-live="polite">
-      <div class="switcher" role="group" aria-label="Elegir ejemplo">
-        <button type="button" aria-pressed="true" data-ex="0">Ecografía</button>
-        <button type="button" aria-pressed="false" data-ex="1">Laboratorio</button>
-        <button type="button" aria-pressed="false" data-ex="2">Radiografía</button>
-      </div>
-      <div class="report-slip">
-        <div class="hd"><span id="ex-kind">Ecografía abdominal</span><span>Ejemplo ficticio</span></div>
-        <div id="ex-tech"></div>
-      </div>
-      <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 4v16M5 13l7 7 7-7"/></svg> Lo que lee el paciente</div>
-      <div class="plain"><span class="tag">En palabras claras</span><p id="ex-plain"></p></div>
+      <span class="eyebrow">Chely · Beta abierta</span>
+      <h1>Sé de los primeros en probar la beta abierta de Chely</h1>
+      <p class="lead">Entendé tus estudios médicos en palabras sencillas.</p>
+      <a class="btn primary" href="app/">Ingresar</a>
     </div>
   </div>
 </header>
@@ -409,23 +419,7 @@ a.chely-social-item:hover,a.chely-social-item:focus-visible {
     <div class="section-links">
       <a class="section-link" data-section="como" href="#como">Cómo funciona</a>
       <a class="section-link" data-section="demo" href="#demo">Probá el ejemplo</a>
-      <a class="section-link" data-section="funciones" href="#funciones">Herramientas</a>
-      <a class="section-link" data-section="piloto" href="#piloto">Prueba piloto</a>
-      <a class="section-link" data-section="confianza" href="#confianza">Privacidad y plan</a>
-      <a class="section-link" data-section="preguntas" href="#preguntas">Preguntas frecuentes</a>
-      <a class="section-link" data-section="sumate" href="#sumate">Participar</a>
-    </div>
-    </details>
-  </div>
-</nav>
-
-<section class="band alt" id="como" data-section-panel>
-  <div class="in">
-    <div style="display:grid;gap:.6rem"><span class="eyebrow">Cómo funciona</span><h2>De tu estudio a una explicación clara, en minutos.</h2></div>
-    <div class="steps">
-      <div class="step"><span class="n">Paso 1</span><h3>Creás tu cuenta</h3><p>Con tu correo y una contraseña. Es gratis durante la prueba piloto.</p></div>
-      <div class="step"><span class="n">Paso 2</span><h3>Subís tu estudio</h3><p>Un PDF o una foto del informe escrito, o pegás el texto.</p></div>
-      <div class="step"><span class="n">Paso 3</span><h3>Chely te lo explica</h3><p>Explica cada término, conserva cifras y negaciones y te arma preguntas para la consulta.</p></div>
+      <a class="section-link" data-section="<!-- Hecho por ChatGPT · 2026-11-09 · La navegación de secciones vive en la barra superior. -->xplica</h3><p>Explica cada término, conserva cifras y negaciones y te arma preguntas para la consulta.</p></div>
       <div class="step"><span class="n">Paso 4</span><h3>Lo llevás a tu médico</h3><p>Lo leés tranquilo, con letra grande, y vas a la consulta sabiendo qué preguntar.</p></div>
     </div>
   </div>
@@ -838,15 +832,14 @@ $('#join-form').addEventListener('submit', async e => {
   catch { hint.textContent = 'Seleccioná y copiá este mensaje:'; }
 });
 
-/* Hecho por ChatGPT · 2026-11-01 · Presentación compacta: contenido por secciones, con enlaces accesibles y
-   navegación por URL. Sin JS todas las secciones permanecen visibles. */
+/* Hecho por ChatGPT · 2026-11-09 · Pestañas superiores con estado accesible y URL compartible. */
 (function initSectionNavigation() {
-  const ids = ['como', 'demo', 'funciones', 'piloto', 'confianza', 'preguntas', 'sumate'];
+  const ids = ['inicio', 'como', 'demo', 'funciones', 'piloto', 'confianza', 'preguntas', 'sumate'];
   const panels = ids.map(id => document.getElementById(id));
-  const links = Array.from(document.querySelectorAll('#explorar .section-link'));
-  const picker = document.getElementById('explorar');
-  if (!picker || panels.some(panel => !panel) || links.length !== ids.length) return;
-  const scrollToPicker = () => picker.scrollIntoView({
+  const links = Array.from(document.querySelectorAll('.nav-tabs .nav-tab'));
+  const nav = document.querySelector('.nav');
+  if (!nav || panels.some(panel => !panel) || links.length !== ids.length) return;
+  const scrollToNav = () => nav.scrollIntoView({
     behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
     block: 'start'
   });
@@ -854,20 +847,14 @@ $('#join-form').addEventListener('submit', async e => {
     if (!ids.includes(id)) return;
     panels.forEach(panel => { panel.hidden = panel.id !== id; });
     links.forEach(link => {
-      if (link.dataset.section === id) link.setAttribute('aria-current', 'location');
+      if (link.dataset.section === id) link.setAttribute('aria-current', 'page');
       else link.removeAttribute('aria-current');
     });
-    if (shouldScroll) {
-      // Al elegir una sección, cerrar el menú de opciones para mantener
-      // la pantalla simple y enfocar el contenido seleccionado.
-      const more = picker.querySelector('.chely-explore-details');
-      if (more) more.open = false;
-      requestAnimationFrame(scrollToPicker);
-    }
+    if (shouldScroll) requestAnimationFrame(scrollToNav);
   }
   document.body.classList.add('sectioned');
   const initialId = decodeURIComponent(location.hash.slice(1));
-  showSection(ids.includes(initialId) ? initialId : 'como');
+  showSection(ids.includes(initialId) ? initialId : 'inicio');
   document.querySelectorAll('a[href^="#"]').forEach(link => {
     const id = link.getAttribute('href').slice(1);
     if (!ids.includes(id)) return;
@@ -879,13 +866,11 @@ $('#join-form').addEventListener('submit', async e => {
   });
   function restoreSectionFromUrl() {
     const id = decodeURIComponent(location.hash.slice(1));
-    if (ids.includes(id)) showSection(id, true);
-    else if (id === 'inicio') document.getElementById('inicio').scrollIntoView();
+    showSection(ids.includes(id) ? id : 'inicio', true);
   }
   window.addEventListener('popstate', restoreSectionFromUrl);
   window.addEventListener('hashchange', restoreSectionFromUrl);
-  if (ids.includes(initialId)) requestAnimationFrame(scrollToPicker);
 })();
-</script>
+</script></script>
 </body>
 </html>
