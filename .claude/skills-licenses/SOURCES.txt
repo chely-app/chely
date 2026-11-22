@@ -1,0 +1,4 @@
+supabase_agent-skills c9be0e9
+obra_superpowers 22f0b46
+anthropics_skills e4bb5d9
+coreyhaines31_marketingskills 5b2b400
