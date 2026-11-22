@@ -162,3 +162,15 @@ Este archivo documenta los cambios realizados por distintos colaboradores (human
 - Para estudios que ya tienen una fila guardada en Supabase, F5 recupera la pantalla y los datos confirmados del servidor. Refrescar/cerrar la pestaña DURANTE una subida de red puede interrumpirla: la continuidad en segundo plano se garantiza para navegación interna, no al cerrar el documento.
 - Mantener todos los cambios de autoría identificados como «Hecho por ChatGPT».
 - Pendiente prueba manual de navegación, sesión, F5, formularios y subidas reales en Chrome/Android/iOS.
+
+## 2026-11-22 — Hecho por Claude (skills de Claude Code)
+**Objetivo:** que las sesiones de Claude Code (incluidas las de la nube y las del celular) carguen solas skills para desarrollar, probar y trabajar con Supabase con más cuidado.
+
+**Archivos:** `.claude/skills/**` (32 skills y `README.md`), `.claude/skills-licenses/**` (licencias y versión de origen) y este registro.
+- Superpowers (obra/superpowers): planificar, escribir tests, depurar con método, verificar antes de dar algo por terminado y revisar el código.
+- Supabase oficial (supabase/agent-skills): `supabase` y `supabase-postgres-best-practices`, con RLS, Auth, migraciones y rendimiento.
+- `webapp-testing` (anthropics/skills): pruebas con navegador real (Playwright).
+- 14 skills de marketing (coreyhaines31/marketingskills): copywriting, conversión, redes, anuncios, emails, lanzamiento, precios y SEO.
+- Cada skill se revisó antes de instalarla: no descargan scripts externos ni piden credenciales. Se copiaron tal cual de su origen y la versión exacta de cada una está en `.claude/skills-licenses/SOURCES.txt`.
+
+**No se modificaron:** `app/`, `index.html`, Supabase (migraciones, RLS, RPC, Auth), datos médicos ni la web pública.
